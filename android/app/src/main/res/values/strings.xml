@@ -4,4 +4,5 @@
     <string name="title_activity_main">Kod</string>
     <string name="package_name">com.kod.app</string>
     <string name="custom_url_scheme">com.kod.app</string>
+    <string name="accessibility_service_description">允许 KOD 在用户授权的任务中控制微信和 QQ。支付、密码和验证码操作始终被禁止。</string>
 </resources>
