@@ -30,7 +30,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Page from "@/components/layout/Page";
 import useChatboxAIModels from "@/hooks/useChatboxAIModels";
+import { useIsSmallScreen } from "@/hooks/useScreenChange";
 import { getLogger } from "@/lib/utils";
+import platform from "@/platform";
 import { useProviderSettings } from "@/stores/settingsStore";
 import * as toastActions from "@/stores/toastActions";
 import {
@@ -57,6 +59,7 @@ export const Route = createFileRoute("/video-creator/")({
 function VideoCreatorPage() {
 	const { t } = useTranslation();
 	const { chatboxAIVideoModels } = useChatboxAIModels();
+	const isSmallScreen = useIsSmallScreen();
 	const { providerSettings } = useProviderSettings(ModelProviderEnum.ChatboxAI);
 	const [prompt, setPrompt] = useState("");
 	const [model, setModel] = useState("");
@@ -295,12 +298,15 @@ function VideoCreatorPage() {
 	}, [activeId]);
 
 	const stop = () => abortRef.current?.abort();
-	const download = () => {
+	const download = async () => {
 		if (!videoUrl || !activeTask) return;
-		const anchor = document.createElement("a");
-		anchor.href = videoUrl;
-		anchor.download = `seedance-${activeTask.id}.mp4`;
-		anchor.click();
+		try {
+			const response = await fetch(videoUrl);
+			const blob = await response.blob();
+			await platform.exporter.exportBlob(`seedance-${activeTask.id}.mp4`, blob);
+		} catch (error) {
+			toastActions.add(normalizeVideoError(error));
+		}
 	};
 	const statusColor: Record<VideoTaskStatus, string> = {
 		queued: "gray",
@@ -378,7 +384,7 @@ function VideoCreatorPage() {
 											<Button
 												variant="light"
 												leftSection={<IconDownload size={16} />}
-												onClick={download}
+												onClick={() => void download()}
 											>
 												{t("Download")}
 											</Button>
@@ -458,12 +464,13 @@ function VideoCreatorPage() {
 					</Stack>
 				</ScrollArea>
 
-				<Paper
-					withBorder
-					w={{ base: "100%", sm: 300 }}
-					h={{ base: 220, sm: "100%" }}
-					radius={0}
-				>
+					{(!isSmallScreen || tasks.length > 0) && (
+						<Paper
+							withBorder
+							w={{ base: "100%", sm: 300 }}
+							h={{ base: 220, sm: "100%" }}
+							radius={0}
+						>
 					<Group p="md">
 						<IconHistory size={18} />
 						<Text fw={600}>{t("History")}</Text>
@@ -501,8 +508,9 @@ function VideoCreatorPage() {
 							))}
 						</Stack>
 					</ScrollArea>
-				</Paper>
-			</Flex>
+						</Paper>
+					)}
+				</Flex>
 		</Page>
 	);
 }
