@@ -526,6 +526,8 @@ function ImageCreatorPage() {
       color="gray"
       size="md"
       radius="lg"
+      aria-label="Open image history"
+      data-testid="image-history-button"
       onClick={() => setShowMobileHistory(true)}
       className="controls"
     >

@@ -32,6 +32,8 @@ export const Page: FC<PageProps> = ({ children, title, left, right }) => {
             <Flex align="center" className={needRoomForMacWindowControls ? 'pl-20' : ''}>
               <ActionIcon
                 className="controls"
+                aria-label="Open navigation"
+                data-testid="page-menu-button"
                 variant="subtle"
                 size={isSmallScreen ? 24 : 20}
                 color={isSmallScreen ? 'chatbox-secondary' : 'chatbox-tertiary'}

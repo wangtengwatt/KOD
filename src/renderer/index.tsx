@@ -18,7 +18,7 @@ import './static/index.css'
 import { initLogAtom, migrationProcessAtom } from './stores/atoms/utilAtoms'
 import * as migration from './stores/migration'
 import queryClient from './stores/queryClient'
-import { CHATBOX_BUILD_PLATFORM, CHATBOX_BUILD_TARGET } from './variables'
+import { CHATBOX_BUILD_TARGET } from './variables'
 
 const log = getLogger('index')
 
@@ -60,7 +60,7 @@ import { initUpdateListeners } from './stores/updateStore'
 import('./setup/token_estimation_init')
 
 // 引入移动端安全区域代码，主要为了解决异形屏幕的问题
-if (CHATBOX_BUILD_TARGET === 'mobile_app' && CHATBOX_BUILD_PLATFORM === 'ios') {
+if (CHATBOX_BUILD_TARGET === 'mobile_app') {
   import('./setup/mobile_safe_area')
 }
 
