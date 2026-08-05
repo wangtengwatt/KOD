@@ -266,10 +266,17 @@ export async function fetchKodRelayStationModels(config: KodRelayStationConfig):
       capabilities.push('web_search')
     }
 
+    const modelId = item.id.toLowerCase()
+    const isVideoModel = modelId.includes('seedance') || modelId.includes('video')
+    const isImageModel =
+      !isVideoModel && ['image', 'dall', 'flux', 'stable-diffusion', 'sdxl', 'midjourney'].some((keyword) =>
+        modelId.includes(keyword)
+      )
+
     return {
       modelId: item.id,
       nickname: item.name,
-      type: 'chat',
+      type: isVideoModel ? ('video' as const) : isImageModel ? ('image' as const) : ('chat' as const),
       contextWindow: item.context_length,
       capabilities,
     }
@@ -790,7 +797,7 @@ const RemoteModelInfoSchema = z.object({
   modelId: z.string(),
   modelName: z.string(),
   labels: z.array(z.string()).optional(),
-  type: z.enum(['chat', 'embedding', 'rerank', 'image']).optional(),
+  type: z.enum(['chat', 'embedding', 'rerank', 'image', 'video']).optional(),
   apiStyle: z.enum(['google', 'openai', 'openai-responses', 'anthropic']).optional(),
   contextWindow: z.number().optional(),
   capabilities: z.array(z.enum(['vision', 'tool_use', 'reasoning'])).optional(),

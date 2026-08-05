@@ -48,7 +48,7 @@ export interface ModelsDevResponse {
 export interface ModelMetadata {
   modelId: string
   name?: string
-  type: 'chat' | 'embedding' | 'rerank'
+  type: 'chat' | 'embedding' | 'rerank' | 'image' | 'video'
   capabilities: ('vision' | 'reasoning' | 'tool_use' | 'web_search')[]
   contextWindow: number
   maxOutput: number

@@ -1,6 +1,7 @@
 import { ModelProviderEnum, type ProviderModelInfo } from '@shared/types'
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
+import { enrichModelsFromRegistry } from '@/packages/model-registry'
 import { fetchKodRelayStationModels, getKodRelayStationConfig } from '@/packages/remote'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
 import { useProviderSettings } from '@/stores/settingsStore'
@@ -20,7 +21,8 @@ const useChatboxAIModels = () => {
       }
 
       const relayStation = await getKodRelayStationConfig(accessToken)
-      const models = await fetchKodRelayStationModels(relayStation)
+      const fetchedModels = await fetchKodRelayStationModels(relayStation)
+      const models = enrichModelsFromRegistry(fetchedModels, ModelProviderEnum.ChatboxAI)
 
       setProviderSettings((previousSettings) => ({
         ...previousSettings,
@@ -41,14 +43,31 @@ const useChatboxAIModels = () => {
   const allChatboxAIModels = accessToken ? data?.models || EMPTY_MODELS : EMPTY_MODELS
 
   const chatboxAIModels = useMemo(
-    () => allChatboxAIModels.filter((m) => !kodSettings?.excludedModels?.includes(m.modelId)),
+    () =>
+      allChatboxAIModels.filter(
+        (model) =>
+          model.type !== 'image' &&
+          model.type !== 'video' &&
+          !kodSettings?.excludedModels?.includes(model.modelId)
+      ),
     [allChatboxAIModels, kodSettings]
+  )
+
+  const chatboxAIImageModels = useMemo(
+    () => allChatboxAIModels.filter((model) => model.type === 'image'),
+    [allChatboxAIModels]
+  )
+
+  const chatboxAIVideoModels = useMemo(
+    () => allChatboxAIModels.filter((model) => model.type === 'video'),
+    [allChatboxAIModels]
   )
 
   return {
     allChatboxAIModels,
     chatboxAIModels,
-    chatboxAIImageModels: EMPTY_MODELS,
+    chatboxAIImageModels,
+    chatboxAIVideoModels,
     ...others,
   }
 }
