@@ -25,9 +25,9 @@ const readOnlyInputStyles = {
     fontWeight: 'normal',
   },
   input: {
-    backgroundColor: 'var(--chatbox-background-secondary)',
+    backgroundColor: 'var(--kod-background-secondary)',
     border: 'none',
-    color: 'var(--chatbox-tint-primary)',
+    color: 'var(--kod-tint-primary)',
     cursor: 'default',
   },
 }
@@ -118,16 +118,16 @@ export function ImportProviderModal({ opened, onClose, importedConfig, existingP
             gap="xs"
             p="sm"
             style={{
-              backgroundColor: 'var(--chatbox-background-error-secondary)',
+              backgroundColor: 'var(--kod-background-error-secondary)',
               borderRadius: '8px',
             }}
           >
-            <ScalableIcon icon={IconAlertTriangle} color="var(--chatbox-tint-error)" />
+            <ScalableIcon icon={IconAlertTriangle} color="var(--kod-tint-error)" />
             <Box flex={1}>
-              <Text size="sm" fw={600} c="chatbox-error">
+              <Text size="sm" fw={600} c="kod-error">
                 {t('Provider already exists')}
               </Text>
-              <Text size="sm" c="chatbox-error">
+              <Text size="sm" c="kod-error">
                 {t('A provider with this ID already exists. Continuing will overwrite the existing configuration.')}
               </Text>
             </Box>

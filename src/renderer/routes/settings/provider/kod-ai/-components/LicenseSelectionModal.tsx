@@ -42,7 +42,7 @@ export function LicenseSelectionModal({ opened, licenses, onConfirm, onCancel }:
       size="md"
     >
       <Stack gap="md">
-        <Text size="sm" c="chatbox-secondary">
+        <Text size="sm" c="kod-secondary">
           {t('You have multiple licenses. Please select one to use:')}
         </Text>
 
@@ -60,22 +60,22 @@ export function LicenseSelectionModal({ opened, licenses, onConfirm, onCancel }:
                   label={
                     <Stack gap={2}>
                       <Text fw={500}>{license.product_name}</Text>
-                      <Text size="xs" c="chatbox-tertiary" className="font-mono">
+                      <Text size="xs" c="kod-tertiary" className="font-mono">
                         {license.key.substring(0, 8)}
                         {'*'.repeat(12)}
                       </Text>
                       {isExpired ? (
-                        <Text size="xs" c="chatbox-tertiary">
+                        <Text size="xs" c="kod-tertiary">
                           {t('Total Quota')}: {formatTokens(license.unified_token_limit)}
                         </Text>
                       ) : (
-                        <Text size="xs" c="chatbox-tertiary">
+                        <Text size="xs" c="kod-tertiary">
                           {t('Remaining/Total Quota')}: {formatTokens(remaining)}/
                           {formatTokens(license.unified_token_limit)}
                         </Text>
                       )}
                       {expiryDate && (
-                        <Text size="xs" c="chatbox-tertiary">
+                        <Text size="xs" c="kod-tertiary">
                           {t('Expires')}: {expiryDate}
                           {isExpired && ` (${t('Expired')})`}
                         </Text>

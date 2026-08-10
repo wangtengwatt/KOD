@@ -16,7 +16,7 @@ export default function SegmentedControl({ value, onChange, data, ...props }: Se
       fullWidth
       transitionDuration={200}
       transitionTimingFunction="ease"
-      color="chatbox-brand"
+      color="kod-brand"
       {...props}
       styles={{
         root: {

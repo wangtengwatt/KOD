@@ -24,18 +24,18 @@ export default function DesktopDownloadReminder() {
 
   return (
     <div className="fixed right-4 bottom-4 z-[120] w-[min(360px,calc(100vw-2rem))]">
-      <Paper withBorder radius="lg" p="md" shadow="lg" className="backdrop-blur-sm bg-chatbox-background-primary/95">
+      <Paper withBorder radius="lg" p="md" shadow="lg" className="backdrop-blur-sm bg-kod-background-primary/95">
         <Stack gap="sm">
           <Flex justify="space-between" gap="sm" align="flex-start">
             <Flex gap="sm" align="flex-start" flex={1}>
-              <ScalableIcon icon={IconDeviceDesktop} size={20} className="text-chatbox-brand mt-2 shrink-0" />
+              <ScalableIcon icon={IconDeviceDesktop} size={20} className="text-kod-brand mt-2 shrink-0" />
                 <Text fw={600}>{t('More advanced features are available in Chatbox Desktop.')}
                 </Text>
             </Flex>
 
             <ActionIcon
               variant="subtle"
-              color="chatbox-secondary"
+              color="kod-secondary"
               onClick={() => setSettings({ chatboxAIDesktopPromptDismissed: true })}
               aria-label={t('Close') || 'Close'}
             >
@@ -43,7 +43,7 @@ export default function DesktopDownloadReminder() {
             </ActionIcon>
           </Flex>
 
-          <Text size="xs" c="chatbox-secondary" style={{ whiteSpace: 'pre-line' }}>
+          <Text size="xs" c="kod-secondary" style={{ whiteSpace: 'pre-line' }}>
             {t(
               '1. Your chat history on web version can only be stored in the browser cache (unreliable - it may be cleaned by browser). \n2. MCP and Knowledge Base are currently supported on the desktop app only. '
             )}

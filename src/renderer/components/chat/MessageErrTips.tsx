@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { trackJkClickEvent } from '@/analytics/jk'
 import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
-import { ChatboxAIErrorMessage } from '@/components/common/ChatboxAIErrorMessage'
+import { KodAIErrorMessage } from '@/components/common/KodAIErrorMessage'
 import { useCopied } from '@/hooks/useCopied'
 import { navigateToSettings } from '@/modals/Settings'
 import { trackingEvent } from '@/packages/event'
@@ -324,7 +324,7 @@ export default function MessageErrTips(props: { msg: Message; onRetry?: () => vo
     )
   } else if (msg.errorCode && ChatboxAIAPIError.getDetail(msg.errorCode)) {
     onlyShowTips = true
-    tips.push(<ChatboxAIErrorMessage errorCode={msg.errorCode} model={msg.model} />)
+    tips.push(<KodAIErrorMessage errorCode={msg.errorCode} model={msg.model} />)
   } else {
     tips.push(
       <Trans
@@ -344,7 +344,7 @@ export default function MessageErrTips(props: { msg: Message; onRetry?: () => vo
   return (
     <div
       role="alert"
-      className={`message-error-tips text-sm text-chatbox-tint-error ${isBubbleLayout ? 'py-2' : 'px-4 py-3 rounded-lg border border-solid border-chatbox-border-error bg-chatbox-background-error-secondary'}`}
+      className={`message-error-tips text-sm text-kod-tint-error ${isBubbleLayout ? 'py-2' : 'px-4 py-3 rounded-lg border border-solid border-kod-border-error bg-kod-background-error-secondary'}`}
     >
       {tips.map((tip, i) => (
         <b key={`${i}-${tip}`}>{tip}</b>
@@ -358,7 +358,7 @@ export default function MessageErrTips(props: { msg: Message; onRetry?: () => vo
           <Text
             component="button"
             size="xs"
-            c="chatbox-tertiary"
+            c="kod-tertiary"
             className="cursor-pointer border-0 bg-transparent p-0"
             onClick={onRetry}
           >
@@ -367,7 +367,7 @@ export default function MessageErrTips(props: { msg: Message; onRetry?: () => vo
         </Flex>
       )}
       {requestId && (
-        <Text size="xs" c="chatbox-tertiary" mt="xs" className="break-all select-text">
+        <Text size="xs" c="kod-tertiary" mt="xs" className="break-all select-text">
           {t('Request ID: {{requestId}}', { requestId })}
         </Text>
       )}

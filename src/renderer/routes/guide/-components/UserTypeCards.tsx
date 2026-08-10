@@ -70,10 +70,10 @@ export function UserTypeCards({ onSelect, disabled }: UserTypeCardsProps) {
                   ? 'linear-gradient(180deg, rgba(34, 139, 230, 0.08) 0%, rgba(34, 139, 230, 0.02) 100%)'
                   : 'linear-gradient(180deg, rgba(134, 142, 150, 0.06) 0%, rgba(134, 142, 150, 0.02) 100%)',
                 border: isSelected
-                  ? '2px solid var(--chatbox-border-brand)'
+                  ? '2px solid var(--kod-border-brand)'
                   : highlighted
-                    ? '2px solid var(--chatbox-border-brand)'
-                    : '2px solid var(--chatbox-border-secondary)',
+                    ? '2px solid var(--kod-border-brand)'
+                    : '2px solid var(--kod-border-secondary)',
               }}
             >
               {/* Recommended badge - positioned at top-right corner */}
@@ -81,7 +81,7 @@ export function UserTypeCards({ onSelect, disabled }: UserTypeCardsProps) {
                 <Box
                   className="absolute top-0 right-0 px-3 py-1 text-xs font-medium text-white"
                   style={{
-                    background: 'var(--chatbox-background-brand-primary)',
+                    background: 'var(--kod-background-brand-primary)',
                     borderBottomLeftRadius: '0.5rem',
                   }}
                 >
@@ -108,13 +108,13 @@ export function UserTypeCards({ onSelect, disabled }: UserTypeCardsProps) {
                   fw={600}
                   size="sm"
                   ta="center"
-                  className={highlighted ? 'text-chatbox-tint-brand' : 'text-chatbox-tint-primary'}
+                  className={highlighted ? 'text-kod-tint-brand' : 'text-kod-tint-primary'}
                 >
                   {texts.title}
                 </Text>
 
                 {/* Description */}
-                <Text size="xs" c="chatbox-secondary" ta="center">
+                <Text size="xs" c="kod-secondary" ta="center">
                   {texts.description}
                 </Text>
               </Stack>

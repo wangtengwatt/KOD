@@ -15,12 +15,12 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
   return (
     <Stack gap="xl" ref={ref}>
       <Flex gap="xs" align="center" justify="space-between">
-        <Title order={3} c="chatbox-secondary">
+        <Title order={3} c="kod-secondary">
           KOD
         </Title>
         <Button
           variant="transparent"
-          c="chatbox-tertiary"
+          c="kod-tertiary"
           px={0}
           h={24}
           onClick={() => platform.openLink('https://kod.kai.com')}
@@ -32,13 +32,13 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
       <Paper shadow="xs" p="md" withBorder>
         <Stack gap="sm">
           <Text fw={600}>{t('You are logged in to KOD')}</Text>
-          <Text c="chatbox-tertiary">
+          <Text c="kod-tertiary">
             {t('KOD will use the relay station URL and API key linked to this account to fetch models.')}
           </Text>
           <Flex justify="flex-end">
             <Button
               variant="light"
-              color="chatbox-gray"
+              color="kod-gray"
               leftSection={<ScalableIcon icon={IconLogout} size={14} />}
               onClick={() => void onLogout()}
             >

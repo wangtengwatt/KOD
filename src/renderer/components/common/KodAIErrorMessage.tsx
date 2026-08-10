@@ -4,17 +4,13 @@ import type { FC } from 'react'
 import { Trans } from 'react-i18next'
 import LinkTargetBlank from '@/components/common/Link'
 import { navigateToSettings } from '@/modals/Settings'
-import { trackingEvent } from '@/packages/event'
-import { buildChatboxUrl } from '@/packages/remote'
-import platform from '@/platform'
-import * as settingActions from '@/stores/settingActions'
 import { useSettingsStore } from '@/stores/settingsStore'
 
-interface ChatboxAIErrorMessageProps {
+interface KodAIErrorMessageProps {
   errorCode: number
   /** Optional model name for `{{model}}` interpolation in i18n keys. */
   model?: string
-  /** Tracking source label appended to upgrade-link analytics events. */
+  /** Retained for caller compatibility; KOD links no longer use tracking redirects. */
   trackingSource?: string
 }
 
@@ -25,13 +21,9 @@ const SUPPORTED_WEB_BROWSING_MODELS = 'gemini-2.0-flash(API), perplexity API'
  * links (open settings, switch search provider, upgrade plan). Returns `null`
  * for unknown codes so callers can fall back to a generic message.
  */
-export const ChatboxAIErrorMessage: FC<ChatboxAIErrorMessageProps> = ({
-  errorCode,
-  model,
-  trackingSource = 'msg_upgrade_required',
-}) => {
+export const KodAIErrorMessage: FC<KodAIErrorMessageProps> = ({ errorCode, model }) => {
   const licensePlanName = useSettingsStore((s) => s.licensePlanName)
-  const isFreePlan = licensePlanName === 'Chatbox AI Free'
+  const isFreePlan = licensePlanName?.endsWith('Free') ?? false
   const codeName = isFreePlan ? 'token_quota_exhausted_free' : undefined
   const detail = ChatboxAIAPIError.getDetail(errorCode, codeName)
   if (!detail) return null
@@ -64,38 +56,10 @@ export const ChatboxAIErrorMessage: FC<ChatboxAIErrorMessageProps> = ({
             }}
           />
         ),
-        OpenMorePlanButton: (
-          <Link
-            component="button"
-            type="button"
-            className="cursor-pointer italic"
-            onClick={() => {
-              platform.openLink(
-                buildChatboxUrl(
-                  `/redirect_app/view_more_plans/${settingActions.getLanguage()}?utm_source=app&utm_content=${trackingSource}`
-                )
-              )
-              trackingEvent('click_view_more_plans_button_from_upgrade_error_tips', {
-                event_category: 'user',
-              })
-            }}
-          />
-        ),
-        LinkToHomePage: <LinkTargetBlank href="https://chatboxai.app" />,
-        LinkToAdvancedFileProcessing: (
-          <LinkTargetBlank
-            href={buildChatboxUrl(
-              `/redirect_app/advanced_file_processing/${settingActions.getLanguage()}?utm_source=app&utm_content=${trackingSource}`
-            )}
-          />
-        ),
-        LinkToAdvancedUrlProcessing: (
-          <LinkTargetBlank
-            href={buildChatboxUrl(
-              `/redirect_app/advanced_url_processing/${settingActions.getLanguage()}?utm_source=app&utm_content=${trackingSource}`
-            )}
-          />
-        ),
+        OpenMorePlanButton: <LinkTargetBlank href="https://kod.kai.com/settings" />,
+        LinkToHomePage: <LinkTargetBlank href="https://kod.kai.com" />,
+        LinkToAdvancedFileProcessing: <LinkTargetBlank href="https://kod.kai.com/settings" />,
+        LinkToAdvancedUrlProcessing: <LinkTargetBlank href="https://kod.kai.com/settings" />,
         OpenDocumentParserSettingButton: (
           <Link
             component="button"

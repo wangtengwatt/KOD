@@ -81,7 +81,7 @@ export function EmailCodeLoginModal({ opened, onClose, onLoginSuccess }: EmailCo
       closeOnEscape={false}
     >
       <Stack gap="md">
-        <Text size="sm" c="chatbox-secondary">
+        <Text size="sm" c="kod-secondary">
           {t('Login requires email and password. Invitation code is required for first login.')}
         </Text>
 
@@ -136,12 +136,12 @@ export function EmailCodeLoginModal({ opened, onClose, onLoginSuccess }: EmailCo
             autoComplete="one-time-code"
             disabled={!isFirstLogin || isSubmitting}
           />
-          <Text size="xs" c="chatbox-tertiary">
+          <Text size="xs" c="kod-tertiary">
             {t('Invitation code is required for first login')}
           </Text>
         </Stack>
 
-        <Text size="xs" c="chatbox-tertiary">
+        <Text size="xs" c="kod-tertiary">
           {t('By continuing, you agree to our')}{' '}
           <Anchor size="xs" href="https://kod.kai.com/terms" target="_blank" underline="hover">
             {t('Terms of Service')}
@@ -154,7 +154,7 @@ export function EmailCodeLoginModal({ opened, onClose, onLoginSuccess }: EmailCo
         </Text>
 
         <Flex gap="sm" justify="flex-end" align="center">
-          <Button color="chatbox-gray" variant="light" onClick={handleClose} disabled={isSubmitting}>
+          <Button color="kod-gray" variant="light" onClick={handleClose} disabled={isSubmitting}>
             {t('Cancel')}
           </Button>
           <Button onClick={() => void handleSubmit()} loading={isSubmitting}>

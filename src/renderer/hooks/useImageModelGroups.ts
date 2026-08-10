@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { getModelManifest, type RemoteModelInfo } from '@/packages/remote'
 import { useLanguage, useSettingsStore } from '@/stores/settingsStore'
-import useChatboxAIModels from './useChatboxAIModels'
+import useKodAIModels from './useKodAIModels'
 import { useProviders } from './useProviders'
 
 export interface ImageModelOption {
@@ -102,7 +102,7 @@ export function useProviderImageModels(provider: ModelProviderEnum, enabled: boo
 
 export function useImageModelGroups(): ImageModelGroup[] {
   const { providers } = useProviders()
-  const { chatboxAIImageModels } = useChatboxAIModels()
+  const { kodAIImageModels } = useKodAIModels()
   const providerSettingsMap = useSettingsStore((state) => state.providers)
 
   const chatboxProvider = providers.find((p) => p.id === ModelProviderEnum.ChatboxAI)
@@ -121,7 +121,7 @@ export function useImageModelGroups(): ImageModelGroup[] {
     if (chatboxProvider) {
       const excluded = new Set(providerSettingsMap?.[ModelProviderEnum.ChatboxAI]?.excludedModels || [])
       const models = preferChatboxDefaultImageModel(
-        chatboxAIImageModels.map(providerModelToOption).filter((model) => !excluded.has(model.modelId))
+        kodAIImageModels.map(providerModelToOption).filter((model) => !excluded.has(model.modelId))
       )
       if (models.length > 0) {
         groups.push({
@@ -182,7 +182,7 @@ export function useImageModelGroups(): ImageModelGroup[] {
     geminiProvider,
     customGeminiProviders,
     providerSettingsMap,
-    chatboxAIImageModels,
+    kodAIImageModels,
     openAIImageModels,
     geminiImageModels,
   ])

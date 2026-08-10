@@ -149,7 +149,7 @@ export const GitHubInstallModal: FC<GitHubInstallModalProps> = ({
                         {skill.name}
                       </Text>
                       {skill.description && (
-                        <Text size="xs" c="chatbox-tertiary">
+                        <Text size="xs" c="kod-tertiary">
                           {skill.description}
                         </Text>
                       )}
@@ -169,7 +169,7 @@ export const GitHubInstallModal: FC<GitHubInstallModalProps> = ({
                 )}
               </Flex>
               {statusError && (
-                <Text size="xs" mt="xs" c="chatbox-error">
+                <Text size="xs" mt="xs" c="kod-error">
                   {statusError}
                 </Text>
               )}

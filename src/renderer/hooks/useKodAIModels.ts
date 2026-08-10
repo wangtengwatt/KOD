@@ -8,7 +8,7 @@ import { useProviderSettings } from '@/stores/settingsStore'
 
 const EMPTY_MODELS: ProviderModelInfo[] = []
 
-const useChatboxAIModels = () => {
+const useKodAIModels = () => {
   const accessToken = useAuthInfoStore((state) => state.accessToken)
   const { providerSettings: kodSettings, setProviderSettings } = useProviderSettings(ModelProviderEnum.ChatboxAI)
 
@@ -40,25 +40,25 @@ const useChatboxAIModels = () => {
     retry: 1,
   })
 
-  const allChatboxAIModels = accessToken ? data?.models || EMPTY_MODELS : EMPTY_MODELS
+  const allKodAIModels = accessToken ? data?.models || EMPTY_MODELS : EMPTY_MODELS
 
-  const chatboxAIModels = useMemo(
-    () => allChatboxAIModels.filter((m) => m.type !== 'image' && !kodSettings?.excludedModels?.includes(m.modelId)),
-    [allChatboxAIModels, kodSettings]
+  const kodAIModels = useMemo(
+    () => allKodAIModels.filter((m) => m.type !== 'image' && !kodSettings?.excludedModels?.includes(m.modelId)),
+    [allKodAIModels, kodSettings]
   )
 
   // 图像生成模型（type === 'image'），分拣到 image 组供 Image Creator / 图片会话使用
-  const chatboxAIImageModels = useMemo(
-    () => allChatboxAIModels.filter((m) => m.type === 'image'),
-    [allChatboxAIModels]
+  const kodAIImageModels = useMemo(
+    () => allKodAIModels.filter((m) => m.type === 'image'),
+    [allKodAIModels]
   )
 
   return {
-    allChatboxAIModels,
-    chatboxAIModels,
-    chatboxAIImageModels,
+    allKodAIModels,
+    kodAIModels,
+    kodAIImageModels,
     ...others,
   }
 }
 
-export default useChatboxAIModels
+export default useKodAIModels

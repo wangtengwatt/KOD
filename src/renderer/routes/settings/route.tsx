@@ -26,6 +26,7 @@ import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import platform from '@/platform'
 import { featureFlags } from '@/utils/feature-flags'
+import { getSettingsParentPath } from './-settings-navigation'
 
 const ITEMS = [
   {
@@ -108,21 +109,30 @@ export const Route = createFileRoute('/settings')({
 export function RouteComponent() {
   const { t } = useTranslation()
   const router = useRouter()
+  const routerState = useRouterState()
   const canGoBack = useCanGoBack()
   const isSmallScreen = useIsSmallScreen()
+  const settingsParentPath = getSettingsParentPath(routerState.location.pathname)
+  const showBackButton = isSmallScreen && (settingsParentPath !== undefined || canGoBack)
 
   return (
     <Page
       title={t('Settings')}
       left={
-        isSmallScreen && canGoBack ? (
+        showBackButton ? (
           <ActionIcon
             className="controls"
             variant="subtle"
             size={28}
-            color="chatbox-secondary"
+            color="kod-secondary"
             mr="sm"
-            onClick={() => router.history.back()}
+            onClick={() => {
+              if (settingsParentPath) {
+                router.navigate({ to: settingsParentPath })
+                return
+              }
+              router.history.back()
+            }}
           >
             <IconChevronLeft />
           </ActionIcon>
@@ -156,7 +166,7 @@ export function SettingsRoot() {
           gap={isSmallScreen ? 0 : 'xs'}
           maw={isSmallScreen ? undefined : 256}
           className={clsx(
-            'border-solid border-0 border-r overflow-auto border-chatbox-border-primary',
+            'border-solid border-0 border-r overflow-auto border-kod-border-primary',
             isSmallScreen ? 'w-full border-r-0' : 'flex-[1_0_auto]'
           )}
         >
@@ -177,11 +187,11 @@ export function SettingsRoot() {
                 pr="xl"
                 py={isSmallScreen ? 'sm' : undefined}
                 align="center"
-                c={item.key === key ? 'chatbox-brand' : 'chatbox-secondary'}
-                bg={item.key === key ? 'var(--chatbox-background-brand-secondary)' : 'transparent'}
+                c={item.key === key ? 'kod-brand' : 'kod-secondary'}
+                bg={item.key === key ? 'var(--kod-background-brand-secondary)' : 'transparent'}
                 className={clsx(
                   ' cursor-pointer select-none rounded-md',
-                  item.key === key ? '' : 'hover:!bg-chatbox-background-gray-secondary'
+                  item.key === key ? '' : 'hover:!bg-kod-background-gray-secondary'
                 )}
               >
                 <Box component="span" flex="0 0 auto" w={20} h={20} mr="xs">
@@ -196,10 +206,10 @@ export function SettingsRoot() {
                   {t(item.label)}
                 </Text>
                 {item.key === 'chatbox-ai' && isChatboxAIActivated && (
-                  <Indicator size={8} color="chatbox-success" className="ml-auto" />
+                  <Indicator size={8} color="kod-success" className="ml-auto" />
                 )}
                 {isSmallScreen && (
-                  <ScalableIcon icon={IconChevronRight} size={20} className="!text-chatbox-tint-tertiary" />
+                  <ScalableIcon icon={IconChevronRight} size={20} className="!text-kod-tint-tertiary" />
                 )}
               </Flex>
 
@@ -216,7 +226,7 @@ export function SettingsRoot() {
                 pr="xl"
                 py="sm"
                 align="center"
-                c={'chatbox-secondary'}
+                c={'kod-secondary'}
                 className={clsx(' cursor-pointer select-none rounded-md')}
               >
                 <Box component="span" flex="0 0 auto" w={20} h={20} mr="xs">
@@ -230,7 +240,7 @@ export function SettingsRoot() {
                 >
                   {t('About')}
                 </Text>
-                <ScalableIcon icon={IconChevronRight} size={20} className="!text-chatbox-tint-tertiary" />
+                <ScalableIcon icon={IconChevronRight} size={20} className="!text-kod-tint-tertiary" />
               </Flex>
 
               {isSmallScreen && <Divider />}

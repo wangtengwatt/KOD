@@ -125,13 +125,13 @@ export function buildChatboxUrl(path: string) {
   return new URL(path, getChatboxOrigin()).toString()
 }
 
-const getChatboxHeaders = async () => {
+const getKodClientHeaders = async () => {
   return {
-    'CHATBOX-PLATFORM': await platform.getPlatform(),
-    'CHATBOX-PLATFORM-TYPE': platform.type,
-    'CHATBOX-CHANNEL': CHATBOX_BUILD_CHANNEL,
-    'CHATBOX-VERSION': await platform.getVersion(),
-    'CHATBOX-OS': getOS(),
+    'X-KOD-PLATFORM': await platform.getPlatform(),
+    'X-KOD-PLATFORM-TYPE': platform.type,
+    'X-KOD-CHANNEL': CHATBOX_BUILD_CHANNEL,
+    'X-KOD-VERSION': await platform.getVersion(),
+    'X-KOD-OS': getOS(),
   }
 }
 
@@ -215,20 +215,22 @@ export async function getKodRelayStationConfig(token?: string | null): Promise<K
 const OpenAICompatibleModelSchema = z
   .object({
     id: z.string(),
-    name: z.string().optional(),
-    context_length: z.number().optional(),
+    name: z.string().nullish(),
+    context_length: z.coerce.number().nullish(),
     architecture: z
       .object({
-        input_modalities: z.array(z.string()).optional(),
+        input_modalities: z.array(z.string()).nullish(),
       })
-      .optional(),
+      .passthrough()
+      .nullish(),
     pricing: z
       .object({
-        web_search: z.string().optional(),
-        internal_reasoning: z.string().optional(),
+        web_search: z.union([z.string(), z.number()]).nullish(),
+        internal_reasoning: z.union([z.string(), z.number()]).nullish(),
       })
-      .optional(),
-    supported_parameters: z.array(z.string()).optional(),
+      .passthrough()
+      .nullish(),
+    supported_parameters: z.array(z.string()).nullish(),
   })
   .passthrough()
 
@@ -238,12 +240,17 @@ const OpenAICompatibleModelsResponseSchema = z
   })
   .passthrough()
 
-function normalizeRelayBaseUrl(url: string) {
-  return url.replace(/\/+$/, '')
+function getRelayModelsUrl(url: string) {
+  const normalized = url.trim().replace(/\/+$/, '')
+  return `${normalized.replace(/\/models$/i, '')}/models`
+}
+
+function hasNonZeroPrice(value: string | number | null | undefined) {
+  return value != null && Number(value) !== 0
 }
 
 export async function fetchKodRelayStationModels(config: KodRelayStationConfig): Promise<ProviderModelInfo[]> {
-  const json = await ofetch(`${normalizeRelayBaseUrl(config.url)}/models`, {
+  const json = await ofetch(getRelayModelsUrl(config.url), {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
@@ -256,13 +263,13 @@ export async function fetchKodRelayStationModels(config: KodRelayStationConfig):
     if (item.architecture?.input_modalities?.includes('image')) {
       capabilities.push('vision')
     }
-    if (item.pricing?.internal_reasoning && item.pricing.internal_reasoning !== '0') {
+    if (hasNonZeroPrice(item.pricing?.internal_reasoning)) {
       capabilities.push('reasoning')
     }
     if (item.supported_parameters?.some((param) => param === 'tools' || param === 'tool_choice')) {
       capabilities.push('tool_use')
     }
-    if (item.pricing?.web_search && item.pricing.web_search !== '0') {
+    if (hasNonZeroPrice(item.pricing?.web_search)) {
       capabilities.push('web_search')
     }
 
@@ -272,9 +279,9 @@ export async function fetchKodRelayStationModels(config: KodRelayStationConfig):
 
     return {
       modelId: item.id,
-      nickname: item.name,
+      nickname: item.name ?? undefined,
       type: isImageModel ? ('image' as const) : 'chat',
-      contextWindow: item.context_length,
+      contextWindow: item.context_length ?? undefined,
       capabilities,
     }
   })
@@ -395,7 +402,7 @@ export async function getRemoteConfig(config: keyof RemoteConfig) {
   }
   const res = await ofetch<Response>(`${getAPIOrigin()}/api/remote_config/${config}`, {
     retry: 3,
-    headers: await getChatboxHeaders(),
+    headers: await getKodClientHeaders(),
   })
   return res['data']
 }
@@ -430,7 +437,7 @@ export async function getSessionRagConfig(params?: { licenseKey?: string }) {
   }
 
   const promise = (async () => {
-    const headers = await getChatboxHeaders()
+    const headers = await getKodClientHeaders()
     const res = await ofetch<Response>(`${getAPIOrigin()}/api/session_rag/config`, {
       retry: 3,
       headers: {
@@ -484,7 +491,7 @@ export async function getDialogConfig(params: { uuid: string; language: string; 
     method: 'POST',
     retry: 3,
     body: params,
-    headers: await getChatboxHeaders(),
+    headers: await getKodClientHeaders(),
   })
   return res['data'] || null
 }
@@ -497,7 +504,7 @@ export async function getLicenseDetail(params: { licenseKey: string }) {
     retry: 3,
     headers: {
       Authorization: params.licenseKey,
-      ...(await getChatboxHeaders()),
+      ...(await getKodClientHeaders()),
     },
   })
   return res['data'] || null
@@ -527,7 +534,7 @@ export async function getLicenseDetailRealtime(params: { licenseKey: string }): 
       retry: 5,
       headers: {
         Authorization: params.licenseKey,
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       onResponseError({ response }) {
         // 在错误响应时捕获 error 对象
@@ -563,7 +570,7 @@ export async function generateUploadUrl(params: { licenseKey: string; filename: 
       headers: {
         Authorization: params.licenseKey,
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify(params),
     },
@@ -593,7 +600,7 @@ export async function createUserFile<T extends boolean>(params: {
       headers: {
         Authorization: params.licenseKey,
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify(params),
     },
@@ -641,7 +648,7 @@ export async function parseUserLinkPro(params: { licenseKey: string; url: string
       headers: {
         Authorization: licenseKey,
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify({
         licenseKey,
@@ -677,7 +684,7 @@ export async function parseUserLinkFree(params: { url: string }) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(await getChatboxHeaders()),
+      ...(await getKodClientHeaders()),
     },
     body: JSON.stringify(params),
   })
@@ -705,7 +712,7 @@ export async function webBrowsing(params: { licenseKey: string; query: string })
       headers: {
         Authorization: params.licenseKey,
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify(params),
     },
@@ -733,7 +740,7 @@ export async function activateLicense(params: { licenseKey: string; instanceName
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify(params),
     },
@@ -777,7 +784,7 @@ export async function validateLicense(params: { licenseKey: string; instanceId: 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify(params),
     },
@@ -819,7 +826,7 @@ export async function getModelManifest(params: { aiProvider: ModelProvider; lice
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify({
         aiProvider: params.aiProvider,
@@ -846,7 +853,7 @@ export async function reportContent(params: { id: string; type: string; details:
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(await getChatboxHeaders()),
+      ...(await getKodClientHeaders()),
     },
     body: JSON.stringify(params),
   })
@@ -865,7 +872,7 @@ export async function getProviderModelsInfo(params: { modelIds: string[] }) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify(params),
     },
@@ -905,7 +912,7 @@ export async function requestLoginTicketId() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify({
         device_type: deviceType,
@@ -935,7 +942,7 @@ export async function sendEmailLoginCode(params: { email: string; lang?: string 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify({
         email: params.email,
@@ -966,7 +973,7 @@ export async function loginOrSignupWithEmailCode(params: { email: string; code: 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify({
         email: params.email,
@@ -998,7 +1005,7 @@ export async function getWebAuthToken(): Promise<string> {
     {
       method: 'POST',
       headers: {
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
     },
     {
@@ -1026,7 +1033,7 @@ export async function checkLoginStatus(ticketId: string) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify({ ticket_id: ticketId }),
     },
@@ -1067,7 +1074,7 @@ export async function refreshAccessToken(params: { refreshToken: string }) {
       method: 'POST',
       headers: {
         'x-chatbox-refresh-token': params.refreshToken,
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
     },
     {
@@ -1110,7 +1117,7 @@ export async function getUserProfile() {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
     },
     {
@@ -1156,7 +1163,7 @@ export async function listLicensesByUser(): Promise<UserLicense[]> {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
     },
     {
@@ -1218,7 +1225,7 @@ export async function submitImageGeneration(
       headers: {
         Authorization: `Bearer ${licenseKey}`,
         'Content-Type': 'application/json',
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       body: JSON.stringify(params),
     },
@@ -1243,7 +1250,7 @@ export async function pollImageTask(
       method: 'GET',
       headers: {
         Authorization: `Bearer ${licenseKey}`,
-        ...(await getChatboxHeaders()),
+        ...(await getKodClientHeaders()),
       },
       signal,
     },

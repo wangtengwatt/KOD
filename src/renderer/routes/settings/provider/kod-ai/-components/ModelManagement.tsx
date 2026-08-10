@@ -9,8 +9,8 @@ import { ModelList } from '@/components/ModelList'
 
 interface ModelManagementProps {
   showControls?: boolean
-  chatboxAIModels: ProviderModelInfo[]
-  allChatboxAIModels: ProviderModelInfo[]
+  kodAIModels: ProviderModelInfo[]
+  allKodAIModels: ProviderModelInfo[]
   onDeleteModel: (modelId: string) => void
   onResetModels: () => void
   onFetchModels: () => void
@@ -19,8 +19,8 @@ interface ModelManagementProps {
 }
 
 export function ModelManagement({
-  chatboxAIModels,
-  allChatboxAIModels,
+  kodAIModels,
+  allKodAIModels,
   onDeleteModel,
   onResetModels,
   onFetchModels,
@@ -47,8 +47,8 @@ export function ModelManagement({
             <Flex gap="sm" align="center" justify="flex-end">
               <Button
                 variant="light"
-                color="chatbox-gray"
-                c="chatbox-secondary"
+                color="kod-gray"
+                c="kod-secondary"
                 size="compact-xs"
                 px="sm"
                 onClick={onResetModels}
@@ -59,8 +59,8 @@ export function ModelManagement({
 
               <Button
                 variant="light"
-                color="chatbox-gray"
-                c="chatbox-secondary"
+                color="kod-gray"
+                c="kod-secondary"
                 size="compact-xs"
                 px="sm"
                 onClick={handleFetchModels}
@@ -73,7 +73,7 @@ export function ModelManagement({
         </Flex>
 
         <ModelList
-          models={chatboxAIModels}
+          models={kodAIModels}
           showActions={showControls}
           onDeleteModel={onDeleteModel}
           showSearch={false}
@@ -90,11 +90,11 @@ export function ModelManagement({
           size="lg"
         >
           <ModelList
-            models={allChatboxAIModels}
+            models={allKodAIModels}
             showActions={true}
             onAddModel={onAddModel}
             onRemoveModel={onRemoveModel}
-            displayedModelIds={chatboxAIModels.map((m) => m.modelId)}
+            displayedModelIds={kodAIModels.map((m) => m.modelId)}
             showSearch={true}
           />
         </AdaptiveModal>

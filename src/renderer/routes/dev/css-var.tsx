@@ -13,14 +13,14 @@ function RouteComponent() {
       <h1>CSS Variables Preview</h1>
 
       {[
-        'chatbox-brand',
-        'chatbox-success',
-        'chatbox-error',
-        'chatbox-warning',
-        'chatbox-gray',
-        'chatbox-primary',
-        'chatbox-secondary',
-        'chatbox-tertiary',
+        'kod-brand',
+        'kod-success',
+        'kod-error',
+        'kod-warning',
+        'kod-gray',
+        'kod-primary',
+        'kod-secondary',
+        'kod-tertiary',
       ].map((color) => (
         <>
           <h5>{color}</h5>
@@ -48,22 +48,22 @@ function RouteComponent() {
       ))}
 
       <Flex gap="lg">
-        <ActionIcon variant="filled" size={44} radius={0} color="chatbox-primary">
+        <ActionIcon variant="filled" size={44} radius={0} color="kod-primary">
           <ScalableIcon icon={Icon24Hours} size={16} strokeWidth={1.5} />
         </ActionIcon>
-        <ActionIcon variant="light" size={44} radius={0} color="chatbox-primary">
+        <ActionIcon variant="light" size={44} radius={0} color="kod-primary">
           <ScalableIcon icon={Icon24Hours} size={16} strokeWidth={1.5} />
         </ActionIcon>
-        <ActionIcon variant="outline" size={44} radius={0} color="chatbox-primary">
+        <ActionIcon variant="outline" size={44} radius={0} color="kod-primary">
           <ScalableIcon icon={Icon24Hours} size={16} strokeWidth={1.5} />
         </ActionIcon>
-        <ActionIcon variant="subtle" size={44} radius={0} color="chatbox-primary">
+        <ActionIcon variant="subtle" size={44} radius={0} color="kod-primary">
           <ScalableIcon icon={Icon24Hours} size={16} strokeWidth={1.5} />
         </ActionIcon>
-        <ActionIcon variant="transparent" size={44} radius={0} color="chatbox-primary">
+        <ActionIcon variant="transparent" size={44} radius={0} color="kod-primary">
           <ScalableIcon icon={Icon24Hours} size={16} strokeWidth={1.5} />
         </ActionIcon>
-        <ActionIcon variant="white" size={44} radius={0} color="chatbox-primary">
+        <ActionIcon variant="white" size={44} radius={0} color="kod-primary">
           <ScalableIcon icon={Icon24Hours} size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Flex>

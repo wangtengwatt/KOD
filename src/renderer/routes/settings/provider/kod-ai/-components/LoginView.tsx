@@ -41,10 +41,10 @@ export const LoginView = forwardRef<HTMLDivElement, LoginViewProps>(({ language,
           </Flex>
         </Flex>
         <Stack gap="0">
-          <Title order={3} c="chatbox-primary">
+          <Title order={3} c="kod-primary">
             {t('Login to Chatbox AI')}
           </Title>
-          <Text c="chatbox-tertiary">
+          <Text c="kod-tertiary">
             {t('Login requires email and password. Invitation code is required for first login.')}
           </Text>
         </Stack>
@@ -63,9 +63,9 @@ export const LoginView = forwardRef<HTMLDivElement, LoginViewProps>(({ language,
             >
               {t('Login to Chatbox AI')}
             </Button>
-            <Text c="chatbox-tertiary">
+            <Text c="kod-tertiary">
               {t('By continuing, you agree to our')}{' '}
-              <Anchor size="sm" href="https://kod.kai.com/terms" target="_blank" underline="hover" c="chatbox-tertiary">
+              <Anchor size="sm" href="https://kod.kai.com/terms" target="_blank" underline="hover" c="kod-tertiary">
                 {t('Terms of Service')}
               </Anchor>
               . {t('Read our')}{' '}
@@ -74,7 +74,7 @@ export const LoginView = forwardRef<HTMLDivElement, LoginViewProps>(({ language,
                 href="https://kod.kai.com/privacy"
                 target="_blank"
                 underline="hover"
-                c="chatbox-tertiary"
+                c="kod-tertiary"
               >
                 {t('Privacy Policy')}
               </Anchor>
@@ -86,7 +86,7 @@ export const LoginView = forwardRef<HTMLDivElement, LoginViewProps>(({ language,
       {/* promote card */}
       <Paper shadow="xs" p="sm" withBorder>
         <Stack gap="sm">
-          <Text fw="600" c="chatbox-brand">
+          <Text fw="600" c="kod-brand">
             {t('Chatbox AI offers a user-friendly AI solution to help you enhance productivity')}
           </Text>
           <Stack>
@@ -99,7 +99,7 @@ export const LoginView = forwardRef<HTMLDivElement, LoginViewProps>(({ language,
               <Flex key={item} gap="xs" align="center">
                 <ScalableIcon
                   icon={IconCircleCheckFilled}
-                  className=" flex-shrink-0 flex-grow-0 text-chatbox-tint-brand"
+                  className=" flex-shrink-0 flex-grow-0 text-kod-tint-brand"
                 />
                 <Text>{item}</Text>
               </Flex>

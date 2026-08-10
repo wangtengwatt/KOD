@@ -27,8 +27,8 @@ export function SuggestedQuestions({ onQuestionClick, disabled }: SuggestedQuest
   return (
     <Box mt="lg">
       {/* Section header */}
-      <Text size="xs" c="chatbox-tertiary" fw={500} mb="xs" className="flex items-center gap-1.5">
-        <ScalableIcon icon={IconSparkles} size={12} className="text-chatbox-tint-brand opacity-70" />
+      <Text size="xs" c="kod-tertiary" fw={500} mb="xs" className="flex items-center gap-1.5">
+        <ScalableIcon icon={IconSparkles} size={12} className="text-kod-tint-brand opacity-70" />
         {t('You might also want to ask')}
       </Text>
 
@@ -42,18 +42,18 @@ export function SuggestedQuestions({ onQuestionClick, disabled }: SuggestedQuest
             className={`
               group
               px-3 py-2 rounded-lg
-              bg-chatbox-background-secondary
-              border border-chatbox-border-primary
+              bg-kod-background-secondary
+              border border-kod-border-primary
               transition-all duration-200
-              ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-chatbox-tint-brand/50 hover:bg-chatbox-background-brand-secondary/30'}
+              ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-kod-tint-brand/50 hover:bg-kod-background-brand-secondary/30'}
             `}
           >
             <Text
               size="sm"
-              c="chatbox-secondary"
+              c="kod-secondary"
               className={`
                 transition-colors duration-200
-                ${!disabled && 'group-hover:text-chatbox-tint-brand'}
+                ${!disabled && 'group-hover:text-kod-tint-brand'}
               `}
             >
               {question}

@@ -592,15 +592,15 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
     switch (status) {
       case 'completed':
       case 'done':
-        return <IconCircleCheck size={16} color="var(--chatbox-tint-success)" />
+        return <IconCircleCheck size={16} color="var(--kod-tint-success)" />
       case 'processing':
         return (
-          <IconLoader size={16} color="var(--chatbox-tint-warning)" style={{ animation: 'spin 1s linear infinite' }} />
+          <IconLoader size={16} color="var(--kod-tint-warning)" style={{ animation: 'spin 1s linear infinite' }} />
         )
       case 'pending':
-        return <IconLoader size={16} color="var(--chatbox-tint-gray)" />
+        return <IconLoader size={16} color="var(--kod-tint-gray)" />
       case 'paused':
-        return <IconPlayerPause size={16} color="var(--chatbox-tint-warning)" />
+        return <IconPlayerPause size={16} color="var(--kod-tint-warning)" />
       case 'failed': {
         const isParsedContentTooLarge = error === KNOWLEDGE_BASE_PARSED_CONTENT_TOO_LARGE_ERROR
         // Determine label based on actual parser type used
@@ -711,28 +711,28 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
             py="2px"
             style={{
               cursor: 'pointer',
-              backgroundColor: 'var(--chatbox-background-secondary)',
-              borderBottom: '1px solid var(--chatbox-border-secondary-hover)',
+              backgroundColor: 'var(--kod-background-secondary)',
+              borderBottom: '1px solid var(--kod-border-secondary-hover)',
             }}
             onClick={() => setIsExpanded(!isExpanded)}
           >
             <Group>
               {isExpanded ? (
-                <IconChevronDown size={16} color="var(--chatbox-tint-gray)" />
+                <IconChevronDown size={16} color="var(--kod-tint-gray)" />
               ) : (
-                <IconChevronRight size={16} color="var(--chatbox-tint-gray)" />
+                <IconChevronRight size={16} color="var(--kod-tint-gray)" />
               )}
-              <Text size="sm" fw={600} className="text-chatbox-tint-primary">
+              <Text size="sm" fw={600} className="text-kod-tint-primary">
                 {t('Documents')}
               </Text>
               <Pill
                 size="xs"
                 bg={
                   filesCount > 0
-                    ? 'var(--chatbox-background-brand-secondary)'
-                    : 'var(--chatbox-background-gray-secondary)'
+                    ? 'var(--kod-background-brand-secondary)'
+                    : 'var(--kod-background-gray-secondary)'
                 }
-                c={filesCount > 0 ? 'var(--chatbox-tint-brand)' : 'var(--chatbox-tint-gray)'}
+                c={filesCount > 0 ? 'var(--kod-tint-brand)' : 'var(--kod-tint-gray)'}
                 fz="xs"
               >
                 {filesCount}
@@ -740,7 +740,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
             </Group>
             <Button
               variant="subtle"
-              color="var(--chatbox-tint-primary)"
+              color="var(--kod-tint-primary)"
               size="xs"
               fw={600}
               leftSection={showUploadArea ? <IconCheck size={14} /> : <IconPlus size={14} />}
@@ -759,7 +759,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
               <Box
                 p="md"
                 style={{
-                  borderBottom: allFiles.length > 0 ? '1px solid var(--chatbox-tint-gray)' : 'none',
+                  borderBottom: allFiles.length > 0 ? '1px solid var(--kod-tint-gray)' : 'none',
                 }}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -771,11 +771,11 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                   radius="md"
                   style={{
                     border: isDragOver
-                      ? '2px dashed var(--chatbox-border-brand)'
-                      : '2px dashed var(--chatbox-border-primary)',
+                      ? '2px dashed var(--kod-border-brand)'
+                      : '2px dashed var(--kod-border-primary)',
                     backgroundColor: isDragOver
-                      ? 'var(--chatbox-background-brand-secondary)'
-                      : 'var(--chatbox-background-gray-secondary)',
+                      ? 'var(--kod-background-brand-secondary)'
+                      : 'var(--kod-background-gray-secondary)',
                     transition: 'all 0.2s ease',
                     cursor: 'pointer',
                   }}
@@ -784,7 +784,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                   <Stack align="center" gap="sm">
                     <IconUpload
                       size={32}
-                      color={isDragOver ? 'var(--chatbox-tint-brand)' : 'var(--chatbox-tint-gray)'}
+                      color={isDragOver ? 'var(--kod-tint-brand)' : 'var(--kod-tint-gray)'}
                     />
                     <Text size="sm" fw={500} ta="center" c={isDragOver ? 'blue' : 'dimmed'}>
                       {isDragOver ? t('Drop files here') : t('Drag and drop files here, or click to browse')}
@@ -806,9 +806,9 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                     title={t('Some files were not uploaded')}
                     styles={{
                       root: {
-                        border: '1px solid var(--chatbox-border-primary)',
-                        borderLeft: '3px solid var(--chatbox-tint-error)',
-                        background: 'var(--chatbox-background-primary)',
+                        border: '1px solid var(--kod-border-primary)',
+                        borderLeft: '3px solid var(--kod-tint-error)',
+                        background: 'var(--kod-background-primary)',
                       },
                     }}
                   >
@@ -881,7 +881,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                           }}
                         >
                           <Group gap="sm" align="center" style={{ flex: 1 }}>
-                            <IconFile size={20} color="var(--chatbox-tint-brand)" />
+                            <IconFile size={20} color="var(--kod-tint-brand)" />
                             <Box style={{ flex: 1 }}>
                               <Text size="sm" fw={500} lineClamp={1}>
                                 {doc.filename}
@@ -1018,7 +1018,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
                       left: 0,
                       right: 0,
                       height: 30,
-                      background: 'linear-gradient(transparent, var(--chatbox-background-body))',
+                      background: 'linear-gradient(transparent, var(--kod-background-body))',
                       pointerEvents: 'none',
                       zIndex: 1,
                     }}
@@ -1035,7 +1035,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
             {!isLoading && allFiles.length === 0 && (
               <Box p="xl">
                 <Stack align="center" gap="sm">
-                  <IconFile size={48} color="var(--chatbox-tint-placeholder)" />
+                  <IconFile size={48} color="var(--kod-tint-placeholder)" />
                   <Text size="sm" c="dimmed" ta="center">
                     {t('No documents yet')}
                   </Text>

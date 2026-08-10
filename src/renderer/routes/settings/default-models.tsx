@@ -57,7 +57,7 @@ export function RouteComponent() {
           />
         </ModelSelector>
 
-        <Text c="chatbox-tertiary" size="xs">
+        <Text c="kod-tertiary" size="xs">
           {t('Chatbox will use this model as the default for new chats.')}
         </Text>
       </Stack>
@@ -92,7 +92,7 @@ export function RouteComponent() {
           />
         </ModelSelector>
 
-        <Text c="chatbox-tertiary" size="xs">
+        <Text c="kod-tertiary" size="xs">
           {t('Chatbox will automatically use this model to rename threads.')}
         </Text>
       </Stack>
@@ -127,7 +127,7 @@ export function RouteComponent() {
           />
         </ModelSelector>
 
-        <Text c="chatbox-tertiary" size="xs">
+        <Text c="kod-tertiary" size="xs">
           {t('Chatbox will automatically use this model to construct search term.')}
         </Text>
       </Stack>
@@ -162,7 +162,7 @@ export function RouteComponent() {
           />
         </ModelSelector>
 
-        <Text c="chatbox-tertiary" size="xs">
+        <Text c="kod-tertiary" size="xs">
           {t('Chatbox OCRs images with this model and sends the text to models without image support.')}
         </Text>
       </Stack>
@@ -203,9 +203,9 @@ const ModelSelectContent = forwardRef<
       py={6}
       component="button"
       align="center"
-      c="chatbox-tertiary"
+      c="kod-tertiary"
       w={320}
-      className="border-solid border border-chatbox-border-primary rounded-sm cursor-pointer bg-transparent"
+      className="border-solid border border-kod-border-primary rounded-sm cursor-pointer bg-transparent"
       onClick={onClick}
     >
       <Text span flex={1} className=" text-left">

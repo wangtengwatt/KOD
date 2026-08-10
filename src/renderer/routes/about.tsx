@@ -32,7 +32,7 @@ function RouteComponent() {
     <Page title={t('About')}>
       <Container size="md" p={0}>
         <Stack gap="xxl" px={isSmallScreen ? 'sm' : 'md'} py={isSmallScreen ? 'xl' : 'md'}>
-          <Flex gap="xxl" p="md" className="rounded-lg bg-chatbox-background-secondary">
+          <Flex gap="xxl" p="md" className="rounded-lg bg-kod-background-secondary">
             <Image h={100} w={100} mah={'20vw'} maw={'20vw'} src={iconPNG} />
             <Stack flex={1} gap="xxs">
               <Flex justify="space-between" align="center" wrap="wrap" gap={isSmallScreen ? 'xs' : 'sm'} rowGap="xs">
@@ -43,7 +43,7 @@ function RouteComponent() {
                 <UpdateSection />
               </Flex>
               <Text>{t('about-slogan')}</Text>
-              <Text c="chatbox-tertiary">{t('about-introduction')}</Text>
+              <Text c="kod-tertiary">{t('about-introduction')}</Text>
 
               <Flex gap="sm">
                 <Anchor
@@ -51,7 +51,7 @@ function RouteComponent() {
                   href="https://chatboxai.app/privacy"
                   target="_blank"
                   underline="hover"
-                  c="chatbox-tertiary"
+                  c="kod-tertiary"
                 >
                   {t('Privacy Policy')}
                 </Anchor>
@@ -60,7 +60,7 @@ function RouteComponent() {
                   href="https://chatboxai.app/terms"
                   target="_blank"
                   underline="hover"
-                  c="chatbox-tertiary"
+                  c="kod-tertiary"
                 >
                   {t('User Terms')}
                 </Anchor>
@@ -137,7 +137,7 @@ function List(props: { children: ReactElement | ReactElement[] }) {
   const children = Children.toArray(props.children) as ReactElement[]
 
   return (
-    <Stack gap={0} className="rounded-lg bg-chatbox-background-secondary">
+    <Stack gap={0} className="rounded-lg bg-kod-background-secondary">
       {children.map((child, index) => (
         <Fragment key={child.key}>
           {child}
@@ -169,9 +169,9 @@ function ListItem({
       align="center"
       className={link ? 'cursor-pointer' : ''}
       onClick={() => link && platform.openLink(link)}
-      c="chatbox-tertiary"
+      c="kod-tertiary"
     >
-      <Box w={20} h={20} className="flex-shrink-0 " c="chatbox-primary">
+      <Box w={20} h={20} className="flex-shrink-0 " c="kod-primary">
         {icon}
       </Box>
       <Text flex={1} size="md">
@@ -183,7 +183,7 @@ function ListItem({
       ) : (
         <>
           {value && (
-            <Text size="md" c="chatbox-tertiary">
+            <Text size="md" c="kod-tertiary">
               {value}
             </Text>
           )}

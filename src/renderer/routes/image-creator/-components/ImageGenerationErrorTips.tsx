@@ -60,10 +60,10 @@ export function ImageGenerationErrorTips({ record, onRetry, isRetrying }: ImageG
     <Paper
       p="lg"
       radius="lg"
-      className="bg-[var(--chatbox-background-error-secondary)] border border-[var(--chatbox-border-error)]"
+      className="bg-[var(--kod-background-error-secondary)] border border-[var(--kod-border-error)]"
     >
       <Flex direction="column" align="center" gap="md">
-        <div className="w-12 h-12 rounded-full bg-[var(--chatbox-background-error-primary)] flex items-center justify-center">
+        <div className="w-12 h-12 rounded-full bg-[var(--kod-background-error-primary)] flex items-center justify-center">
           <IconX size={24} className="text-white" />
         </div>
 
@@ -83,7 +83,7 @@ export function ImageGenerationErrorTips({ record, onRetry, isRetrying }: ImageG
                   <Text
                     component="span"
                     className="cursor-pointer underline"
-                    c="chatbox-brand"
+                    c="kod-brand"
                     onClick={() => navigateToSettings()}
                   />
                 ),
@@ -91,7 +91,7 @@ export function ImageGenerationErrorTips({ record, onRetry, isRetrying }: ImageG
                   <Text
                     component="span"
                     className="cursor-pointer underline"
-                    c="chatbox-brand"
+                    c="kod-brand"
                     onClick={() => {
                       platform.openLink(
                         buildChatboxUrl(
@@ -154,7 +154,7 @@ export function ImageGenerationErrorTips({ record, onRetry, isRetrying }: ImageG
           )}
           <Button
             variant="light"
-            color="chatbox-error"
+            color="kod-error"
             leftSection={<IconRefresh size={16} />}
             onClick={onRetry}
             disabled={isRetrying}

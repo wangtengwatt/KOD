@@ -12,8 +12,7 @@ export interface BuildinMCPServerConfig {
 // kod 不再依赖。数组保留为空，UI 不渲染任何内置 server；如需恢复或替换为开源/自建 server，在此补充。
 export const BUILTIN_MCP_SERVERS: BuildinMCPServerConfig[] = []
 
-export function getBuiltinServerConfig(id: string, licenseKey?: string): MCPServerConfig | null {
-  void licenseKey
+export function getBuiltinServerConfig(id: string, _legacyLicenseKey?: string): MCPServerConfig | null {
   const config = BUILTIN_MCP_SERVERS.find((s) => s.id === id)
   if (!config) {
     return null

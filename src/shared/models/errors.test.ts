@@ -136,6 +136,17 @@ describe('ChatboxAIAPIError', () => {
     expect(ChatboxAIAPIError.getDetail(0)).toBeNull()
     expect(ChatboxAIAPIError.getDetail(Number.NaN)).toBeNull()
   })
+
+  it('keeps user-visible error messages KOD-branded and free of Chatbox support links', () => {
+    const messages = Object.values(ChatboxAIAPIError.codeNameMap).map((detail) => detail.i18nKey)
+
+    expect(messages.join('\n')).not.toMatch(/Chatbox AI Free|Chatbox AI Pro|Chatbox Desktop App|Chatbox AI Service/)
+    expect(messages.join('\n')).not.toContain('chatboxai.com')
+    expect(ChatboxAIAPIError.codeNameMap.license_upgrade_required.code).toBe(20001)
+    expect(ChatboxAIAPIError.codeNameMap.chatbox_search_license_key_required.name).toBe(
+      'chatbox_search_license_key_required'
+    )
+  })
 })
 
 describe('Error inheritance', () => {

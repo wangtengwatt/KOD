@@ -120,7 +120,7 @@ export function DocumentParserSettings({ showTitle = true }: DocumentParserSetti
         maw={320}
       />
 
-      <Text size="xs" c="chatbox-gray">
+      <Text size="xs" c="kod-gray">
         {t(PARSER_DESCRIPTIONS[currentParserType])}
       </Text>
 
@@ -148,11 +148,11 @@ export function DocumentParserSettings({ showTitle = true }: DocumentParserSetti
 
           {typeof connectionResult === 'boolean' ? (
             connectionResult ? (
-              <Text size="xs" c="chatbox-success">
+              <Text size="xs" c="kod-success">
                 {t('Connection successful!')}
               </Text>
             ) : (
-              <Text size="xs" c="chatbox-error">
+              <Text size="xs" c="kod-error">
                 {t('API key invalid!')}
               </Text>
             )

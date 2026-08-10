@@ -5,12 +5,12 @@ import { useCallback, useMemo } from 'react'
 import { enrichModelsFromRegistry, useModelRegistryVersion } from '@/packages/model-registry'
 import platform from '@/platform'
 import { useSettingsStore } from '@/stores/settingsStore'
-import useChatboxAIModels from './useChatboxAIModels'
+import useKodAIModels from './useKodAIModels'
 
 export const useProviders = () => {
   useModelRegistryVersion()
 
-  const { chatboxAIModels } = useChatboxAIModels()
+  const { kodAIModels } = useKodAIModels()
   const { setSettings, ...settings } = useSettingsStore((state) => state)
   const providerSettingsMap = settings.providers
 
@@ -25,12 +25,12 @@ export const useProviders = () => {
           const providerSettings = mergeSharedOAuthProviderSettings(p.id, providerSettingsMap)
           if (
             p.id === ModelProviderEnum.ChatboxAI &&
-            (settings.licenseKey || providerSettings?.apiKey || chatboxAIModels.length > 0)
+            (settings.licenseKey || providerSettings?.apiKey || kodAIModels.length > 0)
           ) {
             return {
               ...p,
               ...providerSettings,
-              models: chatboxAIModels.length > 0 ? chatboxAIModels : providerSettings?.models || [],
+              models: kodAIModels.length > 0 ? kodAIModels : providerSettings?.models || [],
             }
           } else if (
             (!p.isCustom &&
@@ -52,7 +52,7 @@ export const useProviders = () => {
           }
         })
         .filter((p) => !!p),
-    [providerSettingsMap, allProviderBaseInfos, chatboxAIModels, settings.licenseKey]
+    [providerSettingsMap, allProviderBaseInfos, kodAIModels, settings.licenseKey]
   )
 
   const favoritedModels = useMemo(

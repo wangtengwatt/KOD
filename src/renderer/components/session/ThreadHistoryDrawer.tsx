@@ -78,7 +78,7 @@ export default function ThreadHistoryDrawer({ session }: { session: Session }) {
         <Text size="md" fw={600}>
           {t('Thread History')}
         </Text>
-        <ActionIcon variant="transparent" color="chatbox-primary" onClick={() => setShowDrawer(false)}>
+        <ActionIcon variant="transparent" color="kod-primary" onClick={() => setShowDrawer(false)}>
           <ScalableIcon icon={IconX} size={20} />
         </ActionIcon>
       </Flex>
@@ -128,12 +128,12 @@ function ThreadItem(props: {
       onClick={() => {
         goto(thread.id)
       }}
-      className="group/thread-item px-xs py-xxs cursor-pointer hover:bg-chatbox-background-gray-secondary"
+      className="group/thread-item px-xs py-xxs cursor-pointer hover:bg-kod-background-gray-secondary"
     >
-      <Badge color="chatbox-tertiary" size="xs">
+      <Badge color="kod-tertiary" size="xs">
         {thread.messageCount}
       </Badge>
-      {/* <Text size="xs" c="chatbox-tertiary">
+      {/* <Text size="xs" c="kod-tertiary">
         {thread.messageCount}
       </Text> */}
       <Text size="xs" lineClamp={1} flex={1}>
@@ -169,7 +169,7 @@ function ThreadItem(props: {
       >
         <ActionIcon
           variant="transparent"
-          color="chatbox-primary"
+          color="kod-primary"
           className={isSmallScreen || menuOpened ? '' : 'group-hover/thread-item:visible invisible'}
           onClick={(e) => e.stopPropagation()}
         >
