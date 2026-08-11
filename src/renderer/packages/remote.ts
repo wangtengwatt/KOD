@@ -89,7 +89,7 @@ async function initAuthenticatedAfetch(): Promise<ReturnType<typeof createAuthen
   return authenticatedAfetchPromise
 }
 
-async function getAuthenticatedAfetch() {
+export async function getAuthenticatedAfetch() {
   if (!_authenticatedAfetch) {
     return await initAuthenticatedAfetch()
   }
@@ -135,7 +135,11 @@ const getKodClientHeaders = async () => {
   }
 }
 
-const KOD_API_ORIGIN = 'https://kod.kai.com'
+export const KOD_API_ORIGIN = 'https://kod.kai.com'
+
+export function getKodApiOrigin() {
+  return KOD_API_ORIGIN
+}
 
 const KodResultSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
   z.object({

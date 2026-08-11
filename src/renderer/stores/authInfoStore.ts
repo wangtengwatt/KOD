@@ -6,6 +6,7 @@ import type { AuthTokens } from '../routes/settings/provider/kod-ai/-components/
 interface AuthTokensState {
   accessToken: string | null
   refreshToken: string | null
+  loginEmail: string | null
 }
 
 interface AuthTokensActions {
@@ -17,6 +18,7 @@ interface AuthTokensActions {
 const initialState: AuthTokensState = {
   accessToken: null,
   refreshToken: null,
+  loginEmail: null,
 }
 
 export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
@@ -25,10 +27,13 @@ export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
       immer((set, get) => ({
         ...initialState,
 
-        setTokens: (tokens: AuthTokens) => {
+        setTokens: (tokens: AuthTokens & { email?: string }) => {
           set((state) => {
             state.accessToken = tokens.accessToken
             state.refreshToken = tokens.refreshToken
+            if (tokens.email) {
+              state.loginEmail = tokens.email
+            }
           })
         },
 
@@ -36,6 +41,7 @@ export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
           set((state) => {
             state.accessToken = null
             state.refreshToken = null
+            state.loginEmail = null
           })
         },
 
@@ -56,6 +62,7 @@ export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
         partialize: (state) => ({
           accessToken: state.accessToken,
           refreshToken: state.refreshToken,
+          loginEmail: state.loginEmail,
         }),
       }
     )
