@@ -3,6 +3,7 @@ import SwipeableDrawer from '@mui/material/SwipeableDrawer'
 import {
   IconCirclePlus,
   IconCode,
+  IconDeviceMobile,
   IconDownload,
   IconInfoCircle,
   IconLayoutSidebarLeftCollapse,
@@ -307,6 +308,17 @@ export default function Sidebar() {
                 variant="light"
                 p="xs"
               />
+              {CHATBOX_BUILD_PLATFORM === 'android' && (
+                <NavLink
+                  c="chatbox-secondary"
+                  className="rounded"
+                  label="Android Agent"
+                  leftSection={<ScalableIcon icon={IconDeviceMobile} size={20} />}
+                  onClick={() => navigate({ to: '/android-agent' })}
+                  variant="light"
+                  p="xs"
+                />
+              )}
               <NavLink
                 c="chatbox-secondary"
                 className="rounded"

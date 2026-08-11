@@ -44,11 +44,12 @@ import CssBaseline from '@mui/material/CssBaseline'
 import { ThemeProvider } from '@mui/material/styles'
 import { useQuery } from '@tanstack/react-query'
 import { createRootRoute, Outlet, useLocation } from '@tanstack/react-router'
-import { useAtomValue, useSetAtom } from 'jotai'
+import { useSetAtom } from 'jotai'
 import { useEffect, useMemo, useRef } from 'react'
 import { trackJkViewEvent } from '@/analytics/jk'
 import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
 import SettingsModal, { navigateToSettings } from '@/modals/Settings'
+import AndroidAgentApprovalModal from '@/packages/android-agent/ApprovalModal'
 import { prefetchModelRegistry } from '@/packages/model-registry'
 import { getOS } from '@/packages/navigator'
 import * as remote from '@/packages/remote'
@@ -370,6 +371,7 @@ function Root() {
       {/* <WelcomeDialog /> */}
       <Toasts /> {/* mui */}
       <SettingsModal />
+      <AndroidAgentApprovalModal />
     </Box>
   )
 }

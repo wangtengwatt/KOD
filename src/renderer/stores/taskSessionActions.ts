@@ -1,6 +1,6 @@
 import * as defaults from '@shared/defaults'
 import type { ChatStreamOptions, ModelStreamPart } from '@shared/models/types'
-import { ModelProviderEnum, createMessage, type Message, type TaskSession } from '@shared/types'
+import { createMessage, type Message, ModelProviderEnum, type TaskSession } from '@shared/types'
 import { getMessageText, sequenceMessages } from '@shared/utils/message'
 import type { ToolSet } from 'ai'
 import { createModel, createModelDependencies } from '@/adapters'
@@ -8,6 +8,7 @@ import { getLogger } from '@/lib/utils'
 import { convertToModelMessages, injectModelSystemPrompt } from '@/packages/model-calls/message-utils'
 import platform from '@/platform'
 import { featureFlags } from '@/utils/feature-flags'
+import { CHATBOX_BUILD_PLATFORM } from '@/variables'
 import { lastUsedModelStore } from './lastUsedModelStore'
 import { queryClient } from './queryClient'
 import { createInitialState, processStreamChunk } from './session/stream-chunk-processor'
@@ -158,7 +159,8 @@ async function generateTaskResponse(taskId: string, targetMsg: Message, contextM
     }
     const dependencies = await createModelDependencies()
     const model = await createModel(sessionSettings, dependencies)
-    if (session?.workingDirectory && platform.sandboxInit) {
+    const isAndroidTask = CHATBOX_BUILD_PLATFORM === 'android'
+    if (!isAndroidTask && session?.workingDirectory && platform.sandboxInit) {
       const initResult = await platform.sandboxInit({ workingDirectory: session.workingDirectory })
       if (!initResult.success) {
         throw new Error(`Sandbox initialization failed: ${initResult.error || 'Unknown error'}`)
@@ -191,7 +193,8 @@ async function generateTaskResponse(taskId: string, targetMsg: Message, contextM
     const { tools, instructions } = await buildToolsForSession(model, {
       webBrowsing: true,
       messages: promptMessages,
-      sandboxEnabled: true,
+      sandboxEnabled: !isAndroidTask,
+      androidAgentEnabled: isAndroidTask,
       enabledSkillNames,
     })
 
@@ -233,9 +236,7 @@ async function generateTaskResponse(taskId: string, targetMsg: Message, contextM
     let processorState = createInitialState()
 
     const streamCallbacks = {
-      onFileReceived: async (_mediaType: string, _base64: string) => {
-        return ''
-      },
+      onFileReceived: (_mediaType: string, _base64: string) => Promise.resolve(''),
     }
 
     for await (const chunk of stream) {

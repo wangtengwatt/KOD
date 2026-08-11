@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { classifyAndroidAction, containsBlockedTerm, validateApproval } from './policy'
+import { assertSafeAction, classifyAndroidAction, containsBlockedTerm, matchesSelector, validateApproval } from './policy'
 
 describe('Android agent policy', () => {
   it('classifies allowed, confirmable, and blocked actions', () => {
@@ -13,6 +13,12 @@ describe('Android agent policy', () => {
     expect(containsBlockedTerm('请帮我转账')).toBe(true)
     expect(containsBlockedTerm('enter verification code')).toBe(true)
     expect(containsBlockedTerm('搜索测试联系人')).toBe(false)
+  })
+
+  it('blocks sensitive targets and password input selectors', () => {
+    expect(() => assertSafeAction({ type: 'click', text: '确认转账' })).toThrow()
+    expect(() => assertSafeAction({ type: 'input', viewId: 'login_password', value: 'hello' })).toThrow()
+    expect(() => assertSafeAction({ type: 'input', viewId: 'message_box', value: 'hello' })).not.toThrow()
   })
 
   it('accepts only matching, unexpired one-time approvals', () => {
@@ -30,5 +36,12 @@ describe('Android agent policy', () => {
     expect(validateApproval(approval, expected, 150)).toBe(true)
     expect(validateApproval(approval, { ...expected, actionId: 'other' }, 150)).toBe(false)
     expect(validateApproval(approval, expected, 201)).toBe(false)
+  })
+
+  it('requires all supplied selector fields to match', () => {
+    const node = { text: '发送', description: 'send', viewId: 'composer.send' }
+    expect(matchesSelector(node, { text: '发送', viewId: 'composer.send' })).toBe(true)
+    expect(matchesSelector(node, { text: '发送', description: 'other' })).toBe(false)
+    expect(matchesSelector(node, {})).toBe(false)
   })
 })

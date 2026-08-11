@@ -3,6 +3,7 @@ import type { KnowledgeBase, Message } from '@shared/types'
 import type { SkillInfo } from '@shared/types/skills'
 import { type ToolSet, tool } from 'ai'
 import { z } from 'zod'
+import { androidAgentInstructions, androidAgentToolSet } from '@/packages/android-agent/toolset'
 import { mcpController } from '@/packages/mcp/controller'
 import fileToolSet from '@/packages/model-calls/toolsets/file'
 import { getToolSet as getKBToolSet } from '@/packages/model-calls/toolsets/knowledge-base'
@@ -18,6 +19,7 @@ export interface BuildToolsOptions {
   knowledgeBase?: Pick<KnowledgeBase, 'id' | 'name'>
   messages: Message[]
   sandboxEnabled?: boolean
+  androidAgentEnabled?: boolean
   enabledSkillNames?: string[]
 }
 
@@ -78,7 +80,7 @@ export async function buildToolsForSession(
   model: ModelInterface,
   options: BuildToolsOptions
 ): Promise<BuildToolsResult> {
-  const { webBrowsing, knowledgeBase, messages, sandboxEnabled, enabledSkillNames } = options
+  const { webBrowsing, knowledgeBase, messages, sandboxEnabled, androidAgentEnabled, enabledSkillNames } = options
 
   const hasInlineFileOrLink = messages.some(
     (m) => m.links?.length || m.files?.some((file) => file.ragMode !== 'session-retrieval')
@@ -125,6 +127,9 @@ export async function buildToolsForSession(
   if (sandboxEnabled) {
     instructions += sandboxToolSet.description
   }
+  if (androidAgentEnabled) {
+    instructions += androidAgentInstructions
+  }
 
   let tools: ToolSet = {
     ...mcpController.getAvailableTools(),
@@ -153,6 +158,10 @@ export async function buildToolsForSession(
 
   if (sandboxEnabled) {
     tools = { ...tools, ...sandboxToolSet.tools }
+  }
+
+  if (androidAgentEnabled) {
+    tools = { ...tools, ...androidAgentToolSet }
   }
 
   // Skills integration
