@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { ModelProviderEnum, ModelProviderType } from './provider'
 import { SkillSettingsSchema } from './skills'
+import { suanbaoPreferencesSchema } from './suanbao'
 
 // Re-export for backward compatibility
 export { ModelProviderType } from './provider'
@@ -415,6 +416,7 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
     enabledSkillNames: [],
     translationEnabled: true,
   }),
+  suanbao: suanbaoPreferencesSchema.optional(),
 })
 
 // TODO: provider的 base info 和 settings混在一起了，可以考虑像 session settings 和 global settings一样拆开

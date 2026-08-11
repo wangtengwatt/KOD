@@ -59,10 +59,7 @@ function currentPrefs(): SuanbaoPreferences {
 export function migrateSuanbaoV1PrefsToSettings(): void {
   if (!isHydrated()) return
   if (hasMigratedFlag()) return
-  settingsStore.setState((state) => ({
-    ...state,
-    suanbao: currentPrefs(),
-  }) as typeof state)
+  settingsStore.setState({ suanbao: currentPrefs() })
   setMigratedFlag()
 }
 
