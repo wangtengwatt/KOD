@@ -29,7 +29,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Page from "@/components/layout/Page";
-import useChatboxAIModels from "@/hooks/useChatboxAIModels";
+import useKodAIModels from "@/hooks/useKodAIModels";
 import { useIsSmallScreen } from "@/hooks/useScreenChange";
 import { getLogger } from "@/lib/utils";
 import platform from "@/platform";
@@ -58,7 +58,7 @@ export const Route = createFileRoute("/video-creator/")({
 
 function VideoCreatorPage() {
 	const { t } = useTranslation();
-	const { chatboxAIVideoModels } = useChatboxAIModels();
+	const { kodAIVideoModels } = useKodAIModels();
 	const isSmallScreen = useIsSmallScreen();
 	const { providerSettings } = useProviderSettings(ModelProviderEnum.ChatboxAI);
 	const [prompt, setPrompt] = useState("");
@@ -108,9 +108,9 @@ function VideoCreatorPage() {
 	}, []);
 
 	useEffect(() => {
-		if (!model && chatboxAIVideoModels[0])
-			setModel(chatboxAIVideoModels[0].modelId);
-	}, [chatboxAIVideoModels, model]);
+		if (!model && kodAIVideoModels[0])
+			setModel(kodAIVideoModels[0].modelId);
+	}, [kodAIVideoModels, model]);
 
 	useEffect(() => {
 		return () => {
@@ -405,7 +405,7 @@ function VideoCreatorPage() {
 								/>
 								<Select
 									label={t("Model")}
-									data={chatboxAIVideoModels.map((item) => ({
+									data={kodAIVideoModels.map((item) => ({
 										value: item.modelId,
 										label: item.nickname || item.modelId,
 									}))}
