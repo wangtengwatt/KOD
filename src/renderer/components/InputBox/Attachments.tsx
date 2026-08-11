@@ -355,20 +355,20 @@ export function MessageAttachment(props: {
         className={`flex items-center gap-2 px-2 py-1.5 min-w-0 overflow-hidden
             relative
             rounded-md
-            bg-chatbox-background-secondary
-            ${isClickable ? 'cursor-pointer hover:bg-chatbox-background-secondary-hover transition-colors' : ''}`}
+            bg-kod-background-secondary
+            ${isClickable ? 'cursor-pointer hover:bg-kod-background-secondary-hover transition-colors' : ''}`}
         onClick={handleClick}
       >
-        <div className="flex-none w-7 h-7 rounded-md bg-chatbox-background-primary flex items-center justify-center">
+        <div className="flex-none w-7 h-7 rounded-md bg-kod-background-primary flex items-center justify-center">
           {filename && <FileIcon filename={filename} className="w-4 h-4" />}
-          {url && !filename && <Link2 className="w-4 h-4 text-chatbox-secondary" strokeWidth={1.5} />}
+          {url && !filename && <Link2 className="w-4 h-4 text-kod-secondary" strokeWidth={1.5} />}
         </div>
         <div className="min-w-0 flex-1 overflow-hidden">
           <Typography className="text-xs leading-tight truncate" noWrap>
             {label}
           </Typography>
           {subtitle && (
-            <Typography className="text-chatbox-tertiary" noWrap sx={{ fontSize: '10px', lineHeight: 1.4 }}>
+            <Typography className="text-kod-tertiary" noWrap sx={{ fontSize: '10px', lineHeight: 1.4 }}>
               {subtitle}
             </Typography>
           )}
@@ -378,7 +378,7 @@ export function MessageAttachment(props: {
           effectiveIndexStatus !== 'ready' &&
           effectiveIndexStatus !== 'failed' &&
           progressValue !== undefined && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-chatbox-background-tertiary overflow-hidden">
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-kod-background-tertiary overflow-hidden">
               <div className="h-full bg-blue-500 transition-all" style={{ width: `${progressValue}%` }} />
             </div>
           )}
@@ -399,7 +399,7 @@ export function MessageAttachment(props: {
         )}
         {showStatus && effectiveAvailability !== 'blocked' && effectiveIndexStatus === 'failed' && onRetry && (
           <MiniButton
-            className="flex-none p-0.5 rounded text-chatbox-tertiary hover:text-chatbox-secondary"
+            className="flex-none p-0.5 rounded text-kod-tertiary hover:text-kod-secondary"
             onClick={(e) => {
               e.stopPropagation()
               onRetry()
@@ -414,7 +414,7 @@ export function MessageAttachment(props: {
         )}
         {isClickable && (
           <Eye
-            className="flex-none w-3.5 h-3.5 text-chatbox-tertiary opacity-0 group-hover/attachment:opacity-100 transition-opacity"
+            className="flex-none w-3.5 h-3.5 text-kod-tertiary opacity-0 group-hover/attachment:opacity-100 transition-opacity"
             strokeWidth={1.5}
           />
         )}

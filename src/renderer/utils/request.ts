@@ -44,7 +44,7 @@ function buildHeaders(options: RequestOptions, url: string): Headers {
 
   if (options.useProxy && !isLocalHost(url) && platform.type !== 'mobile') {
     headers.set('CHATBOX-TARGET-URI', url)
-    headers.set('CHATBOX-PLATFORM', platform.type)
+    headers.set('X-KOD-PLATFORM', platform.type)
   }
 
   return headers
@@ -57,7 +57,7 @@ async function doRequest(url: string, options: RequestOptions): Promise<Response
 
   if (useProxy && !isLocalHost(url) && platform.type !== 'mobile') {
     const version = await platform.getVersion()
-    headers.set('CHATBOX-VERSION', version || 'unknown')
+    headers.set('X-KOD-VERSION', version || 'unknown')
     requestUrl = 'https://cors-proxy.chatboxai.app/proxy-api/completions'
   }
 

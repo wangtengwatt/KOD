@@ -106,10 +106,10 @@ export function createAfetch(platformInfo: PlatformInfo) {
             ...init,
             headers: {
               ...init?.headers,
-              'CHATBOX-PLATFORM': platformInfo.platform,
-              'CHATBOX-PLATFORM-TYPE': platformInfo.type,
-              'CHATBOX-OS': platformInfo.os,
-              'CHATBOX-VERSION': platformInfo.version,
+              'X-KOD-PLATFORM': platformInfo.platform,
+              'X-KOD-PLATFORM-TYPE': platformInfo.type,
+              'X-KOD-OS': platformInfo.os,
+              'X-KOD-VERSION': platformInfo.version,
             },
           }
         }
@@ -223,10 +223,10 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
       }
 
       if (isChatboxAPI(url)) {
-        authHeaders['CHATBOX-PLATFORM'] = platformInfo.platform
-        authHeaders['CHATBOX-PLATFORM-TYPE'] = platformInfo.type
-        authHeaders['CHATBOX-OS'] = platformInfo.os
-        authHeaders['CHATBOX-VERSION'] = platformInfo.version
+        authHeaders['X-KOD-PLATFORM'] = platformInfo.platform
+        authHeaders['X-KOD-PLATFORM-TYPE'] = platformInfo.type
+        authHeaders['X-KOD-OS'] = platformInfo.os
+        authHeaders['X-KOD-VERSION'] = platformInfo.version
       }
 
       return {

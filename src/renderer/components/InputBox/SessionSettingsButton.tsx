@@ -16,7 +16,7 @@ interface SessionSettingsButtonProps {
 export const SessionSettingsButton = forwardRef<HTMLButtonElement, SessionSettingsButtonProps>(
   ({ onClick, tooltipLabel, disabled = false, isMobile = false, size, variant }, ref) => {
     const actionIconProps = isMobile
-      ? { ...mobileActionIconProps, color: 'chatbox-secondary' }
+      ? { ...mobileActionIconProps, color: 'kod-secondary' }
       : {
           ...desktopActionIconProps,
           size: size || desktopActionIconProps.size,

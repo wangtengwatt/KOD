@@ -197,7 +197,7 @@ const SessionSettingsModal = NiceModal.create(
 
                     {editingData.assistantAvatarKey && (
                       <ActionIcon
-                        color="chatbox-error"
+                        color="kod-error"
                         size={24}
                         radius="xl"
                         bottom={0}
@@ -223,7 +223,7 @@ const SessionSettingsModal = NiceModal.create(
                 value={editingData.name}
                 onChange={(e) => setEditingData({ ...editingData, name: e.target.value })}
                 classNames={{
-                  input: '!text-chatbox-tint-primary',
+                  input: '!text-kod-tint-primary',
                 }}
               />
             </Stack>
@@ -237,7 +237,7 @@ const SessionSettingsModal = NiceModal.create(
               value={systemPrompt}
               onChange={(event) => setSystemPrompt(event.target.value)}
               classNames={{
-                input: '!text-chatbox-tint-primary',
+                input: '!text-kod-tint-primary',
               }}
               styles={{
                 input: { touchAction: 'manipulation' },
@@ -247,12 +247,12 @@ const SessionSettingsModal = NiceModal.create(
             <Stack gap="xs">
               <Flex align="center" justify="space-between">
                 <Text fw={700}>{t('Specific model settings')}</Text>
-                <Button size="compact-sm" color="chatbox-brand" variant="transparent" onClick={onReset} fw={600}>
+                <Button size="compact-sm" color="kod-brand" variant="transparent" onClick={onReset} fw={600}>
                   {t('Reset')}
                 </Button>
               </Flex>
 
-              <Box p="sm" className="border border-solid border-chatbox-border-primary rounded-md">
+              <Box p="sm" className="border border-solid border-kod-border-primary rounded-md">
                 {isChatSession(session) && (
                   <ChatConfig
                     settings={editingData.settings}
@@ -283,7 +283,7 @@ const SessionSettingsModal = NiceModal.create(
                 align="center"
                 gap="sm"
                 wrap="wrap"
-                className="p-sm border border-solid border-chatbox-border-primary rounded-md"
+                className="p-sm border border-solid border-kod-border-primary rounded-md"
               >
                 <Flex align="center" gap="xxs">
                   <Text>{t('Background Image')}</Text>
@@ -292,7 +292,7 @@ const SessionSettingsModal = NiceModal.create(
                     withArrow
                     offset={4}
                   >
-                    <ScalableIcon icon={IconInfoCircle} size={20} className="text-chatbox-tint-tertiary" />
+                    <ScalableIcon icon={IconInfoCircle} size={20} className="text-kod-tint-tertiary" />
                   </Tooltip>
                 </Flex>
 
@@ -326,14 +326,14 @@ const SessionSettingsModal = NiceModal.create(
                 </FileButton>
 
                 {editingData.backgroundImage?.type === 'storage-key' ? (
-                  <Box w={48} h={48} className="relative overflow-hidden rounded bg-chatbox-tertiary/20 flex-shrink-0">
+                  <Box w={48} h={48} className="relative overflow-hidden rounded bg-kod-tertiary/20 flex-shrink-0">
                     <ImageInStorage
                       storageKey={editingData.backgroundImage.storageKey}
                       className="object-cover w-full h-full"
                     />
 
                     <ActionIcon
-                      color="chatbox-error"
+                      color="kod-error"
                       size={20}
                       radius={10}
                       bottom={3}
@@ -477,7 +477,7 @@ function ThinkingBudgetConfig({
           zIndex={3000}
           events={{ hover: true, focus: true, touch: true }}
         >
-          <ScalableIcon icon={IconInfoCircle} size={20} className="text-chatbox-tint-tertiary" />
+          <ScalableIcon icon={IconInfoCircle} size={20} className="text-kod-tint-tertiary" />
         </Tooltip>
       </Flex>
 
@@ -550,7 +550,7 @@ function ThinkingLevelConfig({ currentLevel, supportedLevels, onLevelChange, too
           zIndex={3000}
           events={{ hover: true, focus: true, touch: true }}
         >
-          <ScalableIcon icon={IconInfoCircle} size={20} className="text-chatbox-tint-tertiary" />
+          <ScalableIcon icon={IconInfoCircle} size={20} className="text-kod-tint-tertiary" />
         </Tooltip>
       </Flex>
 
@@ -655,7 +655,7 @@ function OpenAIProviderConfig({
           zIndex={3000}
           events={{ hover: true, focus: true, touch: true }}
         >
-          <ScalableIcon icon={IconInfoCircle} size={20} className="text-chatbox-tint-tertiary" />
+          <ScalableIcon icon={IconInfoCircle} size={20} className="text-kod-tint-tertiary" />
         </Tooltip>
       </Flex>
 
@@ -774,7 +774,7 @@ export function ChatConfig({
             zIndex={3000}
             events={{ hover: true, focus: true, touch: true }}
           >
-            <ScalableIcon icon={IconInfoCircle} size={20} className="text-chatbox-tint-tertiary" />
+            <ScalableIcon icon={IconInfoCircle} size={20} className="text-kod-tint-tertiary" />
           </Tooltip>
         </Flex>
 
@@ -796,7 +796,7 @@ export function ChatConfig({
             zIndex={3000}
             events={{ hover: true, focus: true, touch: true }}
           >
-            <ScalableIcon icon={IconInfoCircle} size={20} className="text-chatbox-tint-tertiary" />
+            <ScalableIcon icon={IconInfoCircle} size={20} className="text-kod-tint-tertiary" />
           </Tooltip>
         </Flex>
 
@@ -818,7 +818,7 @@ export function ChatConfig({
             zIndex={3000}
             events={{ hover: true, focus: true, touch: true }}
           >
-            <ScalableIcon icon={IconInfoCircle} size={20} className="text-chatbox-tint-tertiary" />
+            <ScalableIcon icon={IconInfoCircle} size={20} className="text-kod-tint-tertiary" />
           </Tooltip>
         </Flex>
 

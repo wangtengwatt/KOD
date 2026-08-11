@@ -133,15 +133,15 @@ const KnowledgeBasePage: React.FC = () => {
   const [deleteConfirmKb, setDeleteConfirmKb] = useState<(Partial<KnowledgeBase> & { id: number }) | null>(null)
   const [isUnsupportedPlatform, setIsUnsupportedPlatform] = useState(false)
 
-  const [chatboxAIModels, setChatboxAIModels] = useState<{
+  const [kodAIModels, setChatboxAIModels] = useState<{
     embedding: string
     vision: string
     rerank: string
   } | null>(null)
 
   const canUseChatboxAIProvider = useMemo(() => {
-    return !!(chatboxAIModels && licenseKey)
-  }, [chatboxAIModels, licenseKey])
+    return !!(kodAIModels && licenseKey)
+  }, [kodAIModels, licenseKey])
 
   const isChatboxAIKnowledgeBase = useCallback(
     (kb: KnowledgeBase) => {
@@ -150,20 +150,20 @@ const KnowledgeBasePage: React.FC = () => {
         return kb.providerMode === 'chatbox-ai'
       }
       // Fallback for legacy KBs created before providerMode was stored: check embedding model
-      if (!chatboxAIModels) return false
-      return kb.embeddingModel === chatboxAIModels.embedding
+      if (!kodAIModels) return false
+      return kb.embeddingModel === kodAIModels.embedding
     },
-    [chatboxAIModels]
+    [kodAIModels]
   )
 
   // Check if there are Chatbox AI KBs but user is not logged in — show login prompt.
   // A KB counts as a Chatbox AI KB when its embedding model is the Chatbox AI embedding model.
   const chatboxAIKbNeedsLogin = useMemo(() => {
     if (canUseChatboxAIProvider) return false
-    if (!chatboxAIModels) return false
+    if (!kodAIModels) return false
     // key
-    return kbList.some((kb) => kb.embeddingModel === chatboxAIModels.embedding)
-  }, [canUseChatboxAIProvider, chatboxAIModels, kbList])
+    return kbList.some((kb) => kb.embeddingModel === kodAIModels.embedding)
+  }, [canUseChatboxAIProvider, kodAIModels, kbList])
 
   const [newProviderMode, setNewProviderMode] = useState<'chatbox-ai' | 'custom'>('custom')
 
@@ -261,7 +261,7 @@ const KnowledgeBasePage: React.FC = () => {
   function formatParserType(parserType?: DocumentParserType): string {
     switch (parserType) {
       case 'chatbox-ai':
-        return 'Chatbox AI'
+        return t('Local')
       case 'mineru':
         return 'MinerU'
       case 'local':
@@ -325,12 +325,11 @@ const KnowledgeBasePage: React.FC = () => {
     let documentParser: DocumentParserConfig | undefined
 
     if (newProviderMode === 'chatbox-ai') {
-      if (!chatboxAIModels) return
-      embeddingModel = chatboxAIModels.embedding
-      rerankModel = chatboxAIModels.rerank
-      visionModel = chatboxAIModels.vision
+      if (!kodAIModels) return
+      embeddingModel = kodAIModels.embedding
+      rerankModel = kodAIModels.rerank
+      visionModel = kodAIModels.vision
       // Chatbox AI mode uses local parsing by default to save compute points
-      // Users can retry with server parsing (Chatbox AI) if local parsing fails
       documentParser = { type: 'local' }
     } else {
       if (!newEmbeddingModel) return
@@ -418,7 +417,7 @@ const KnowledgeBasePage: React.FC = () => {
         <Button variant="outline" onClick={() => setShowCreate(true)} disabled={isUnsupportedPlatform}>
           <Group gap="xs">
             <ScalableIcon icon={IconPlus} size={16} />
-            <Text size="sm" c="chatbox-brand" fw={400}>
+            <Text size="sm" c="kod-brand" fw={400}>
               {t('Add')}
             </Text>
           </Group>
@@ -451,7 +450,7 @@ const KnowledgeBasePage: React.FC = () => {
           />
 
           {newProviderMode === 'chatbox-ai' ? (
-            <KnowledgeBaseChatboxAIInfo hasError={!chatboxAIModels} />
+            <KnowledgeBaseChatboxAIInfo hasError={!kodAIModels} />
           ) : (
             <>
               <DocumentParserSelector parserConfig={newDocumentParser} onParserConfigChange={setNewDocumentParser} />
@@ -567,7 +566,7 @@ const KnowledgeBasePage: React.FC = () => {
           {kbList.length === 0 ? (
             <Paper withBorder p="xl" style={{ textAlign: 'center' }}>
               <Stack gap="md" align="center">
-                <ScalableIcon icon={IconInfoCircle} size={48} color="var(--chatbox-tint-tertiary)" />
+                <ScalableIcon icon={IconInfoCircle} size={48} color="var(--kod-tint-tertiary)" />
                 <Stack gap="xs" align="center">
                   <Text fw={500} size="lg">
                     {t('No Knowledge Base Yet')}

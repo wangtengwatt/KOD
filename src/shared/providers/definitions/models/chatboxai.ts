@@ -1,9 +1,5 @@
-import { type AnthropicProviderOptions } from '@ai-sdk/anthropic'
-import {
-  createGoogleGenerativeAI,
-  type GoogleGenerativeAIProvider,
-  type GoogleGenerativeAIProviderOptions,
-} from '@ai-sdk/google'
+import type { AnthropicProviderOptions } from '@ai-sdk/anthropic'
+import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { type ModelMessage, streamText, type ToolSet } from 'ai'
 import AbstractAISDKModel, { type CallSettings } from '../../../models/abstract-ai-sdk'
@@ -14,10 +10,8 @@ import type {
   ModelInterface,
   ModelStreamPart,
 } from '../../../models/types'
-import { getChatboxAPIOrigin } from '../../../request/chatboxai_pool'
 import type { ChatboxAILicenseDetail, ProviderModelInfo, StreamTextResult } from '../../../types'
 import type { ModelDependencies } from '../../../types/adapters'
-import { buildGeminiImageConfig } from '../gemini-types'
 
 interface Options {
   licenseKey?: string
@@ -40,8 +34,27 @@ interface Config {
   uuid: string
 }
 
-// 将chatboxAIFetch移到类内部作为私有方法
+/**
+ * 从中转站（kai-new-api）返回的文本中提取 data URL 图片。
+ * 网关会把 Gemini inlineData 转成：![image](data:image/png;base64,...)
+ */
+function extractImagesFromRelayText(text: string): string[] {
+  if (!text) return []
+  const images: string[] = []
+  const regex = /data:(image\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)/g
+  let match = regex.exec(text)
+  while (match !== null) {
+    const mediaType = match[1]
+    const base64 = match[2].replace(/\s+/g, '')
+    if (base64) {
+      images.push(`data:${mediaType};base64,${base64}`)
+    }
+    match = regex.exec(text)
+  }
+  return images
+}
 
+// 将chatboxAIFetch移到类内部作为私有方法
 export default class ChatboxAI extends AbstractAISDKModel implements ModelInterface {
   public name = 'ChatboxAI'
 
@@ -63,81 +76,20 @@ export default class ChatboxAI extends AbstractAISDKModel implements ModelInterf
   }
 
   protected getProvider(options: CallChatCompletionOptions) {
-    const license = this.options.licenseKey || ''
-    const instanceId = (this.options.licenseInstances ? this.options.licenseInstances[license] : '') || ''
     const relayApiHost = this.options.apiHost?.replace(/\/+$/, '')
-    if (relayApiHost && this.options.apiKey) {
-      return createOpenAICompatible({
-        name: 'KodAI',
-        apiKey: this.options.apiKey,
-        baseURL: relayApiHost,
-        headers: {
-          'chatbox-session-id': options.sessionId || '',
-        },
-        fetch: this.chatboxAIFetch.bind(this),
-      })
+    if (!relayApiHost || !this.options.apiKey) {
+      throw new Error('Kod AI relay station is not configured. Please log in to enable Kod AI.')
     }
 
-    // P0 去云化：禁用上游 Chatbox 云回退路径。
-    // 原逻辑在中转站未配置时，按 apiStyle 回退到 getChatboxAPIOrigin()/gateway/...（api.chatboxai.app），
-    // 会静默走上游云。改为明确抛错，引导用户登录/配置中转站，绝不偷偷连云。
-    // 原回退分支（google/anthropic/openai-responses/openai）保留为注释，便于回滚或后续彻底删除。
-    // TODO(P1): 配合许可证体系改造时，决定是否彻底删除这些分支。
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    void license
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    void instanceId
-    throw new Error(
-      'Kod AI relay station is not configured. Please log in to enable Kod AI.'
-    )
-    // 原上游回退分支（注释保留）：
-    // if (this.options.model.apiStyle === 'google') {
-    //   const provider = createGoogleGenerativeAI({
-    //     apiKey: this.options.licenseKey || '',
-    //     baseURL: `${getChatboxAPIOrigin()}/gateway/google-ai-studio/v1beta`,
-    //     headers: {
-    //       'Instance-Id': instanceId,
-    //       Authorization: `Bearer ${this.options.licenseKey || ''}`,
-    //       'chatbox-session-id': options.sessionId,
-    //     },
-    //     fetch: this.chatboxAIFetch.bind(this),
-    //   })
-    //   return provider
-    // } else if (this.options.model.apiStyle === 'anthropic') {
-    //   const provider = createAnthropic({
-    //     apiKey: this.options.licenseKey || '',
-    //     baseURL: `${getChatboxAPIOrigin()}/gateway/anthropic/v1`,
-    //     headers: {
-    //       'Instance-Id': instanceId,
-    //       'chatbox-session-id': options.sessionId || '',
-    //     },
-    //     fetch: this.chatboxAIFetch.bind(this),
-    //   })
-    //   return provider
-    // } else if (this.options.model.apiStyle === 'openai-responses') {
-    //   const provider = createOpenAI({
-    //     apiKey: this.options.licenseKey || '',
-    //     baseURL: `${getChatboxAPIOrigin()}/gateway/openai-responses/v1`,
-    //     headers: {
-    //       'Instance-Id': instanceId,
-    //       'chatbox-session-id': options.sessionId || '',
-    //     },
-    //     fetch: this.chatboxAIFetch.bind(this),
-    //   })
-    //   return provider
-    // } else {
-    //   const provider = createOpenAICompatible({
-    //     name: 'ChatboxAI',
-    //     apiKey: this.options.licenseKey || '',
-    //     baseURL: `${getChatboxAPIOrigin()}/gateway/openai/v1`,
-    //     headers: {
-    //       'Instance-Id': instanceId,
-    //       'chatbox-session-id': options.sessionId || '',
-    //     },
-    //     fetch: this.chatboxAIFetch.bind(this),
-    //   })
-    //   return provider
-    // }
+    return createOpenAICompatible({
+      name: 'KodAI',
+      apiKey: this.options.apiKey,
+      baseURL: relayApiHost,
+      headers: {
+        'chatbox-session-id': options.sessionId || '',
+      },
+      fetch: this.chatboxAIFetch.bind(this),
+    })
   }
 
   protected getCallSettings(options: CallChatCompletionOptions): CallSettings {
@@ -172,34 +124,13 @@ export default class ChatboxAI extends AbstractAISDKModel implements ModelInterf
 
   getChatModel(options: CallChatCompletionOptions) {
     const provider = this.getProvider(options)
-    // P0 去云化：上游 gateway 回退分支已禁用，中转站统一返回 OpenAICompatibleProvider，
-    // 不再按 apiStyle 断言成 Google/OpenAI-Responses 专用类型（那些分支已不可达）。
     return provider.languageModel(this.options.model.modelId)
   }
 
+  // Image generation uses the relay's OpenAI-compatible chat completions endpoint.
+  // kai-new-api converts Gemini inlineData to markdown data URLs, while some compatible
+  // implementations return AI SDK file chunks, so paint supports both response forms.
   public async paint(
-    _params: {
-      prompt: string
-      images?: { imageUrl: string }[]
-      num: number
-      aspectRatio?: string
-    },
-    _signal?: AbortSignal,
-    _callback?: (picBase64: string) => void | Promise<void>
-  ): Promise<string[]> {
-    // P0 去云化：关闭 Kod AI 图像生成云路径。
-    // 原 paint() 走 paintWithGemini/paintWithChatboxAPI，均调用 getChatboxAPIOrigin()（api.chatboxai.app）。
-    // BYOK 图像生成(OpenAI DALL·E / Gemini 自实现 paint)不走本类，不受影响。
-    // 如需恢复，取消下方抛错并还原原分支逻辑。
-    throw new Error('Kod AI image generation is disabled. Please use a BYOK provider (e.g. OpenAI DALL·E).')
-    // 原逻辑保留（注释）便于回滚：
-    // if (this.options.model.apiStyle === 'google') {
-    //   return this.paintWithGemini(params, signal, callback)
-    // }
-    // return this.paintWithChatboxAPI(params, signal, callback)
-  }
-
-  private async paintWithGemini(
     params: {
       prompt: string
       images?: { imageUrl: string }[]
@@ -209,7 +140,16 @@ export default class ChatboxAI extends AbstractAISDKModel implements ModelInterf
     signal?: AbortSignal,
     callback?: (picBase64: string) => void | Promise<void>
   ): Promise<string[]> {
-    const provider = this.getGoogleProvider()
+    const relayApiHost = this.options.apiHost?.replace(/\/+$/, '')
+    if (!relayApiHost || !this.options.apiKey) {
+      throw new Error('Kod AI relay station is not configured. Please log in to enable Kod AI image generation.')
+    }
+
+    const provider = createOpenAI({
+      apiKey: this.options.apiKey,
+      baseURL: relayApiHost,
+      fetch: this.chatboxAIFetch.bind(this),
+    })
     const model = provider.chat(this.options.model.modelId)
 
     const messageContent: Array<{ type: 'text'; text: string } | { type: 'image'; image: string }> = []
@@ -222,105 +162,47 @@ export default class ChatboxAI extends AbstractAISDKModel implements ModelInterf
 
     const results: string[] = []
     for (let i = 0; i < params.num; i++) {
-      const providerOptions: GoogleGenerativeAIProviderOptions = {
-        responseModalities: ['TEXT', 'IMAGE'],
-      }
-      const imageConfig = buildGeminiImageConfig(params.aspectRatio)
-      if (imageConfig) {
-        providerOptions.imageConfig = imageConfig
-      }
-
       const result = streamText({
         model,
         messages: [{ role: 'user', content: messageContent }],
         abortSignal: signal,
-        providerOptions: {
-          google: providerOptions,
-        },
         // Image generation is billable; network-error retries could double-charge.
         maxRetries: 0,
       })
 
+      const textParts: string[] = []
+      const seen = new Set<string>()
+      const pushImage = async (dataUrl: string) => {
+        if (seen.has(dataUrl)) return
+        seen.add(dataUrl)
+        results.push(dataUrl)
+        await callback?.(dataUrl)
+      }
+
       for await (const chunk of result.fullStream) {
         if (chunk.type === 'file' && chunk.file.mediaType?.startsWith('image/') && chunk.file.base64) {
-          const dataUrl = `data:${chunk.file.mediaType};base64,${chunk.file.base64}`
-          results.push(dataUrl)
-          await callback?.(dataUrl)
+          await pushImage(`data:${chunk.file.mediaType};base64,${chunk.file.base64}`)
+        } else if (chunk.type === 'text-delta' && chunk.text) {
+          // AI SDK v6: text-delta 字段是 `text`，不是 `textDelta`
+          textParts.push(chunk.text)
+        } else if (chunk.type === 'error') {
+          console.error('[KodAI.paint] stream error:', chunk.error)
+          throw chunk.error instanceof Error ? chunk.error : new Error(String(chunk.error))
         }
       }
+
+      // 中转站把图片嵌在文本里：![image](data:image/png;base64,...)
+      for (const dataUrl of extractImagesFromRelayText(textParts.join(''))) {
+        await pushImage(dataUrl)
+      }
     }
-    return results
-  }
 
-  private getGoogleProvider(): GoogleGenerativeAIProvider {
-    const license = this.options.licenseKey || ''
-    const instanceId = (this.options.licenseInstances ? this.options.licenseInstances[license] : '') || ''
-    return createGoogleGenerativeAI({
-      apiKey: this.options.licenseKey || '',
-      baseURL: `${getChatboxAPIOrigin()}/gateway/google-ai-studio/v1beta`,
-      headers: {
-        'Instance-Id': instanceId,
-        Authorization: `Bearer ${this.options.licenseKey || ''}`,
-      },
-      fetch: this.chatboxAIFetch.bind(this),
-    })
-  }
-
-  private async paintWithChatboxAPI(
-    params: {
-      prompt: string
-      images?: { imageUrl: string }[]
-      num: number
-      aspectRatio?: string
-    },
-    signal?: AbortSignal,
-    callback?: (picBase64: string) => void | Promise<void>
-  ): Promise<string[]> {
-    const concurrence: Promise<string>[] = []
-    for (let i = 0; i < params.num; i++) {
-      concurrence.push(
-        this.callImageGeneration(params.prompt, params.images, params.aspectRatio, signal).then(async (picBase64) => {
-          await callback?.(picBase64)
-          return picBase64
-        })
+    if (results.length === 0) {
+      throw new Error(
+        'No image returned from relay station. Make sure the selected model supports image generation (e.g. gemini-*-image*).'
       )
     }
-    return await Promise.all(concurrence)
-  }
-
-  private async callImageGeneration(
-    prompt: string,
-    images?: { imageUrl: string }[],
-    aspectRatio?: string,
-    signal?: AbortSignal
-  ): Promise<string> {
-    const license = this.options.licenseKey || ''
-    const instanceId = (this.options.licenseInstances ? this.options.licenseInstances[license] : '') || ''
-    const modelId = this.options.model.modelId
-    const res = await this.chatboxAIFetch(`${getChatboxAPIOrigin()}/api/ai/paint`, {
-      headers: {
-        Authorization: `Bearer ${license}`,
-        'Instance-Id': instanceId,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
-      body: JSON.stringify({
-        prompt,
-        ...(modelId ? { model: modelId } : {}),
-        images: images?.map((i) => ({ image_url: i.imageUrl })),
-        response_format: 'b64_json',
-        style: this.options.dalleStyle,
-        aspect_ratio: aspectRatio,
-        uuid: this.config.uuid,
-        language: this.options.language,
-      }),
-      signal,
-    })
-    const json = await res.json()
-    if (!json['data'] || !json['data'][0]) {
-      throw new Error('Invalid response format from image generation API')
-    }
-    return json['data'][0]['b64_json']
+    return results
   }
 
   public async chat(messages: ModelMessage[], options: CallChatCompletionOptions): Promise<StreamTextResult> {

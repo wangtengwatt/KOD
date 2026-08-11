@@ -83,41 +83,41 @@ function detectContainerEnvironment(): boolean {
   }
 }
 
-type LinuxRuntimeFlags = {
+type RuntimeFlags = {
   disableGpu: boolean
   disableDevShmUsage: boolean
 }
 
-function getLinuxRuntimeFlags(): LinuxRuntimeFlags {
+function getRuntimeFlags(): RuntimeFlags {
   const forceGpu = isTruthyEnv(process.env.CHATBOX_FORCE_GPU)
   const forceDisableGpu = isTruthyEnv(process.env.CHATBOX_DISABLE_GPU)
   const isCI = isTruthyEnv(process.env.CI)
   const isContainer = detectContainerEnvironment()
   const hasDisplayServer = !!process.env.DISPLAY || !!process.env.WAYLAND_DISPLAY
+  const useSoftwareRenderingByDefault = process.platform === 'win32' && !app.isPackaged
 
   return {
-    disableGpu: forceGpu ? false : forceDisableGpu || isCI || isContainer || !hasDisplayServer,
+    disableGpu:
+      forceGpu ? false : forceDisableGpu || isCI || isContainer || !hasDisplayServer || useSoftwareRenderingByDefault,
     disableDevShmUsage: isCI || isContainer,
   }
 }
 
-// Linux startup compatibility flags:
-// - Disable GPU only in constrained environments (CI/container/headless) or when explicitly requested.
-// - Keep GPU enabled on normal Linux desktops for better rendering performance.
+// Startup compatibility flags:
+// - Disable GPU in constrained environments (CI/container/headless) or when explicitly requested.
+// - In Windows development, prefer software rendering by default because some local GPU stacks
+//   crash Electron at startup.
 // - Use /tmp instead of /dev/shm only in CI/container environments.
 // Must run before app.whenReady().
-if (process.platform === 'linux') {
-  const linuxRuntimeFlags = getLinuxRuntimeFlags()
-  if (linuxRuntimeFlags.disableGpu) {
-    app.disableHardwareAcceleration()
-    app.commandLine.appendSwitch('disable-gpu')
-  }
-  if (linuxRuntimeFlags.disableDevShmUsage) {
-    app.commandLine.appendSwitch('disable-dev-shm-usage')
-  }
-  const { disableGpu, disableDevShmUsage } = linuxRuntimeFlags
-  log.info(`[Linux startup flags] disableGpu=${disableGpu}, disableDevShmUsage=${disableDevShmUsage}`)
+const runtimeFlags = getRuntimeFlags()
+if (runtimeFlags.disableGpu) {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
 }
+if (runtimeFlags.disableDevShmUsage) {
+  app.commandLine.appendSwitch('disable-dev-shm-usage')
+}
+log.info(`[Startup flags] disableGpu=${runtimeFlags.disableGpu}, disableDevShmUsage=${runtimeFlags.disableDevShmUsage}`)
 
 // 这行代码是解决 Windows 通知的标题和图标不正确的问题，标题会错误显示成 electron.app.Chatbox
 // 参考：https://stackoverflow.com/questions/65859634/notification-from-electron-shows-electron-app-electron

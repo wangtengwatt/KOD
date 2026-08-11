@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { MODELS_DEV_SNAPSHOT } from '../model-registry/snapshot.generated'
 import { getModelsDevProviderId } from '../model-registry/provider-mapping'
+import { ModelProviderEnum } from '../types'
 import { getAllProviders } from './index'
 
 describe('provider control-plane contracts', () => {
   it('registers providers with unique ids', () => {
     const ids = getAllProviders().map((provider) => provider.id)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('keeps Kod AI first in provider lists', () => {
+    expect(getAllProviders()[0]?.id).toBe(ModelProviderEnum.ChatboxAI)
   })
 
   it('keeps models.dev mapping aligned with provider definitions', () => {

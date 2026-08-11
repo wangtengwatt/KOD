@@ -67,7 +67,7 @@ export function RouteComponent() {
   const handleSelectProvider = useCallback(
     (providerId: string) => {
       navigate({
-        to: providerId === 'chatbox-ai' ? '/settings/provider/chatbox-ai' : '/settings/provider/$providerId',
+        to: providerId === 'chatbox-ai' ? '/settings/provider/kod-ai' : '/settings/provider/$providerId',
         params: { providerId },
       })
     },

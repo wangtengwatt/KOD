@@ -95,7 +95,7 @@ function CopilotSearch() {
           <Flex justify="center" className="pt-sm">
             <Button
               variant="outline"
-              color="chatbox-brand"
+              color="kod-brand"
               size="sm"
               onClick={() => fetchNextPage()}
               loading={isFetchingNextPage}

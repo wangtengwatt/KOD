@@ -43,7 +43,7 @@ const ColorSwatch = ({ label, cssVar, value }: { label: string; cssVar: string; 
       style={{
         backgroundColor: `var(${cssVar})`,
         borderRadius: 6,
-        border: '1px solid var(--chatbox-border-primary)',
+        border: '1px solid var(--kod-border-primary)',
         flexShrink: 0,
       }}
     />
@@ -60,7 +60,7 @@ const ColorSwatch = ({ label, cssVar, value }: { label: string; cssVar: string; 
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <Stack gap="sm" mb="xl">
-    <Title order={4} c="chatbox-primary">
+    <Title order={4} c="kod-primary">
       {title}
     </Title>
     {children}
@@ -81,31 +81,31 @@ export const Colors: StoryObj = {
       <Grid>
         <Grid.Col span={6}>
           <Section title="Tint Colors (Text)">
-            <ColorSwatch label="Primary" cssVar="--chatbox-tint-primary" />
-            <ColorSwatch label="Secondary" cssVar="--chatbox-tint-secondary" />
-            <ColorSwatch label="Tertiary" cssVar="--chatbox-tint-tertiary" />
-            <ColorSwatch label="Disabled" cssVar="--chatbox-tint-disabled" />
-            <ColorSwatch label="Brand" cssVar="--chatbox-tint-brand" />
-            <ColorSwatch label="Error" cssVar="--chatbox-tint-error" />
-            <ColorSwatch label="Warning" cssVar="--chatbox-tint-warning" />
-            <ColorSwatch label="Success" cssVar="--chatbox-tint-success" />
+            <ColorSwatch label="Primary" cssVar="--kod-tint-primary" />
+            <ColorSwatch label="Secondary" cssVar="--kod-tint-secondary" />
+            <ColorSwatch label="Tertiary" cssVar="--kod-tint-tertiary" />
+            <ColorSwatch label="Disabled" cssVar="--kod-tint-disabled" />
+            <ColorSwatch label="Brand" cssVar="--kod-tint-brand" />
+            <ColorSwatch label="Error" cssVar="--kod-tint-error" />
+            <ColorSwatch label="Warning" cssVar="--kod-tint-warning" />
+            <ColorSwatch label="Success" cssVar="--kod-tint-success" />
           </Section>
         </Grid.Col>
         <Grid.Col span={6}>
           <Section title="Background Colors">
-            <ColorSwatch label="Primary" cssVar="--chatbox-background-primary" />
-            <ColorSwatch label="Secondary" cssVar="--chatbox-background-secondary" />
-            <ColorSwatch label="Tertiary" cssVar="--chatbox-background-tertiary" />
-            <ColorSwatch label="Brand Primary" cssVar="--chatbox-background-brand-primary" />
-            <ColorSwatch label="Brand Secondary" cssVar="--chatbox-background-brand-secondary" />
-            <ColorSwatch label="Error Secondary" cssVar="--chatbox-background-error-secondary" />
+            <ColorSwatch label="Primary" cssVar="--kod-background-primary" />
+            <ColorSwatch label="Secondary" cssVar="--kod-background-secondary" />
+            <ColorSwatch label="Tertiary" cssVar="--kod-background-tertiary" />
+            <ColorSwatch label="Brand Primary" cssVar="--kod-background-brand-primary" />
+            <ColorSwatch label="Brand Secondary" cssVar="--kod-background-brand-secondary" />
+            <ColorSwatch label="Error Secondary" cssVar="--kod-background-error-secondary" />
           </Section>
 
           <Section title="Border Colors">
-            <ColorSwatch label="Primary" cssVar="--chatbox-border-primary" />
-            <ColorSwatch label="Secondary" cssVar="--chatbox-border-secondary" />
-            <ColorSwatch label="Brand" cssVar="--chatbox-border-brand" />
-            <ColorSwatch label="Error" cssVar="--chatbox-border-error" />
+            <ColorSwatch label="Primary" cssVar="--kod-border-primary" />
+            <ColorSwatch label="Secondary" cssVar="--kod-border-secondary" />
+            <ColorSwatch label="Brand" cssVar="--kod-border-brand" />
+            <ColorSwatch label="Error" cssVar="--kod-border-error" />
           </Section>
         </Grid.Col>
       </Grid>
@@ -125,15 +125,15 @@ export const Spacing: StoryObj = {
         properties.
       </Text>
       {[
-        { name: 'none', var: '--chatbox-spacing-none', px: '0' },
-        { name: '3xs', var: '--chatbox-spacing-3xs', px: '2' },
-        { name: 'xxs', var: '--chatbox-spacing-xxs', px: '4' },
-        { name: 'xs', var: '--chatbox-spacing-xs', px: '8' },
-        { name: 'sm', var: '--chatbox-spacing-sm', px: '12' },
-        { name: 'md', var: '--chatbox-spacing-md', px: '16' },
-        { name: 'lg', var: '--chatbox-spacing-lg', px: '20' },
-        { name: 'xl', var: '--chatbox-spacing-xl', px: '24' },
-        { name: 'xxl', var: '--chatbox-spacing-xxl', px: '32' },
+        { name: 'none', var: '--kod-spacing-none', px: '0' },
+        { name: '3xs', var: '--kod-spacing-3xs', px: '2' },
+        { name: 'xxs', var: '--kod-spacing-xxs', px: '4' },
+        { name: 'xs', var: '--kod-spacing-xs', px: '8' },
+        { name: 'sm', var: '--kod-spacing-sm', px: '12' },
+        { name: 'md', var: '--kod-spacing-md', px: '16' },
+        { name: 'lg', var: '--kod-spacing-lg', px: '20' },
+        { name: 'xl', var: '--kod-spacing-xl', px: '24' },
+        { name: 'xxl', var: '--kod-spacing-xxl', px: '32' },
       ].map((s) => (
         <Flex key={s.name} align="center" gap="md" mb="xs">
           <Text size="sm" w={40} fw={500}>
@@ -143,7 +143,7 @@ export const Spacing: StoryObj = {
             h={20}
             style={{
               width: `var(${s.var})`,
-              backgroundColor: 'var(--chatbox-tint-brand)',
+              backgroundColor: 'var(--kod-tint-brand)',
               borderRadius: 4,
               minWidth: 2,
             }}
@@ -166,20 +166,20 @@ export const BorderRadius: StoryObj = {
       </Title>
       <Flex gap="lg" wrap="wrap">
         {[
-          { name: 'none', var: '--chatbox-radius-none' },
-          { name: 'xs', var: '--chatbox-radius-xs' },
-          { name: 'sm', var: '--chatbox-radius-sm' },
-          { name: 'md', var: '--chatbox-radius-md' },
-          { name: 'lg', var: '--chatbox-radius-lg' },
-          { name: 'xl', var: '--chatbox-radius-xl' },
-          { name: 'xxl', var: '--chatbox-radius-xxl' },
+          { name: 'none', var: '--kod-radius-none' },
+          { name: 'xs', var: '--kod-radius-xs' },
+          { name: 'sm', var: '--kod-radius-sm' },
+          { name: 'md', var: '--kod-radius-md' },
+          { name: 'lg', var: '--kod-radius-lg' },
+          { name: 'xl', var: '--kod-radius-xl' },
+          { name: 'xxl', var: '--kod-radius-xxl' },
         ].map((r) => (
           <Stack key={r.name} align="center" gap={4}>
             <Box
               w={60}
               h={60}
               style={{
-                backgroundColor: 'var(--chatbox-background-brand-primary)',
+                backgroundColor: 'var(--kod-background-brand-primary)',
                 borderRadius: `var(${r.var})`,
               }}
             />

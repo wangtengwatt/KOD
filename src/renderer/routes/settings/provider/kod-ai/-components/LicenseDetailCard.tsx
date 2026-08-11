@@ -75,7 +75,7 @@ function QuotaRingIcon({ remaining, total }: { remaining: number; total: number 
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="var(--chatbox-background-tertiary)"
+          stroke="var(--kod-background-tertiary)"
           strokeWidth={strokeWidth}
         />
         <circle
@@ -124,13 +124,13 @@ function QuotaCardDes({
 
   return (
     <Stack gap={4}>
-      <Text c="chatbox-secondary" style={isSmallScreen ? { whiteSpace: 'pre-line' } : undefined}>
+      <Text c="kod-secondary" style={isSmallScreen ? { whiteSpace: 'pre-line' } : undefined}>
         {title}
       </Text>
 
       {typeof remaining === 'number' && typeof total === 'number' ? (
         <Flex align="center" gap={6} wrap="nowrap">
-          <Text fw={700} fz="1.3rem" lh={1.05} c={accent === 'blue' ? 'chatbox-brand' : 'chatbox-primary'}>
+          <Text fw={700} fz="1.3rem" lh={1.05} c={accent === 'blue' ? 'kod-brand' : 'kod-primary'}>
             {formatNumber(remaining, 2)}
           </Text>
           <Text c="dimmed" fz="1.1rem" pb={3}>
@@ -152,11 +152,11 @@ function QuotaCardDes({
       {actionLabel && onAction && (
         <UnstyledButton
           onClick={onAction}
-          className="w-fit text-chatbox-tint-brand"
+          className="w-fit text-kod-tint-brand"
           style={{ opacity: actionLoading ? 0.6 : 1 }}
         >
           <Flex gap={2} align="center">
-            <Text span c="chatbox-brand" fw={500}>
+            <Text span c="kod-brand" fw={500}>
               {actionLoading ? t('Loading...') : actionLabel}
             </Text>
             <ScalableIcon icon={IconArrowRight} size={15} />
@@ -175,7 +175,7 @@ function QuotaCard({ icon, ...rest }: QuotaCardProps) {
       className="h-full rounded-md p-lg"
       style={{
         backgroundColor:
-          'color-mix(in srgb, var(--chatbox-background-secondary) 68%, var(--chatbox-background-primary))',
+          'color-mix(in srgb, var(--kod-background-secondary) 68%, var(--kod-background-primary))',
       }}
     >
       {isSmallScreen ? (
@@ -205,11 +205,11 @@ function InfoPanel({ title, value, valueColor }: InfoPanelProps) {
       className="rounded-md p-lg"
       style={{
         backgroundColor:
-          'color-mix(in srgb, var(--chatbox-background-secondary) 68%, var(--chatbox-background-primary))',
+          'color-mix(in srgb, var(--kod-background-secondary) 68%, var(--kod-background-primary))',
       }}
     >
       <Stack gap={6}>
-        <Text c="chatbox-secondary">{title}</Text>
+        <Text c="kod-secondary">{title}</Text>
         <Text fw={700} fz="1.05rem" c={valueColor}>
           {value}
         </Text>
@@ -273,7 +273,7 @@ export function LicenseDetailCard({ licenseDetail, language, utmContent }: Licen
     <Stack gap="lg">
       {isExpired && (
         <Alert variant="light" color="orange" p="sm">
-          <Flex gap="xs" align="center" c="chatbox-primary">
+          <Flex gap="xs" align="center" c="kod-primary">
             <ScalableIcon icon={IconAlertTriangle} className="flex-shrink-0" />
             <Text>{t('Your license has expired. You can continue using your expansion pack.')}</Text>
             <UnstyledButton

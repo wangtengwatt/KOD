@@ -39,21 +39,21 @@ export const ProviderHeader = ({
   // 根据是否是移动端决定样式
   const iconSize = isMobile ? 16 : 12
   const padding = isMobile ? 'py-xs pb-0 px-xxs' : 'px-sm py-xs'
-  const textColor = isMobile ? 'chatbox-tertiary' : 'chatbox-secondary'
+  const textColor = isMobile ? 'kod-tertiary' : 'kod-secondary'
   const textWeight = isMobile ? 600 : 500
   const iconClass = isMobile
     ? 'text-inherit'
     : isFavorite
-      ? 'text-chatbox-tint-tertiary'
+      ? 'text-kod-tint-tertiary'
       : provider.isCustom
-        ? 'text-chatbox-tint-gray'
+        ? 'text-kod-tint-gray'
         : ''
 
   // Desktop 版本的容器样式
-  const desktopContainerClass = `${isClickable ? 'cursor-pointer select-none hover:bg-chatbox-background-primary-hover' : ''} ${padding} sticky top-0 z-10 bg-chatbox-background-primary border-0 border-b border-solid border-chatbox-border-primary ${className}`
+  const desktopContainerClass = `${isClickable ? 'cursor-pointer select-none hover:bg-kod-background-primary-hover' : ''} ${padding} sticky top-0 z-10 bg-kod-background-primary border-0 border-b border-solid border-kod-border-primary ${className}`
 
   // Mobile 版本的容器样式
-  const mobileContainerClass = `${padding} ${isMobile ? 'text-chatbox-tint-tertiary' : ''} sticky top-0 z-10 bg-chatbox-background-primary ${className}`
+  const mobileContainerClass = `${padding} ${isMobile ? 'text-kod-tint-tertiary' : ''} sticky top-0 z-10 bg-kod-background-primary ${className}`
 
   const containerClass = isMobile ? mobileContainerClass : desktopContainerClass
 

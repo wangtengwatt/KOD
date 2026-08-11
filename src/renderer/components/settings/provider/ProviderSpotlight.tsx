@@ -36,7 +36,7 @@ const ProviderSpotlight: FC<{
           providerSpotlight.close()
           onAddCustomProvider()
         },
-        leftSection: <ScalableIcon icon={IconSquareRoundedPlusFilled} size={24} className="text-chatbox-tint-brand" />,
+        leftSection: <ScalableIcon icon={IconSquareRoundedPlusFilled} size={24} className="text-kod-tint-brand" />,
       },
     ]
 
@@ -50,7 +50,7 @@ const ProviderSpotlight: FC<{
           providerSpotlight.close()
           onImportProvider()
         },
-        leftSection: <ScalableIcon icon={IconFileImport} size={24} className="text-chatbox-tint-brand" />,
+        leftSection: <ScalableIcon icon={IconFileImport} size={24} className="text-kod-tint-brand" />,
       })
     }
 

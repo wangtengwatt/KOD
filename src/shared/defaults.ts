@@ -125,7 +125,7 @@ export function settings(): Settings {
     },
     extension: {
       webSearch: {
-        provider: 'tavily', // P0 去云化：默认搜索改用 tavily，不再默认走 Chatbox 云
+        provider: 'build-in', // Built-in DuckDuckGo works without an API key.
         tavilyApiKey: '',
         bochaApiKey: '',
         queritApiKey: '',
@@ -172,8 +172,8 @@ export function chatSessionSettings(): SessionSettings {
 
 export function pictureSessionSettings(): SessionSettings {
   return {
-    provider: ModelProviderEnum.ChatboxAI,
-    modelId: 'DALL-E-3',
+    provider: ModelProviderEnum.OpenAI,
+    modelId: 'gpt-image-1',
     imageGenerateNum: 1,
     dalleStyle: 'vivid',
   }

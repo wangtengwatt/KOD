@@ -55,7 +55,7 @@ export function ProviderList({ providers, onAddProvider }: ProviderListProps) {
     <Stack
       maw={isSmallScreen ? undefined : 256}
       className={clsx(
-        'border-solid border-0 border-r border-chatbox-border-primary',
+        'border-solid border-0 border-r border-kod-border-primary',
         isSmallScreen ? 'w-full border-r-0' : 'flex-[1_0_auto]'
       )}
       gap={0}
@@ -65,7 +65,7 @@ export function ProviderList({ providers, onAddProvider }: ProviderListProps) {
           {sortedProviders.map((provider) => (
             <Link
               key={provider.id}
-              to={provider.id === 'chatbox-ai' ? `/settings/provider/chatbox-ai` : `/settings/provider/$providerId`}
+              to={provider.id === 'chatbox-ai' ? `/settings/provider/kod-ai` : `/settings/provider/$providerId`}
               params={{ providerId: provider.id }}
               className={'block no-underline'}
             >
@@ -76,11 +76,11 @@ export function ProviderList({ providers, onAddProvider }: ProviderListProps) {
                 p="md"
                 pr="xl"
                 py={isSmallScreen ? 'sm' : undefined}
-                c={provider.id === providerId ? 'chatbox-brand' : 'chatbox-secondary'}
-                bg={provider.id === providerId ? 'var(--chatbox-background-brand-secondary)' : 'transparent'}
+                c={provider.id === providerId ? 'kod-brand' : 'kod-secondary'}
+                bg={provider.id === providerId ? 'var(--kod-background-brand-secondary)' : 'transparent'}
                 className={clsx(
                   'cursor-pointer select-none rounded-md',
-                  provider.id === providerId ? '' : 'hover:!bg-chatbox-background-gray-secondary'
+                  provider.id === providerId ? '' : 'hover:!bg-kod-background-gray-secondary'
                 )}
               >
                 {provider.isCustom ? (
@@ -103,11 +103,11 @@ export function ProviderList({ providers, onAddProvider }: ProviderListProps) {
                 </Text>
 
                 {activatedProviderIds.has(provider.id) && (
-                  <Indicator size={8} color="chatbox-success" className="ml-auto" />
+                  <Indicator size={8} color="kod-success" className="ml-auto" />
                 )}
 
                 {isSmallScreen && (
-                  <ScalableIcon icon={IconChevronRight} size={20} className="!text-chatbox-tint-tertiary ml-2" />
+                  <ScalableIcon icon={IconChevronRight} size={20} className="!text-kod-tint-tertiary ml-2" />
                 )}
               </Flex>
 

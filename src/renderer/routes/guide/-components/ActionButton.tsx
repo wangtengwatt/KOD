@@ -13,7 +13,7 @@ import { ScalableIcon } from '@/components/common/ScalableIcon'
 import { navigateToSettings } from '@/modals/Settings'
 import { openLinkWithAuth } from '@/packages/openLinkWithAuth'
 import { buildChatboxUrl, getUserProfile, listLicensesByUser, type UserLicense } from '@/packages/remote'
-import { EmailCodeLoginModal } from '@/routes/settings/provider/chatbox-ai/-components/EmailCodeLoginModal'
+import { EmailCodeLoginModal } from '@/routes/settings/provider/kod-ai/-components/EmailCodeLoginModal'
 import { authInfoStore } from '@/stores/authInfoStore'
 import * as premiumActions from '@/stores/premiumActions'
 import { settingsStore, useLanguage } from '@/stores/settingsStore'
@@ -146,7 +146,7 @@ export function LoginButton({ onLoginSuccess }: LoginButtonProps) {
         withCloseButton={false}
       >
         <Stack gap="md">
-          <Text size="sm" c="chatbox-secondary">
+          <Text size="sm" c="kod-secondary">
             {t('You have multiple licenses. Please select one to use:')}
           </Text>
 
@@ -159,7 +159,7 @@ export function LoginButton({ onLoginSuccess }: LoginButtonProps) {
                   label={
                     <Stack gap={2}>
                       <Text fw={500}>{license.product_name}</Text>
-                      <Text size="xs" c="chatbox-tertiary" className="font-mono">
+                      <Text size="xs" c="kod-tertiary" className="font-mono">
                         {license.key.substring(0, 8)}
                         {'*'.repeat(12)}
                       </Text>

@@ -8,7 +8,7 @@ import { useProviderSettings } from '@/stores/settingsStore'
 
 const EMPTY_MODELS: ProviderModelInfo[] = []
 
-const useChatboxAIModels = () => {
+const useKodAIModels = () => {
   const accessToken = useAuthInfoStore((state) => state.accessToken)
   const { providerSettings: kodSettings, setProviderSettings } = useProviderSettings(ModelProviderEnum.ChatboxAI)
 
@@ -30,7 +30,7 @@ const useChatboxAIModels = () => {
         apiKey: relayStation.apiKey,
         models,
         excludedModels: previousSettings?.excludedModels?.filter((modelId) =>
-          models.some((m) => m.modelId === modelId)
+          models.some((model) => model.modelId === modelId)
         ),
       }))
 
@@ -40,36 +40,31 @@ const useChatboxAIModels = () => {
     retry: 1,
   })
 
-  const allChatboxAIModels = accessToken ? data?.models || EMPTY_MODELS : EMPTY_MODELS
-
-  const chatboxAIModels = useMemo(
+  const allKodAIModels = accessToken ? data?.models || EMPTY_MODELS : EMPTY_MODELS
+  const kodAIModels = useMemo(
     () =>
-      allChatboxAIModels.filter(
+      allKodAIModels.filter(
         (model) =>
-          model.type !== 'image' &&
-          model.type !== 'video' &&
-          !kodSettings?.excludedModels?.includes(model.modelId)
+          model.type !== 'image' && model.type !== 'video' && !kodSettings?.excludedModels?.includes(model.modelId)
       ),
-    [allChatboxAIModels, kodSettings]
+    [allKodAIModels, kodSettings]
   )
-
-  const chatboxAIImageModels = useMemo(
-    () => allChatboxAIModels.filter((model) => model.type === 'image'),
-    [allChatboxAIModels]
+  const kodAIImageModels = useMemo(
+    () => allKodAIModels.filter((model) => model.type === 'image'),
+    [allKodAIModels]
   )
-
-  const chatboxAIVideoModels = useMemo(
-    () => allChatboxAIModels.filter((model) => model.type === 'video'),
-    [allChatboxAIModels]
+  const kodAIVideoModels = useMemo(
+    () => allKodAIModels.filter((model) => model.type === 'video'),
+    [allKodAIModels]
   )
 
   return {
-    allChatboxAIModels,
-    chatboxAIModels,
-    chatboxAIImageModels,
-    chatboxAIVideoModels,
+    allKodAIModels,
+    kodAIModels,
+    kodAIImageModels,
+    kodAIVideoModels,
     ...others,
   }
 }
 
-export default useChatboxAIModels
+export default useKodAIModels

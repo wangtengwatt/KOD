@@ -518,10 +518,11 @@ export function registerKnowledgeBaseHandlers() {
         throw new Error('Only failed files can be retried')
       }
 
-      // Reset file status to pending for reprocessing, also set use_remote_parsing flag
+      // Reset file status to pending for reprocessing.
+      // The legacy remote parsing flag is intentionally ignored now.
       await db.execute({
-        sql: 'UPDATE kb_file SET status = ?, error = NULL, chunk_count = 0, total_chunks = 0, processing_started_at = NULL, use_remote_parsing = ? WHERE id = ?',
-        args: ['pending', useRemoteParsing ? 1 : 0, fileId],
+        sql: 'UPDATE kb_file SET status = ?, error = NULL, chunk_count = 0, total_chunks = 0, processing_started_at = NULL, use_remote_parsing = 0 WHERE id = ?',
+        args: ['pending', fileId],
       })
 
       log.info(

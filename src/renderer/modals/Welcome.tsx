@@ -35,7 +35,7 @@ const Welcome = NiceModal.create(() => {
             </Stack>
           </Stack>
 
-          <List size="sm" c="chatbox-secondary" className="flex flex-col items-center">
+          <List size="sm" c="kod-secondary" className="flex flex-col items-center">
             <List.Item>{t('Supports a variety of advanced AI models')}</List.Item>
             <List.Item>{t('All data is stored locally, ensuring privacy and rapid access')}</List.Item>
             <List.Item>{t('Ideal for both work and educational scenarios')}</List.Item>
@@ -51,7 +51,7 @@ const Welcome = NiceModal.create(() => {
               radius="md"
               classNames={{ root: '!outline-none', label: 'flex flex-col items-center justify-center' }}
               onClick={() => {
-                navigateToSettings('/provider/chatbox-ai')
+                navigateToSettings('/provider/kod-ai')
                 modal.resolve('setup')
                 modal.hide()
               }}
@@ -61,7 +61,7 @@ const Welcome = NiceModal.create(() => {
           </Stack>
         </Paper>
 
-        <Button variant="transparent" c="chatbox-secondary" size="compact-md" onClick={onClose}>
+        <Button variant="transparent" c="kod-secondary" size="compact-md" onClick={onClose}>
           {t('Setup later')}
         </Button>
       </Stack>

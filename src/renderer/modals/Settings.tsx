@@ -20,16 +20,16 @@ import { getThemeDesign } from '@/hooks/useAppTheme'
 import useNeedRoomForWinControls from '@/hooks/useNeedRoomForWinControls'
 import { router } from '@/router'
 import { RouteComponent as SettingsChatRouteComponent } from '@/routes/settings/chat'
-import { RouteComponent as SettingsChatboxAiRouteComponent } from '@/routes/settings/chatbox-ai'
 import { RouteComponent as SettingsDefaultModelsRouteComponent } from '@/routes/settings/default-models'
 import { RouteComponent as SettingsDocumentParserRouteComponent } from '@/routes/settings/document-parser'
 import { RouteComponent as SettingsGeneralRouteComponent } from '@/routes/settings/general'
 import { RouteComponent as SettingsHotkeysRouteComponent } from '@/routes/settings/hotkeys'
 import { RouteComponent as SettingsIndexRouteComponent } from '@/routes/settings/index'
+import { RouteComponent as SettingsKodAiRouteComponent } from '@/routes/settings/kod-ai'
 import { RouteComponent as SettingsMcpRouteComponent } from '@/routes/settings/mcp'
 import { RouteComponent as SettingsProviderProviderIdRouteComponent } from '@/routes/settings/provider/$providerId'
-import { RouteComponent as SettingsProviderChatboxAiRouteComponent } from '@/routes/settings/provider/chatbox-ai'
 import { RouteComponent as SettingsProviderIndexRouteComponent } from '@/routes/settings/provider/index'
+import { RouteComponent as SettingsProviderKodAiRouteComponent } from '@/routes/settings/provider/kod-ai'
 import { RouteComponent as SettingsProviderRouteRouteComponent } from '@/routes/settings/provider/route'
 import { SettingsRoot } from '@/routes/settings/route'
 import { RouteComponent as SettingsSkillsRouteComponent } from '@/routes/settings/skills'
@@ -75,19 +75,19 @@ export const SettingsModal: FC<SettingsModalProps> = (props) => {
       }}
       transitionProps={{ transition: 'fade-up' }}
     >
-      <Flex flex="0 0 auto" className="title-bar border-0 border-b border-chatbox-border-primary border-solid">
+      <Flex flex="0 0 auto" className="title-bar border-0 border-b border-kod-border-primary border-solid">
         <div className={clsx('flex-[1_1_0]', needRoomForMacWindowControls ? 'min-w-16' : '')} />
         <Flex p="sm" align="center" w={'100%'} maw={1200} gap="xs">
           <Title order={3} flex={1}>
             {t('Settings')}
           </Title>
 
-          <Text c="chatbox-tertiary" size="xs">
+          <Text c="kod-tertiary" size="xs">
             ESC
           </Text>
           <Button
             className="controls"
-            color="chatbox-secondary"
+            color="kod-secondary"
             variant="light"
             h={36}
             w={36}
@@ -145,9 +145,9 @@ const SettingsIndexRoute = createRoute({
   getParentRoute: () => RootRoute,
 })
 
-const SettingsChatboxAiRoute = createRoute({
-  component: SettingsChatboxAiRouteComponent,
-  path: '/settings/chatbox-ai',
+const SettingsKodAiRoute = createRoute({
+  component: SettingsKodAiRouteComponent,
+  path: '/settings/kod-ai',
   getParentRoute: () => RootRoute,
 })
 
@@ -217,8 +217,8 @@ const SettingsProviderIndexRoute = createRoute({
   getParentRoute: () => SettingsProviderRouteRoute,
 })
 
-const SettingsProviderChatboxAiRoute = createRoute({
-  component: SettingsProviderChatboxAiRouteComponent,
+const SettingsProviderKodAiRoute = createRoute({
+  component: SettingsProviderKodAiRouteComponent,
   path: '/chatbox-ai',
   getParentRoute: () => SettingsProviderRouteRoute,
 })
@@ -231,13 +231,13 @@ const SettingsProviderProviderIdRoute = createRoute({
 
 SettingsProviderRouteRoute.addChildren([
   SettingsProviderIndexRoute,
-  SettingsProviderChatboxAiRoute,
+  SettingsProviderKodAiRoute,
   SettingsProviderProviderIdRoute,
 ])
 
 const routeTree = RootRoute.addChildren([
   SettingsIndexRoute,
-  SettingsChatboxAiRoute,
+  SettingsKodAiRoute,
   SettingsGeneralRoute,
   SettingsChatRoute,
   SettingsWebSearchRoute,

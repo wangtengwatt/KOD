@@ -305,10 +305,9 @@ export default defineConfig(({ mode }) => {
         'process.env.USE_BETA_CHATBOX': JSON.stringify(process.env.USE_BETA_CHATBOX || ''),
       },
       optimizeDeps: {
-        // Force a fresh dep optimization on dev startup. This avoids stale .vite
-        // cache artifacts that intermittently break MUI internals after branch or
-        // dependency changes with runtime errors like "createTheme_default is not a function".
-        force: true,
+        // Avoid forcing a fresh dep optimization on every dev startup.
+        // Large prebundles can overwhelm local Windows environments; opt in when needed.
+        force: process.env.VITE_FORCE_DEP_OPTIMIZE === 'true',
         include: ['mermaid'],
         esbuildOptions: {
           target: 'es2015',

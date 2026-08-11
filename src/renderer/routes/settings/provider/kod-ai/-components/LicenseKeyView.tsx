@@ -51,12 +51,12 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
     <Stack gap="xl" ref={ref}>
       <Flex gap="xs" align="center" justify="space-between">
         <Flex gap="xs" align="center">
-          <Title order={3} c="chatbox-secondary">
+          <Title order={3} c="kod-secondary">
             Chatbox AI
           </Title>
           <Button
             variant="transparent"
-            c="chatbox-tertiary"
+            c="kod-tertiary"
             px={0}
             h={24}
             onClick={() => platform.openLink('https://chatboxai.app')}
@@ -66,11 +66,11 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
         </Flex>
 
         <Flex gap="xs" align="center" justify="flex-end">
-          <Flex gap="xxs" align="center" c="chatbox-brand" className="mr-4 hidden md:flex">
+          <Flex gap="xxs" align="center" c="kod-brand" className="mr-4 hidden md:flex">
             <ScalableIcon icon={IconHelp} />
             <Text
               component="a"
-              c="chatbox-brand"
+              c="kod-brand"
               className="!underline"
               href={buildChatboxUrl(
                 `/redirect_app/how_to_use_license/${language}?utm_source=app&utm_content=provider_cb_key_howtouse`
@@ -83,8 +83,8 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
           <Flex gap="xs" align="center">
             <UnstyledButton onClick={onSwitchToLogin}>
               <Flex gap="xxs" align="center">
-                <ScalableIcon icon={IconArrowLeft} size={16} className="!text-chatbox-tint-brand" />
-                <Text span className="!text-chatbox-tint-brand">
+                <ScalableIcon icon={IconArrowLeft} size={16} className="!text-kod-tint-brand" />
+                <Text span className="!text-kod-tint-brand">
                   {t('Back to Login')}
                 </Text>
               </Flex>
@@ -93,11 +93,11 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
         </Flex>
       </Flex>
       <Flex gap="xs" align="center" justify="flex-start" className="md:hidden">
-        <Flex gap="xxs" align="center" c="chatbox-brand" className="mr-4">
+        <Flex gap="xxs" align="center" c="kod-brand" className="mr-4">
           <ScalableIcon icon={IconHelp} />
           <Text
             component="a"
-            c="chatbox-brand"
+            c="kod-brand"
             className="!underline"
             href={buildChatboxUrl(
               `/redirect_app/how_to_use_license/${language}?utm_source=app&utm_content=provider_cb_key_howtouse`
@@ -110,8 +110,8 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
         <Flex gap="xs" align="center" className="hidden md:flex">
           <UnstyledButton onClick={onSwitchToLogin}>
             <Flex gap="xxs" align="center">
-              <ScalableIcon icon={IconArrowLeft} size={16} className="!text-chatbox-tint-brand" />
-              <Text span className="!text-chatbox-tint-brand">
+              <ScalableIcon icon={IconArrowLeft} size={16} className="!text-kod-tint-brand" />
+              <Text span className="!text-kod-tint-brand">
                 {t('Back to Login')}
               </Text>
             </Flex>
@@ -138,14 +138,14 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
                 {t('Activate License')}
               </Button>
             ) : (
-              <Button color="chatbox-success" variant="subtle" onClick={handleDeactivate}>
+              <Button color="kod-success" variant="subtle" onClick={handleDeactivate}>
                 {t('Deactivate')}
               </Button>
             )}
           </Flex>
           {activated && (
             <Flex gap="xs" align="center">
-              <Text c="chatbox-success">{t('License Activated')}</Text>
+              <Text c="kod-success">{t('License Activated')}</Text>
               {licenseDetail?.token_expire_time && new Date(licenseDetail.token_expire_time) < new Date() && (
                 <Text c="orange" size="sm">
                   ({t('Expired')})
@@ -161,9 +161,9 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
               const errorCode = licenseDetailError?.code || activateError
               const isLicenseNotFound = ['not_found', 'license_not_found'].includes(errorCode || '')
               return (
-                <Flex gap="xs" align="center" c={isLicenseNotFound ? 'chatbox-error' : 'chatbox-primary'}>
+                <Flex gap="xs" align="center" c={isLicenseNotFound ? 'kod-error' : 'kod-primary'}>
                   <ScalableIcon icon={IconExclamationCircle} className="flex-shrink-0" />
-                  <Text c={isLicenseNotFound ? 'chatbox-error' : undefined}>
+                  <Text c={isLicenseNotFound ? 'kod-error' : undefined}>
                     {(() => {
                       switch (errorCode) {
                         case 'not_found':
@@ -190,19 +190,19 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
                       `/redirect_app/manage_license/${language}?utm_source=app&utm_content=provider_cb_key_activate_error`
                     )}
                     target="_blank"
-                    className={`ml-auto flex flex-row items-center gap-xxs${isLicenseNotFound ? ' text-chatbox-tint-error underline decoration-chatbox-tint-error' : ''}`}
+                    className={`ml-auto flex flex-row items-center gap-xxs${isLicenseNotFound ? ' text-kod-tint-error underline decoration-kod-tint-error' : ''}`}
                   >
                     <Text
                       span
                       fw={600}
                       className="whitespace-nowrap"
-                      c={isLicenseNotFound ? 'chatbox-error' : undefined}
+                      c={isLicenseNotFound ? 'kod-error' : undefined}
                     >
                       {t('Manage License')}
                     </Text>
                     <ScalableIcon
                       icon={IconArrowRight}
-                      color={isLicenseNotFound ? 'var(--chatbox-tint-error)' : undefined}
+                      color={isLicenseNotFound ? 'var(--kod-tint-error)' : undefined}
                     />
                   </a>
                 </Flex>
@@ -224,7 +224,7 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
             {licenseDetail.remaining_quota_unified <= 0 &&
               (licenseDetail.expansion_pack_limit || 0) - (licenseDetail.expansion_pack_usage || 0) <= 0 && (
                 <Alert variant="light" color="yellow" p="sm">
-                  <Flex gap="xs" align="center" c="chatbox-primary">
+                  <Flex gap="xs" align="center" c="kod-primary">
                     <ScalableIcon icon={IconExclamationCircle} className="flex-shrink-0" />
                     <Text>
                       {licenseDetail.name === 'Chatbox AI Free'
@@ -284,7 +284,7 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
             {/* chatboxai not activated */}
             <Paper shadow="xs" p="sm" withBorder>
               <Stack gap="sm">
-                <Text fw="600" c="chatbox-brand">
+                <Text fw="600" c="kod-brand">
                   {t('Chatbox AI offers a user-friendly AI solution to help you enhance productivity')}
                 </Text>
                 <Stack>
@@ -297,7 +297,7 @@ export const LicenseKeyView = forwardRef<HTMLDivElement, LicenseKeyViewProps>(({
                     <Flex key={item} gap="xs" align="center">
                       <ScalableIcon
                         icon={IconCircleCheckFilled}
-                        className=" flex-shrink-0 flex-grow-0 text-chatbox-tint-brand"
+                        className=" flex-shrink-0 flex-grow-0 text-kod-tint-brand"
                       />
                       <Text>{item}</Text>
                     </Flex>

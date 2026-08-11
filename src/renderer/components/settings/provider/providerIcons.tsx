@@ -18,6 +18,7 @@ const providerIconMap = new Map<string, string>(
 )
 
 const PROVIDER_ICON_ALIASES: Record<string, string> = {
+  [ModelProviderEnum.ChatboxAI]: 'kod-ai',
   [ModelProviderEnum.QwenPortal]: ModelProviderEnum.Qwen,
   [ModelProviderEnum.MiniMaxCN]: ModelProviderEnum.MiniMax,
 }

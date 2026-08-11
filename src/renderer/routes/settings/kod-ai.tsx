@@ -1,14 +1,14 @@
 import { Stack } from '@mantine/core'
 import { type ModelProvider, ModelProviderEnum } from '@shared/types'
 import { createFileRoute } from '@tanstack/react-router'
-import useChatboxAIModels from '@/hooks/useChatboxAIModels'
+import useKodAIModels from '@/hooks/useKodAIModels'
 import { useLanguage, useProviderSettings } from '@/stores/settingsStore'
-import { LoggedInView } from './provider/chatbox-ai/-components/LoggedInView'
-import { LoginView } from './provider/chatbox-ai/-components/LoginView'
-import { ModelManagement } from './provider/chatbox-ai/-components/ModelManagement'
-import { useAuthTokens } from './provider/chatbox-ai/-components/useAuthTokens'
+import { LoggedInView } from './provider/kod-ai/-components/LoggedInView'
+import { LoginView } from './provider/kod-ai/-components/LoginView'
+import { ModelManagement } from './provider/kod-ai/-components/ModelManagement'
+import { useAuthTokens } from './provider/kod-ai/-components/useAuthTokens'
 
-export const Route = createFileRoute('/settings/chatbox-ai')({
+export const Route = createFileRoute('/settings/kod-ai')({
   component: RouteComponent,
 })
 
@@ -17,7 +17,7 @@ export function RouteComponent() {
   const providerId: ModelProvider = ModelProviderEnum.ChatboxAI
   const { providerSettings, setProviderSettings } = useProviderSettings(providerId)
   const { isLoggedIn, clearAuthTokens, saveAuthTokens } = useAuthTokens()
-  const { allChatboxAIModels, chatboxAIModels, refetch: refetchChatboxAIModels } = useChatboxAIModels()
+  const { allKodAIModels, kodAIModels, refetch: refetchKodAIModels } = useKodAIModels()
 
   const deleteModel = (modelId: string) => {
     setProviderSettings({
@@ -41,12 +41,12 @@ export function RouteComponent() {
       )}
 
       <ModelManagement
-        chatboxAIModels={chatboxAIModels}
-        allChatboxAIModels={allChatboxAIModels}
+        kodAIModels={kodAIModels}
+        allKodAIModels={allKodAIModels}
         onDeleteModel={deleteModel}
         onResetModels={resetModels}
         onFetchModels={() => {
-          void refetchChatboxAIModels()
+          void refetchKodAIModels()
         }}
         onAddModel={(model) =>
           setProviderSettings({

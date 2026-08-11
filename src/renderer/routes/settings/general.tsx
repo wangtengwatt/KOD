@@ -172,7 +172,7 @@ export function RouteComponent() {
       <Stack gap="md">
         <Stack gap="xxs">
           <Title order={5}>{t('Error Reporting')}</Title>
-          <Text c="chatbox-tertiary">
+          <Text c="kod-tertiary">
             {t(
               'Chatbox respects your privacy and only uploads anonymous error data and events when necessary. You can change your preferences at any time in the settings.'
             )}
@@ -256,7 +256,7 @@ const DataRecoverySection = () => {
     <Stack gap="md">
       <Stack gap="xxs">
         <Title order={5}>{t('Data Recovery')}</Title>
-        <Text c="chatbox-tertiary">
+        <Text c="kod-tertiary">
           {t('If conversations are missing from the list, use this feature to scan and recover them from storage')}
         </Text>
       </Stack>
@@ -534,7 +534,7 @@ const ImportExportDataSection = () => {
           {t('Data Backup')}
         </Title>
         {showStorageInfo && (
-          <Text size="xs" c="chatbox-tertiary">
+          <Text size="xs" c="kod-tertiary">
             {storageInfo}
           </Text>
         )}
@@ -569,7 +569,7 @@ const ImportExportDataSection = () => {
       <Stack gap="lg">
         <Stack gap="xxs">
           <Title order={5}>{t('Data Restore')}</Title>
-          <Text c="chatbox-tertiary">
+          <Text c="kod-tertiary">
             {t('Upon import, changes will take effect immediately and existing data will be overwritten')}
           </Text>
         </Stack>
@@ -644,7 +644,7 @@ const ExportLogsSection = () => {
     <Stack gap="md">
       <Stack gap="xxs">
         <Title order={5}>{t('Diagnostic Logs')}</Title>
-        <Text c="chatbox-tertiary">
+        <Text c="kod-tertiary">
           {t(
             'Export application logs for troubleshooting. These logs may be requested by support to help diagnose issues.'
           )}

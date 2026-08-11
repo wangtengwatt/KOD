@@ -21,7 +21,8 @@ export function createParser(config: DocumentParserConfig, kbId?: number): Docum
     case 'local':
       return new LocalParser(kbId)
     case 'chatbox-ai':
-      return new ChatboxParser()
+      // Preserve legacy configs, but route them through the local parser.
+      return new ChatboxParser(kbId)
     case 'mineru':
       if (!config.mineru?.apiToken) {
         throw new Error('MinerU API token is required')
@@ -78,7 +79,7 @@ export async function parseFileWithRouter(
   log.debug(`[ROUTER] Using ${config.type} parser for: ${meta.filename}`)
   const parser = createParser(config, kbId)
   const content = await parser.parse(filePath, meta)
-  return { content, parserUsed: config.type }
+  return { content, parserUsed: config.type === 'chatbox-ai' ? 'local' : config.type }
 }
 
 /**
@@ -87,9 +88,8 @@ export async function parseFileWithRouter(
 export function getParserDisplayName(type: DocumentParserType): string {
   switch (type) {
     case 'local':
-      return 'Local'
     case 'chatbox-ai':
-      return 'Chatbox AI'
+      return 'Local'
     case 'mineru':
       return 'MinerU'
     default:

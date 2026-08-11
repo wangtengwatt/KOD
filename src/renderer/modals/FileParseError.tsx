@@ -144,7 +144,7 @@ const FileParseError = NiceModal.create(({ errorCode, fileName }: FileParseError
     <AdaptiveModal opened={modal.visible} onClose={onClose} size="md" centered title={t('File Processing Error')}>
       <Stack gap="md">
         {fileName && (
-          <Text size="sm" c="chatbox-secondary">
+          <Text size="sm" c="kod-secondary">
             {t('File')}: {fileName}
           </Text>
         )}

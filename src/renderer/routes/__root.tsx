@@ -116,21 +116,21 @@ function BackgroundImageOverlay() {
         `,
         }}
       />
-      <div className="hidden sm:block absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-chatbox-background-primary from-0 to-transparent to-100%" />
+      <div className="hidden sm:block absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-kod-background-primary from-0 to-transparent to-100%" />
       {showSidebar && (
         <div
-          className="hidden sm:block absolute top-0 left-0 h-full bg-gradient-to-r from-chatbox-background-primary from-[25%] to-transparent to-100%"
+          className="hidden sm:block absolute top-0 left-0 h-full bg-gradient-to-r from-kod-background-primary from-[25%] to-transparent to-100%"
           style={{
             width: `${sidebarWidth * 2}px`,
           }}
         />
       )}
 
-      <Flex h={48} className="sm:hidden bg-chatbox-background-primary" />
+      <Flex h={48} className="sm:hidden bg-kod-background-primary" />
 
-      <Flex className="sm:hidden relative h-36 bg-gradient-to-b from-chatbox-background-primary from-0 to-transparent to-100%" />
+      <Flex className="sm:hidden relative h-36 bg-gradient-to-b from-kod-background-primary from-0 to-transparent to-100%" />
 
-      <Flex className="sm:hidden absolute bottom-0 left-0 w-full h-36 bg-gradient-to-t from-chatbox-background-primary from-0 to-transparent to-100%" />
+      <Flex className="sm:hidden absolute bottom-0 left-0 w-full h-36 bg-gradient-to-t from-kod-background-primary from-0 to-transparent to-100%" />
     </div>
   )
 }
@@ -380,17 +380,17 @@ const creteMantineTheme = (scale = 1) =>
   createTheme({
     /** Put your mantine theme override here */
     scale,
-    primaryColor: 'chatbox-brand',
+    primaryColor: 'kod-brand',
     colors: {
-      'chatbox-brand': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-brand)')),
-      'chatbox-gray': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-gray)')),
-      'chatbox-success': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-success)')),
-      'chatbox-error': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-error)')),
-      'chatbox-warning': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-warning)')),
+      'kod-brand': colorsTuple(Array.from({ length: 10 }, () => 'var(--kod-tint-brand)')),
+      'kod-gray': colorsTuple(Array.from({ length: 10 }, () => 'var(--kod-tint-gray)')),
+      'kod-success': colorsTuple(Array.from({ length: 10 }, () => 'var(--kod-tint-success)')),
+      'kod-error': colorsTuple(Array.from({ length: 10 }, () => 'var(--kod-tint-error)')),
+      'kod-warning': colorsTuple(Array.from({ length: 10 }, () => 'var(--kod-tint-warning)')),
 
-      'chatbox-primary': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-primary)')),
-      'chatbox-secondary': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-secondary)')),
-      'chatbox-tertiary': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-tertiary)')),
+      'kod-primary': colorsTuple(Array.from({ length: 10 }, () => 'var(--kod-tint-primary)')),
+      'kod-secondary': colorsTuple(Array.from({ length: 10 }, () => 'var(--kod-tint-secondary)')),
+      'kod-tertiary': colorsTuple(Array.from({ length: 10 }, () => 'var(--kod-tint-tertiary)')),
     },
     headings: {
       fontWeight: 'Bold',
@@ -459,17 +459,17 @@ const creteMantineTheme = (scale = 1) =>
       Text: Text.extend({
         defaultProps: {
           size: 'sm',
-          c: 'chatbox-primary',
+          c: 'kod-primary',
         },
       }),
       Title: Title.extend({
         defaultProps: {
-          c: 'chatbox-primary',
+          c: 'kod-primary',
         },
       }),
       Button: Button.extend({
         defaultProps: {
-          color: 'chatbox-brand',
+          color: 'kod-brand',
         },
         styles: () => ({
           root: {
@@ -485,8 +485,8 @@ const creteMantineTheme = (scale = 1) =>
             '--input-height-sm': rem('32px'),
             ...(props.error
               ? {
-                  '--input-color': 'var(--chatbox-tint-error)',
-                  '--input-bd': 'var(--chatbox-tint-error)',
+                  '--input-color': 'var(--kod-tint-error)',
+                  '--input-bd': 'var(--kod-tint-error)',
                 }
               : {}),
           },
@@ -498,7 +498,7 @@ const creteMantineTheme = (scale = 1) =>
         },
         styles: () => ({
           label: {
-            marginBottom: 'var(--chatbox-spacing-xxs)',
+            marginBottom: 'var(--kod-spacing-xxs)',
             fontWeight: '600',
             lineHeight: '1.5',
           },
@@ -510,7 +510,7 @@ const creteMantineTheme = (scale = 1) =>
         },
         styles: () => ({
           label: {
-            marginBottom: 'var(--chatbox-spacing-xxs)',
+            marginBottom: 'var(--kod-spacing-xxs)',
             fontWeight: '600',
             lineHeight: '1.5',
           },
@@ -523,7 +523,7 @@ const creteMantineTheme = (scale = 1) =>
         },
         styles: () => ({
           label: {
-            marginBottom: 'var(--chatbox-spacing-xxs)',
+            marginBottom: 'var(--kod-spacing-xxs)',
             fontWeight: '600',
             lineHeight: '1.5',
           },
@@ -535,7 +535,7 @@ const creteMantineTheme = (scale = 1) =>
         },
         styles: () => ({
           label: {
-            marginBottom: 'var(--chatbox-spacing-xxs)',
+            marginBottom: 'var(--kod-spacing-xxs)',
             fontWeight: '600',
             lineHeight: '1.5',
           },
@@ -548,7 +548,7 @@ const creteMantineTheme = (scale = 1) =>
         styles: (_theme, props) => {
           return {
             label: {
-              color: props.checked ? 'var(--chatbox-tint-primary)' : 'var(--chatbox-tint-tertiary)',
+              color: props.checked ? 'var(--kod-tint-primary)' : 'var(--kod-tint-tertiary)',
             },
           }
         },
@@ -559,7 +559,7 @@ const creteMantineTheme = (scale = 1) =>
         },
         styles: (_theme, props) => ({
           label: {
-            color: props.checked ? 'var(--chatbox-tint-primary)' : 'var(--chatbox-tint-tertiary)',
+            color: props.checked ? 'var(--kod-tint-primary)' : 'var(--kod-tint-tertiary)',
           },
         }),
       }),
@@ -570,19 +570,19 @@ const creteMantineTheme = (scale = 1) =>
         styles: () => ({
           title: {
             fontWeight: '600',
-            color: 'var(--chatbox-tint-primary)',
+            color: 'var(--kod-tint-primary)',
             fontSize: 'var(--mantine-font-size-sm)',
           },
           close: {
             width: rem('24px'),
             height: rem('24px'),
-            color: 'var(--chatbox-tint-secondary)',
+            color: 'var(--kod-tint-secondary)',
           },
           content: {
-            backgroundColor: 'var(--chatbox-background-primary)',
+            backgroundColor: 'var(--kod-background-primary)',
           },
           overlay: {
-            '--overlay-bg': 'var(--chatbox-background-mask-overlay)',
+            '--overlay-bg': 'var(--kod-background-mask-overlay)',
           },
         }),
       }),
@@ -593,19 +593,19 @@ const creteMantineTheme = (scale = 1) =>
         styles: () => ({
           title: {
             fontWeight: '600',
-            color: 'var(--chatbox-tint-primary)',
+            color: 'var(--kod-tint-primary)',
             fontSize: 'var(--mantine-font-size-sm)',
           },
           close: {
             width: rem('24px'),
             height: rem('24px'),
-            color: 'var(--chatbox-tint-secondary)',
+            color: 'var(--kod-tint-secondary)',
           },
           content: {
-            backgroundColor: 'var(--chatbox-background-primary)',
+            backgroundColor: 'var(--kod-background-primary)',
           },
           overlay: {
-            '--overlay-bg': 'var(--chatbox-background-mask-overlay)',
+            '--overlay-bg': 'var(--kod-background-mask-overlay)',
           },
         }),
       }),
@@ -654,7 +654,7 @@ export const Route = createRootRoute({
     const _theme = useTheme()
     const fontSize = useSettingsStore((state) => state.fontSize)
     useEffect(() => {
-      document.documentElement.style.setProperty('--chatbox-msg-font-size', `${fontSize}px`)
+      document.documentElement.style.setProperty('--kod-msg-font-size', `${fontSize}px`)
     }, [fontSize])
     const mantineTheme = useMemo(() => creteMantineTheme(), [])
 
@@ -677,14 +677,14 @@ export const Route = createRootRoute({
 })
 
 type ExtendedCustomColors =
-  | 'chatbox-brand'
-  | 'chatbox-gray'
-  | 'chatbox-success'
-  | 'chatbox-error'
-  | 'chatbox-warning'
-  | 'chatbox-primary'
-  | 'chatbox-secondary'
-  | 'chatbox-tertiary'
+  | 'kod-brand'
+  | 'kod-gray'
+  | 'kod-success'
+  | 'kod-error'
+  | 'kod-warning'
+  | 'kod-primary'
+  | 'kod-secondary'
+  | 'kod-tertiary'
   | DefaultMantineColor
 
 declare module '@mantine/core' {

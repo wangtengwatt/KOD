@@ -160,7 +160,7 @@ export const openaiProvider = defineProvider({
   },
   getDisplayName: (modelId, providerSettings, sessionType) => {
     if (sessionType === 'picture') {
-      return 'OpenAI API (DALL-E-3)'
+      return `OpenAI API (${providerSettings?.models?.find((m) => m.modelId === modelId)?.nickname || modelId})`
     }
     return `OpenAI API (${providerSettings?.models?.find((m) => m.modelId === modelId)?.nickname || modelId})`
   },

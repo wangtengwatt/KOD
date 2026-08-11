@@ -57,7 +57,7 @@ export default function Header(props: { session: Session }) {
         h={48}
         align="center"
         px="md"
-        className={clsx('flex-none title-bar', isSmallScreen ? 'bg-chatbox-background-primary' : '')}
+        className={clsx('flex-none title-bar', isSmallScreen ? 'bg-kod-background-primary' : '')}
       >
         {(!showSidebar || isSmallScreen) && (
           <Flex align="center" className={needRoomForMacWindowControls ? 'pl-20' : ''}>
@@ -67,7 +67,7 @@ export default function Header(props: { session: Session }) {
               data-testid="header-menu-button"
               variant="subtle"
               size={isSmallScreen ? 24 : 20}
-              color={isSmallScreen ? 'chatbox-secondary' : 'chatbox-tertiary'}
+              color={isSmallScreen ? 'kod-secondary' : 'kod-tertiary'}
               mr="xs"
               onClick={() => setShowSidebar(!showSidebar)}
             >
@@ -102,7 +102,7 @@ export default function Header(props: { session: Session }) {
             <ActionIcon
               className="controls"
               variant="subtle"
-              color="chatbox-tertiary"
+              color="kod-tertiary"
               size={isSmallScreen ? 20 : 16}
               ml={4}
               onClick={editCurrentSession}

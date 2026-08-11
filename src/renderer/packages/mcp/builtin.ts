@@ -1,4 +1,3 @@
-import { getLicenseKey } from '@/stores/settingActions'
 import type { MCPServerConfig } from './types'
 
 export interface BuildinMCPServerConfig {
@@ -13,12 +12,11 @@ export interface BuildinMCPServerConfig {
 // kod 不再依赖。数组保留为空，UI 不渲染任何内置 server；如需恢复或替换为开源/自建 server，在此补充。
 export const BUILTIN_MCP_SERVERS: BuildinMCPServerConfig[] = []
 
-export function getBuiltinServerConfig(id: string, licenseKey?: string): MCPServerConfig | null {
+export function getBuiltinServerConfig(id: string, _legacyLicenseKey?: string): MCPServerConfig | null {
   const config = BUILTIN_MCP_SERVERS.find((s) => s.id === id)
   if (!config) {
     return null
   }
-  const license = licenseKey || getLicenseKey()
   return {
     id,
     name: config.name,
@@ -26,7 +24,6 @@ export function getBuiltinServerConfig(id: string, licenseKey?: string): MCPServ
     transport: {
       type: 'http',
       url: config.url,
-      headers: license ? { 'x-chatbox-license': license } : undefined,
     },
   }
 }

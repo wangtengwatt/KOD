@@ -223,12 +223,6 @@ const PARSER_OPTIONS: { value: DocumentParserType; label: string; description: s
       'Uses built-in document parsing feature, supports common file types. Free usage, no compute points will be consumed.',
   },
   {
-    value: 'chatbox-ai',
-    label: 'Chatbox AI',
-    description:
-      'Cloud-based document parsing service, supports PDF, Office files, EPUB and many other file types. Consumes compute points.',
-  },
-  {
     value: 'mineru',
     label: 'MinerU',
     description: 'Third-party cloud parsing service, supports PDF and most Office files. Requires API token.',
@@ -247,6 +241,7 @@ export const DocumentParserSelector: React.FC<DocumentParserSelectorProps> = ({
   disabled = false,
 }) => {
   const { t } = useTranslation()
+  const normalizedType = parserConfig.type === 'chatbox-ai' ? 'local' : parserConfig.type
   const [mineruToken, setMineruToken] = useState(parserConfig.mineru?.apiToken || '')
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionResult, setConnectionResult] = useState<{ success: boolean; error?: string } | null>(null)
@@ -308,7 +303,7 @@ export const DocumentParserSelector: React.FC<DocumentParserSelectorProps> = ({
     }
   }, [mineruToken, t])
 
-  const selectedOption = PARSER_OPTIONS.find((opt) => opt.value === parserConfig.type)
+  const selectedOption = PARSER_OPTIONS.find((opt) => opt.value === normalizedType)
 
   return (
     <Stack gap="xs">
@@ -319,7 +314,7 @@ export const DocumentParserSelector: React.FC<DocumentParserSelectorProps> = ({
           value: opt.value,
           label: t(opt.label),
         }))}
-        value={parserConfig.type}
+        value={normalizedType}
         onChange={handleParserTypeChange}
         allowDeselect={false}
         disabled={disabled}
@@ -380,7 +375,7 @@ interface DocumentParserDisplayProps {
 
 export const DocumentParserDisplay: React.FC<DocumentParserDisplayProps> = ({ parserType }) => {
   const { t } = useTranslation()
-  const currentType = parserType || 'local'
+  const currentType = parserType === 'chatbox-ai' ? 'local' : parserType || 'local'
 
   return (
     <Select
