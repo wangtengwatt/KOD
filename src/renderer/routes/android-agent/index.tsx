@@ -1,6 +1,8 @@
 import { Alert, Badge, Button, Card, Center, Group, NumberInput, Select, Stack, Text, Textarea, Title } from '@mantine/core'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
+import { SuanbaoMascot } from '@/components/suanbao/SuanbaoMascot'
+import '@/components/suanbao/suanbao.css'
 import Page from '@/components/layout/Page'
 import { useAndroidAgentStore } from '@/packages/android-agent/controller'
 import { isMobileFilePickerAvailable, mobileFileNative } from '@/packages/android-agent/file-native'
@@ -60,6 +62,15 @@ function AndroidAgentPage() {
       <Center h="100%" p="md">
         <Card withBorder maw={560} w="100%" padding="lg">
           <Stack>
+            <Card withBorder padding="sm">
+              <Group align="center" wrap="nowrap">
+                <SuanbaoMascot state={store.task.state === 'running' ? 'executing' : 'idle'} animation="full" />
+                <Stack gap={2}>
+                  <Text fw={600}>蒜宝助手</Text>
+                  <Text size="xs" c="dimmed">Android 应用内桌宠预览；桌面浮窗和托盘能力不会在手机上启用。</Text>
+                </Stack>
+              </Group>
+            </Card>
             <Group justify="space-between">
               <Title order={3}>手机任务控制</Title>
               <Badge color={store.task.state === 'running' ? 'green' : 'gray'}>{store.task.state}</Badge>
