@@ -81,6 +81,7 @@ function AndroidAgentPage() {
   const [fileBusy, setFileBusy] = useState(false)
   const [overlayPermission, setOverlayPermission] = useState(false)
   const [overlayRunning, setOverlayRunning] = useState(false)
+  const [overlayLifecycle, setOverlayLifecycle] = useState('stopped')
   const [overlayBusy, setOverlayBusy] = useState(false)
   const [petPosition, setPetPosition] = useState({ x: 0, y: 0 })
   const petDrag = useRef<{ x: number; y: number; pointerX: number; pointerY: number }>()
@@ -89,6 +90,7 @@ function AndroidAgentPage() {
     const [, overlay] = await Promise.all([store.refresh(), androidAgentNative.getOverlayStatus()])
     setOverlayPermission(overlay.permissionGranted)
     setOverlayRunning(overlay.running)
+    setOverlayLifecycle(overlay.lifecycleState || (overlay.running ? 'visible' : 'stopped'))
   }
 
   useEffect(() => {
@@ -112,6 +114,18 @@ function AndroidAgentPage() {
       window.removeEventListener('focus', onResume)
     }
   }, [store.refresh])
+
+  useEffect(() => {
+    if (!isAndroidAgentAvailable()) return
+    let handle: { remove: () => Promise<void> } | undefined
+    void androidAgentNative.onOverlayStateChanged((status) => {
+      setOverlayPermission(status.permissionGranted)
+      setOverlayRunning(status.running)
+      setOverlayLifecycle(status.lifecycleState || (status.running ? 'visible' : 'stopped'))
+      if (status.lastError) setPetError(`系统悬浮层启动失败：${status.lastError}`)
+    }).then((listener) => { handle = listener })
+    return () => { void handle?.remove() }
+  }, [])
 
   useEffect(() => {
     const installed = store.apps.find((app) => app.installed)
@@ -175,6 +189,7 @@ function AndroidAgentPage() {
             taskState={store.task.state}
             overlayPermission={overlayPermission}
             overlayRunning={overlayRunning}
+            overlayLifecycle={overlayLifecycle}
             overlayBusy={overlayBusy}
             error={petError}
             petPosition={petPosition}
@@ -243,7 +258,7 @@ function PetPanel(props: any) {
     </Card>
     {props.error && <Alert color="red" title="桌宠操作失败">{props.error}</Alert>}
     <PermissionCard complete={props.overlayPermission} title="第 1 步 · 允许悬浮显示" description="用于把蒜宝显示在其他应用上方；你可以随时在系统设置中撤销。" action={!props.overlayPermission ? <Button mt="xs" loading={props.overlayBusy} onClick={props.onGrant}>前往系统设置</Button> : undefined} />
-    <PermissionCard complete={props.overlayRunning} title="第 2 步 · 开启系统桌宠" description={props.overlayRunning ? '蒜宝正在其他应用上方显示。' : '授权后由你主动开启，不会在后台偷偷启动。'} action={props.overlayPermission ? <Button mt="xs" color={props.overlayRunning ? 'red' : 'blue'} variant={props.overlayRunning ? 'light' : 'filled'} loading={props.overlayBusy} onClick={props.overlayRunning ? props.onStop : props.onStart}>{props.overlayRunning ? '关闭桌宠' : '开启桌宠'}</Button> : undefined} />
+    <PermissionCard complete={props.overlayRunning} title="第 2 步 · 开启系统桌宠" description={props.overlayLifecycle === 'starting' ? '系统正在启动悬浮桌宠…' : props.overlayRunning ? '蒜宝正在其他应用上方显示。' : '授权后由你主动开启，不会在后台偷偷启动。'} action={props.overlayPermission ? <Button mt="xs" color={props.overlayRunning ? 'red' : 'blue'} variant={props.overlayRunning ? 'light' : 'filled'} loading={props.overlayBusy || props.overlayLifecycle === 'starting'} onClick={props.overlayRunning ? props.onStop : props.onStart}>{props.overlayRunning ? '关闭桌宠' : '开启桌宠'}</Button> : undefined} />
   </Stack>
 }
 

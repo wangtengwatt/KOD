@@ -1,7 +1,10 @@
 package com.kod.app.agent;
 
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
@@ -34,6 +37,27 @@ public class AndroidAgentPlugin extends Plugin {
     private final SecureRandom secureRandom = new SecureRandom();
     private final Map<String, ApprovalGrant> approvals = new HashMap<>();
     private AgentTask activeTask;
+    private final BroadcastReceiver overlayReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            notifyListeners("overlayStateChanged", overlayStatus());
+        }
+    };
+
+    @Override
+    public void load() {
+        IntentFilter filter = new IntentFilter(getContext().getPackageName() + ".SUANBAO_OVERLAY_STATE_CHANGED");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getContext().registerReceiver(overlayReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            getContext().registerReceiver(overlayReceiver, filter);
+        }
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        try { getContext().unregisterReceiver(overlayReceiver); } catch (IllegalArgumentException ignored) {}
+        super.handleOnDestroy();
+    }
 
     @PluginMethod
     public void listAllowedApps(PluginCall call) {
@@ -181,6 +205,9 @@ public class AndroidAgentPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("permissionGranted", SuanbaoOverlayService.canDraw(getContext()));
         result.put("running", SuanbaoOverlayService.isRunning(getContext()));
+        result.put("lifecycleState", SuanbaoOverlayService.lifecycleState());
+        result.put("interactionState", SuanbaoOverlayService.interactionState());
+        result.put("lastError", SuanbaoOverlayService.lastError());
         return result;
     }
 

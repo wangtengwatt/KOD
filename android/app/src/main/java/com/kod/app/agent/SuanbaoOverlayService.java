@@ -40,6 +40,11 @@ public class SuanbaoOverlayService extends Service {
     private static final String ACTION_STOP = "com.kod.app.agent.STOP_SUANBAO_OVERLAY";
     private static final int POSITION_SCHEMA = 2;
 
+    private static volatile boolean visible;
+    private static volatile String lifecycleState = "stopped";
+    private static volatile String interactionState = "idle";
+    private static volatile String lastError;
+
     private WindowManager windowManager;
     private View overlayView;
     private View menuView;
@@ -65,6 +70,9 @@ public class SuanbaoOverlayService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        lifecycleState = "starting";
+        interactionState = "idle";
+        lastError = null;
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification());
         if (canDraw(this)) showOverlay();
@@ -101,10 +109,18 @@ public class SuanbaoOverlayService extends Service {
 
         try {
             windowManager.addView(overlayView, layoutParams);
+            visible = true;
+            lifecycleState = "visible";
+            lastError = null;
             setRunning(true);
+            sendStateChanged();
         } catch (RuntimeException error) {
             overlayView = null;
+            visible = false;
+            lifecycleState = "error";
+            lastError = error.getClass().getSimpleName();
             setRunning(false);
+            sendStateChanged();
             stopSelf();
         }
     }
@@ -151,6 +167,8 @@ public class SuanbaoOverlayService extends Service {
                     dragging = false;
                     pointerDown = true;
                     longPressed = false;
+                    interactionState = "pressed";
+                    sendStateChanged();
                     mascotView.animate().scaleX(1.04f).scaleY(1.04f).alpha(0.9f).setDuration(100).start();
                     view.postDelayed(longPress, ViewConfiguration.getLongPressTimeout());
                     return true;
@@ -161,6 +179,8 @@ public class SuanbaoOverlayService extends Service {
                     int dy = Math.round(event.getRawY() - touchY);
                     if (!dragging && (Math.abs(dx) > touchSlop || Math.abs(dy) > touchSlop)) {
                         dragging = true;
+                        interactionState = "dragging";
+                        sendStateChanged();
                         view.removeCallbacks(longPress);
                         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
                     }
@@ -201,6 +221,8 @@ public class SuanbaoOverlayService extends Service {
     }
 
     private void snapToNearestEdge() {
+        interactionState = "snapping";
+        sendStateChanged();
         SuanbaoOverlayGeometry.Bounds bounds = safeBounds(layoutParams.width, layoutParams.height);
         int targetX = SuanbaoOverlayGeometry.nearestEdgeX(layoutParams.x, bounds);
         int start = layoutParams.x;
@@ -210,7 +232,15 @@ public class SuanbaoOverlayService extends Service {
         snapAnimator.setInterpolator(new DecelerateInterpolator());
         snapAnimator.addUpdateListener(animation -> moveTo((int) animation.getAnimatedValue(), layoutParams.y));
         snapAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(android.animation.Animator animation) { persistPosition(); }
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                persistPosition();
+                interactionState = "idle";
+                sendStateChanged();
+            }
+            @Override public void onAnimationCancel(android.animation.Animator animation) {
+                interactionState = "idle";
+                sendStateChanged();
+            }
         });
         snapAnimator.start();
     }
@@ -271,6 +301,8 @@ public class SuanbaoOverlayService extends Service {
 
     private void showMenu(boolean full) {
         hideMenu();
+        interactionState = "menuOpen";
+        sendStateChanged();
         LinearLayout menu = new LinearLayout(this);
         menu.setOrientation(LinearLayout.VERTICAL);
         menu.setPadding(dp(8), dp(8), dp(8), dp(8));
@@ -316,6 +348,8 @@ public class SuanbaoOverlayService extends Service {
         if (menuView != null && windowManager != null) {
             try { windowManager.removeView(menuView); } catch (RuntimeException ignored) {}
             menuView = null;
+            interactionState = "idle";
+            sendStateChanged();
         }
     }
 
@@ -371,7 +405,17 @@ public class SuanbaoOverlayService extends Service {
     }
 
     public static boolean isRunning(android.content.Context context) {
-        return context.getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("running", false);
+        return visible;
+    }
+
+    public static String lifecycleState() { return lifecycleState; }
+    public static String interactionState() { return interactionState; }
+    public static String lastError() { return lastError; }
+
+    private void sendStateChanged() {
+        Intent intent = new Intent(getPackageName() + ".SUANBAO_OVERLAY_STATE_CHANGED");
+        intent.setPackage(getPackageName());
+        sendBroadcast(intent);
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -384,7 +428,11 @@ public class SuanbaoOverlayService extends Service {
             try { windowManager.removeView(overlayView); } catch (RuntimeException ignored) {}
             overlayView = null;
         }
+        visible = false;
+        lifecycleState = "stopped";
+        interactionState = "idle";
         setRunning(false);
+        sendStateChanged();
         super.onDestroy();
     }
 

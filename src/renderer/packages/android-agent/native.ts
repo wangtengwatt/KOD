@@ -1,4 +1,4 @@
-import { registerPlugin } from '@capacitor/core'
+import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { CHATBOX_BUILD_PLATFORM, CHATBOX_BUILD_TARGET } from '@/variables'
 import type {
   AndroidAgentActionResult,
@@ -7,6 +7,14 @@ import type {
   AndroidAgentSelector,
   AndroidAgentTask,
 } from './types'
+
+interface AndroidOverlayStatus {
+  permissionGranted: boolean
+  running: boolean
+  lifecycleState?: 'stopped' | 'starting' | 'visible' | 'error'
+  interactionState?: 'idle' | 'pressed' | 'dragging' | 'snapping' | 'menuOpen'
+  lastError?: string
+}
 
 interface AndroidAgentNative {
   listAllowedApps(): Promise<{ apps: AndroidAgentApp[]; protocolVersion?: string }>
@@ -24,10 +32,11 @@ interface AndroidAgentNative {
   }): Promise<{ approvalToken: string; expiresAt: number }>
   getAccessibilityStatus(): Promise<{ enabled: boolean }>
   openAccessibilitySettings(): Promise<void>
-  getOverlayStatus(): Promise<{ permissionGranted: boolean; running: boolean }>
+  getOverlayStatus(): Promise<AndroidOverlayStatus>
   openOverlaySettings(): Promise<void>
-  startOverlayPet(): Promise<{ permissionGranted: boolean; running: boolean }>
-  stopOverlayPet(): Promise<{ permissionGranted: boolean; running: boolean }>
+  startOverlayPet(): Promise<AndroidOverlayStatus>
+  stopOverlayPet(): Promise<AndroidOverlayStatus>
+  addListener(eventName: 'overlayStateChanged', listener: (status: AndroidOverlayStatus) => void): Promise<PluginListenerHandle>
   getForegroundApp(): Promise<{ packageName?: string; allowed: boolean }>
   readUiTree(options: { taskId: string; generation: number; limit?: number }): Promise<AndroidAgentActionResult>
   clickElement(options: { taskId: string; generation: number; approvalToken: string; actionId: string; snapshotId: string } & AndroidAgentSelector): Promise<AndroidAgentActionResult>
@@ -55,6 +64,7 @@ export const androidAgentNative = {
   openOverlaySettings: () => requireAndroid().openOverlaySettings(),
   startOverlayPet: () => requireAndroid().startOverlayPet(),
   stopOverlayPet: () => requireAndroid().stopOverlayPet(),
+  onOverlayStateChanged: (listener: (status: AndroidOverlayStatus) => void) => requireAndroid().addListener('overlayStateChanged', listener),
   getForegroundApp: () => requireAndroid().getForegroundApp(),
   readUiTree: (taskId: string, generation: number, limit = 80) => requireAndroid().readUiTree({ taskId, generation, limit }),
   clickElement: (taskId: string, generation: number, approvalToken: string, actionId: string, snapshotId: string, selector: AndroidAgentSelector) =>
