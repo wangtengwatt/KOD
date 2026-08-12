@@ -52,6 +52,8 @@ public class SuanbaoOverlayService extends Service {
     private WindowManager.LayoutParams layoutParams;
     private WindowManager.LayoutParams menuLayoutParams;
     private ValueAnimator snapAnimator;
+    private SuanbaoOverlayPreferences preferences;
+    private SuanbaoOverlayPreferences.Snapshot appearance;
 
     public static boolean canDraw(android.content.Context context) {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context);
@@ -73,6 +75,8 @@ public class SuanbaoOverlayService extends Service {
         lifecycleState = "starting";
         interactionState = "idle";
         lastError = null;
+        preferences = new SuanbaoOverlayPreferences(this);
+        appearance = preferences.get();
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification());
         if (canDraw(this)) showOverlay();
@@ -85,6 +89,10 @@ public class SuanbaoOverlayService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+        if (intent != null && "com.kod.app.agent.REFRESH_SUANBAO_OVERLAY".equals(intent.getAction())) {
+            refreshAppearance();
+            return START_STICKY;
+        }
         if (overlayView == null && canDraw(this)) showOverlay();
         return START_STICKY;
     }
@@ -96,12 +104,15 @@ public class SuanbaoOverlayService extends Service {
         root.setPadding(dp(3), dp(3), dp(3), dp(3));
         root.setContentDescription("蒜宝桌宠，点击打开菜单，拖动调整位置");
 
+        int visibleWidth = dp(SuanbaoOverlayPreferences.visibleWidthDp(appearance.size()));
+        int visibleHeight = dp(SuanbaoOverlayPreferences.visibleHeightDp(appearance.size()));
         mascotView = new ImageView(this);
         mascotView.setImageResource(R.drawable.suanbao_mascot);
         mascotView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        root.addView(mascotView, new FrameLayout.LayoutParams(dp(82), dp(96)));
+        mascotView.setAlpha(appearance.opacity());
+        root.addView(mascotView, new FrameLayout.LayoutParams(visibleWidth, visibleHeight));
 
-        layoutParams = createLayoutParams(dp(88), dp(102), false);
+        layoutParams = createLayoutParams(visibleWidth + dp(6), visibleHeight + dp(6), false);
         layoutParams.gravity = Gravity.TOP | Gravity.START;
         overlayView = root;
         restorePosition();
@@ -169,7 +180,9 @@ public class SuanbaoOverlayService extends Service {
                     longPressed = false;
                     interactionState = "pressed";
                     sendStateChanged();
-                    mascotView.animate().scaleX(1.04f).scaleY(1.04f).alpha(0.9f).setDuration(100).start();
+                    if (!SuanbaoOverlayPreferences.MOTION_OFF.equals(appearance.motion())) {
+                        mascotView.animate().scaleX(1.06f).scaleY(1.06f).alpha(Math.max(0.5f, appearance.opacity() - 0.15f)).setDuration(100).start();
+                    }
                     view.postDelayed(longPress, ViewConfiguration.getLongPressTimeout());
                     return true;
                 case MotionEvent.ACTION_MOVE:
@@ -190,7 +203,10 @@ public class SuanbaoOverlayService extends Service {
                     view.removeCallbacks(longPress);
                     pointerDown = false;
                     restoreMascotFeedback();
-                    if (dragging) snapToNearestEdge();
+                    if (dragging) {
+                        if (appearance.edgeSnap()) snapToNearestEdge();
+                        else { persistPosition(); interactionState = "idle"; sendStateChanged(); }
+                    }
                     else if (!longPressed) showMenu(false);
                     activePointerId = MotionEvent.INVALID_POINTER_ID;
                     return true;
@@ -198,7 +214,10 @@ public class SuanbaoOverlayService extends Service {
                     view.removeCallbacks(longPress);
                     pointerDown = false;
                     restoreMascotFeedback();
-                    if (dragging) snapToNearestEdge();
+                    if (dragging) {
+                        if (appearance.edgeSnap()) snapToNearestEdge();
+                        else { persistPosition(); interactionState = "idle"; sendStateChanged(); }
+                    }
                     activePointerId = MotionEvent.INVALID_POINTER_ID;
                     return true;
                 default:
@@ -207,8 +226,29 @@ public class SuanbaoOverlayService extends Service {
         }
     }
 
+    private void refreshAppearance() {
+        if (preferences == null) preferences = new SuanbaoOverlayPreferences(this);
+        appearance = preferences.get();
+        if (overlayView == null || mascotView == null) { sendStateChanged(); return; }
+        int width = dp(SuanbaoOverlayPreferences.visibleWidthDp(appearance.size()));
+        int height = dp(SuanbaoOverlayPreferences.visibleHeightDp(appearance.size()));
+        FrameLayout.LayoutParams mascotParams = new FrameLayout.LayoutParams(width, height);
+        mascotView.setLayoutParams(mascotParams);
+        mascotView.setAlpha(appearance.opacity());
+        layoutParams.width = width + dp(6);
+        layoutParams.height = height + dp(6);
+        moveTo(layoutParams.x, layoutParams.y);
+        sendStateChanged();
+    }
+
     private void restoreMascotFeedback() {
-        mascotView.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(120).start();
+        if (SuanbaoOverlayPreferences.MOTION_OFF.equals(appearance.motion())) {
+            mascotView.setScaleX(1f);
+            mascotView.setScaleY(1f);
+            mascotView.setAlpha(appearance.opacity());
+            return;
+        }
+        mascotView.animate().scaleX(1f).scaleY(1f).alpha(appearance.opacity()).setDuration(120).start();
     }
 
     private void moveTo(int x, int y) {
@@ -227,8 +267,15 @@ public class SuanbaoOverlayService extends Service {
         int targetX = SuanbaoOverlayGeometry.nearestEdgeX(layoutParams.x, bounds);
         int start = layoutParams.x;
         cancelSnap();
+        if (SuanbaoOverlayPreferences.MOTION_OFF.equals(appearance.motion())) {
+            moveTo(targetX, layoutParams.y);
+            persistPosition();
+            interactionState = "idle";
+            sendStateChanged();
+            return;
+        }
         snapAnimator = ValueAnimator.ofInt(start, targetX);
-        snapAnimator.setDuration(190);
+        snapAnimator.setDuration(SuanbaoOverlayPreferences.MOTION_REDUCED.equals(appearance.motion()) ? 120 : 190);
         snapAnimator.setInterpolator(new DecelerateInterpolator());
         snapAnimator.addUpdateListener(animation -> moveTo((int) animation.getAnimatedValue(), layoutParams.y));
         snapAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
@@ -386,7 +433,8 @@ public class SuanbaoOverlayService extends Service {
             .setContentTitle("蒜宝桌宠正在运行")
             .setContentText("点击返回 KOD；长按蒜宝可打开完整菜单")
             .setContentIntent(openPending)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "关闭", stopPending)
+            .addAction(android.R.drawable.ic_menu_view, "打开 KOD", openPending)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "关闭桌宠", stopPending)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW);
     }
@@ -411,6 +459,18 @@ public class SuanbaoOverlayService extends Service {
     public static String lifecycleState() { return lifecycleState; }
     public static String interactionState() { return interactionState; }
     public static String lastError() { return lastError; }
+
+    public static SuanbaoOverlayPreferences.Snapshot appearance(android.content.Context context) {
+        return new SuanbaoOverlayPreferences(context).get();
+    }
+
+    public static SuanbaoOverlayPreferences.Snapshot updateAppearance(android.content.Context context, String size, Float opacity, String motion, Boolean edgeSnap) {
+        SuanbaoOverlayPreferences.Snapshot snapshot = new SuanbaoOverlayPreferences(context).update(size, opacity, motion, edgeSnap);
+        Intent intent = new Intent(context, SuanbaoOverlayService.class).setAction("com.kod.app.agent.REFRESH_SUANBAO_OVERLAY");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && visible) context.startForegroundService(intent);
+        else if (visible) context.startService(intent);
+        return snapshot;
+    }
 
     private void sendStateChanged() {
         Intent intent = new Intent(getPackageName() + ".SUANBAO_OVERLAY_STATE_CHANGED");

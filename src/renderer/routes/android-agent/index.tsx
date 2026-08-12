@@ -8,8 +8,11 @@ import {
   Group,
   Loader,
   NumberInput,
+  SegmentedControl,
   Select,
+  Slider,
   Stack,
+  Switch,
   Tabs,
   Text,
   Textarea,
@@ -82,6 +85,10 @@ function AndroidAgentPage() {
   const [overlayPermission, setOverlayPermission] = useState(false)
   const [overlayRunning, setOverlayRunning] = useState(false)
   const [overlayLifecycle, setOverlayLifecycle] = useState('stopped')
+  const [petSize, setPetSize] = useState<'small' | 'medium' | 'large'>('medium')
+  const [petOpacity, setPetOpacity] = useState(1)
+  const [petMotion, setPetMotion] = useState<'full' | 'reduced' | 'off'>('full')
+  const [edgeSnap, setEdgeSnap] = useState(true)
   const [overlayBusy, setOverlayBusy] = useState(false)
   const [petPosition, setPetPosition] = useState({ x: 0, y: 0 })
   const petDrag = useRef<{ x: number; y: number; pointerX: number; pointerY: number }>()
@@ -91,6 +98,10 @@ function AndroidAgentPage() {
     setOverlayPermission(overlay.permissionGranted)
     setOverlayRunning(overlay.running)
     setOverlayLifecycle(overlay.lifecycleState || (overlay.running ? 'visible' : 'stopped'))
+    setPetSize(overlay.size || 'medium')
+    setPetOpacity(overlay.opacity ?? 1)
+    setPetMotion(overlay.motion || 'full')
+    setEdgeSnap(overlay.edgeSnap ?? true)
   }
 
   useEffect(() => {
@@ -122,6 +133,10 @@ function AndroidAgentPage() {
       setOverlayPermission(status.permissionGranted)
       setOverlayRunning(status.running)
       setOverlayLifecycle(status.lifecycleState || (status.running ? 'visible' : 'stopped'))
+      if (status.size) setPetSize(status.size)
+      if (status.opacity !== undefined) setPetOpacity(status.opacity)
+      if (status.motion) setPetMotion(status.motion)
+      if (status.edgeSnap !== undefined) setEdgeSnap(status.edgeSnap)
       if (status.lastError) setPetError(`系统悬浮层启动失败：${status.lastError}`)
     }).then((listener) => { handle = listener })
     return () => { void handle?.remove() }
@@ -198,6 +213,17 @@ function AndroidAgentPage() {
             onGrant={() => { setOverlayBusy(true); setPetError(''); void androidAgentNative.openOverlaySettings().catch((error) => setPetError(friendlyError(error))).finally(() => setOverlayBusy(false)) }}
             onStart={() => void runOverlayAction(androidAgentNative.startOverlayPet)}
             onStop={() => void runOverlayAction(androidAgentNative.stopOverlayPet)}
+            petSize={petSize}
+            petOpacity={petOpacity}
+            petMotion={petMotion}
+            edgeSnap={edgeSnap}
+            onAppearanceChange={(options: any) => {
+              if (options.size) setPetSize(options.size)
+              if (options.opacity !== undefined) setPetOpacity(options.opacity)
+              if (options.motion) setPetMotion(options.motion)
+              if (options.edgeSnap !== undefined) setEdgeSnap(options.edgeSnap)
+              void runOverlayAction(() => androidAgentNative.updateOverlayPreferences(options))
+            }}
           /></Tabs.Panel>
 
           <Tabs.Panel value="assistant"><AssistantPanel
@@ -259,6 +285,7 @@ function PetPanel(props: any) {
     {props.error && <Alert color="red" title="桌宠操作失败">{props.error}</Alert>}
     <PermissionCard complete={props.overlayPermission} title="第 1 步 · 允许悬浮显示" description="用于把蒜宝显示在其他应用上方；你可以随时在系统设置中撤销。" action={!props.overlayPermission ? <Button mt="xs" loading={props.overlayBusy} onClick={props.onGrant}>前往系统设置</Button> : undefined} />
     <PermissionCard complete={props.overlayRunning} title="第 2 步 · 开启系统桌宠" description={props.overlayLifecycle === 'starting' ? '系统正在启动悬浮桌宠…' : props.overlayRunning ? '蒜宝正在其他应用上方显示。' : '授权后由你主动开启，不会在后台偷偷启动。'} action={props.overlayPermission ? <Button mt="xs" color={props.overlayRunning ? 'red' : 'blue'} variant={props.overlayRunning ? 'light' : 'filled'} loading={props.overlayBusy || props.overlayLifecycle === 'starting'} onClick={props.overlayRunning ? props.onStop : props.onStart}>{props.overlayRunning ? '关闭桌宠' : '开启桌宠'}</Button> : undefined} />
+    <Card withBorder radius="lg" padding="md"><Stack gap="md"><Box><Text fw={600}>快捷外观</Text><Text size="sm" c="dimmed">设置会立即同步到系统悬浮桌宠。</Text></Box><Box><Text size="sm" mb={6}>桌宠大小</Text><SegmentedControl fullWidth value={props.petSize} onChange={(size) => props.onAppearanceChange({ size })} data={[{ label: '小', value: 'small' }, { label: '中', value: 'medium' }, { label: '大', value: 'large' }]} /></Box><Box><Group justify="space-between"><Text size="sm">透明度</Text><Text size="sm" c="dimmed">{Math.round(props.petOpacity * 100)}%</Text></Group><Slider min={50} max={100} step={5} value={Math.round(props.petOpacity * 100)} onChangeEnd={(value) => props.onAppearanceChange({ opacity: value / 100 })} /></Box><Box><Text size="sm" mb={6}>动画</Text><SegmentedControl fullWidth value={props.petMotion} onChange={(motion) => props.onAppearanceChange({ motion })} data={[{ label: '完整', value: 'full' }, { label: '减少', value: 'reduced' }, { label: '关闭', value: 'off' }]} /></Box><Switch label="松手后自动吸附屏幕边缘" checked={props.edgeSnap} onChange={(event) => props.onAppearanceChange({ edgeSnap: event.currentTarget.checked })} /></Stack></Card>
   </Stack>
 }
 

@@ -201,6 +201,14 @@ public class AndroidAgentPlugin extends Plugin {
         call.resolve(result);
     }
 
+    @PluginMethod
+    public void updateOverlayPreferences(PluginCall call) {
+        Float opacity = call.hasOption("opacity") ? call.getFloat("opacity") : null;
+        Boolean edgeSnap = call.hasOption("edgeSnap") ? call.getBoolean("edgeSnap") : null;
+        SuanbaoOverlayService.updateAppearance(getContext(), call.getString("size"), opacity, call.getString("motion"), edgeSnap);
+        call.resolve(overlayStatus());
+    }
+
     private JSObject overlayStatus() {
         JSObject result = new JSObject();
         result.put("permissionGranted", SuanbaoOverlayService.canDraw(getContext()));
@@ -208,6 +216,11 @@ public class AndroidAgentPlugin extends Plugin {
         result.put("lifecycleState", SuanbaoOverlayService.lifecycleState());
         result.put("interactionState", SuanbaoOverlayService.interactionState());
         result.put("lastError", SuanbaoOverlayService.lastError());
+        SuanbaoOverlayPreferences.Snapshot appearance = SuanbaoOverlayService.appearance(getContext());
+        result.put("size", appearance.size());
+        result.put("opacity", appearance.opacity());
+        result.put("motion", appearance.motion());
+        result.put("edgeSnap", appearance.edgeSnap());
         return result;
     }
 
