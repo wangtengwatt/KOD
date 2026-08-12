@@ -261,28 +261,14 @@ export default function Sidebar() {
           </Stack>
 
           {isSmallScreen ? (
-            <Flex gap="md" align="center">
-              <NavLink
-                c="kod-secondary"
-                className="rounded"
-                label={t('My Copilots')}
-                leftSection={<ScalableIcon icon={IconMessageChatbot} size={20} />}
-                onClick={() => {
-                  navigate({
-                    to: '/copilots',
-                  })
-                  setShowSidebar(false)
-                }}
-                variant="light"
-                p="xs"
-              />
-
+            <Stack gap="xs">
               {isAndroidAgentAvailable() && (
                 <NavLink
                   c="kod-secondary"
                   className="rounded"
                   label="蒜宝助手"
-                  leftSection={<ScalableIcon icon={IconDeviceMobile} size={20} />}
+                  description="桌宠与手机任务控制"
+                  leftSection={<ScalableIcon icon={IconDeviceMobile} size={22} />}
                   onClick={() => {
                     navigate({ to: '/android-agent' })
                     setShowSidebar(false)
@@ -291,21 +277,35 @@ export default function Sidebar() {
                   p="xs"
                 />
               )}
-
-              <ActionIcon
-                variant="transparent"
-                color="kod-secondary"
-                size={24}
-                onClick={() => {
-                  navigateToSettings()
-                  setShowSidebar(false)
-                }}
-              >
-                <ScalableIcon icon={IconSettingsFilled} size={20} />
-              </ActionIcon>
-
-              <SmallScreenAboutIcon versionHook={versionHook} navigate={navigate} setShowSidebar={setShowSidebar} />
-            </Flex>
+              <Flex gap="md" align="center" justify="space-between">
+                <NavLink
+                  c="kod-secondary"
+                  className="rounded"
+                  label={t('My Copilots')}
+                  leftSection={<ScalableIcon icon={IconMessageChatbot} size={20} />}
+                  onClick={() => {
+                    navigate({ to: '/copilots' })
+                    setShowSidebar(false)
+                  }}
+                  variant="light"
+                  p="xs"
+                />
+                <Flex gap="sm" align="center">
+                  <ActionIcon
+                    variant="transparent"
+                    color="kod-secondary"
+                    size={44}
+                    onClick={() => {
+                      navigateToSettings()
+                      setShowSidebar(false)
+                    }}
+                  >
+                    <ScalableIcon icon={IconSettingsFilled} size={20} />
+                  </ActionIcon>
+                  <SmallScreenAboutIcon versionHook={versionHook} navigate={navigate} setShowSidebar={setShowSidebar} />
+                </Flex>
+              </Flex>
+            </Stack>
           ) : (
             <>
               <NavLink
@@ -485,7 +485,7 @@ function SmallScreenAboutIcon({
       <ActionIcon
         variant="transparent"
         color="kod-secondary"
-        size={24}
+        size={44}
         onClick={() => {
           navigate({ to: '/about' })
           setShowSidebar(false)
