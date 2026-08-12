@@ -11,7 +11,7 @@ final class SuanbaoOverlayPreferences {
     static final String MOTION_REDUCED = "reduced";
     static final String MOTION_OFF = "off";
 
-    record Snapshot(String size, float opacity, String motion, boolean edgeSnap) {}
+    record Snapshot(String size, float opacity, String motion, boolean edgeSnap, boolean positionLocked) {}
 
     private final SharedPreferences prefs;
 
@@ -24,23 +24,26 @@ final class SuanbaoOverlayPreferences {
             validSize(prefs.getString("size", MEDIUM)),
             clampOpacity(prefs.getFloat("opacity", 1f)),
             validMotion(prefs.getString("motion", MOTION_FULL)),
-            prefs.getBoolean("edge_snap", true)
+            prefs.getBoolean("edge_snap", true),
+            prefs.getBoolean("position_locked", false)
         );
     }
 
-    Snapshot update(String size, Float opacity, String motion, Boolean edgeSnap) {
+    Snapshot update(String size, Float opacity, String motion, Boolean edgeSnap, Boolean positionLocked) {
         Snapshot current = get();
         Snapshot next = new Snapshot(
             size == null ? current.size() : validSize(size),
             opacity == null ? current.opacity() : clampOpacity(opacity),
             motion == null ? current.motion() : validMotion(motion),
-            edgeSnap == null ? current.edgeSnap() : edgeSnap
+            edgeSnap == null ? current.edgeSnap() : edgeSnap,
+            positionLocked == null ? current.positionLocked() : positionLocked
         );
         prefs.edit()
             .putString("size", next.size())
             .putFloat("opacity", next.opacity())
             .putString("motion", next.motion())
             .putBoolean("edge_snap", next.edgeSnap())
+            .putBoolean("position_locked", next.positionLocked())
             .apply();
         return next;
     }

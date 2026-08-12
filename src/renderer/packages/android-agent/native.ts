@@ -18,6 +18,7 @@ interface AndroidOverlayStatus {
   opacity?: number
   motion?: 'full' | 'reduced' | 'off'
   edgeSnap?: boolean
+  positionLocked?: boolean
 }
 
 interface AndroidAgentNative {
@@ -40,7 +41,7 @@ interface AndroidAgentNative {
   openOverlaySettings(): Promise<void>
   startOverlayPet(): Promise<AndroidOverlayStatus>
   stopOverlayPet(): Promise<AndroidOverlayStatus>
-  updateOverlayPreferences(options: { size?: 'small' | 'medium' | 'large'; opacity?: number; motion?: 'full' | 'reduced' | 'off'; edgeSnap?: boolean }): Promise<AndroidOverlayStatus>
+  updateOverlayPreferences(options: { size?: 'small' | 'medium' | 'large'; opacity?: number; motion?: 'full' | 'reduced' | 'off'; edgeSnap?: boolean; positionLocked?: boolean }): Promise<AndroidOverlayStatus>
   addListener(eventName: 'overlayStateChanged', listener: (status: AndroidOverlayStatus) => void): Promise<PluginListenerHandle>
   getForegroundApp(): Promise<{ packageName?: string; allowed: boolean }>
   readUiTree(options: { taskId: string; generation: number; limit?: number }): Promise<AndroidAgentActionResult>
@@ -69,7 +70,7 @@ export const androidAgentNative = {
   openOverlaySettings: () => requireAndroid().openOverlaySettings(),
   startOverlayPet: () => requireAndroid().startOverlayPet(),
   stopOverlayPet: () => requireAndroid().stopOverlayPet(),
-  updateOverlayPreferences: (options: { size?: 'small' | 'medium' | 'large'; opacity?: number; motion?: 'full' | 'reduced' | 'off'; edgeSnap?: boolean }) => requireAndroid().updateOverlayPreferences(options),
+  updateOverlayPreferences: (options: { size?: 'small' | 'medium' | 'large'; opacity?: number; motion?: 'full' | 'reduced' | 'off'; edgeSnap?: boolean; positionLocked?: boolean }) => requireAndroid().updateOverlayPreferences(options),
   onOverlayStateChanged: (listener: (status: AndroidOverlayStatus) => void) => requireAndroid().addListener('overlayStateChanged', listener),
   getForegroundApp: () => requireAndroid().getForegroundApp(),
   readUiTree: (taskId: string, generation: number, limit = 80) => requireAndroid().readUiTree({ taskId, generation, limit }),

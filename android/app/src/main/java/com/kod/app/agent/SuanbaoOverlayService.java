@@ -141,7 +141,7 @@ public class SuanbaoOverlayService extends Service {
             ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             : WindowManager.LayoutParams.TYPE_PHONE;
         int flags = focusable
-            ? WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+            ? WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
             : WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         return new WindowManager.LayoutParams(width, height, type, flags, PixelFormat.TRANSLUCENT);
     }
@@ -168,6 +168,10 @@ public class SuanbaoOverlayService extends Service {
         public boolean onTouch(View view, MotionEvent event) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    if (appearance.positionLocked()) {
+                        showMenu(false);
+                        return true;
+                    }
                     cancelSnap();
                     hideMenu();
                     activePointerId = event.getPointerId(0);
@@ -358,6 +362,13 @@ public class SuanbaoOverlayService extends Service {
         background.setCornerRadius(dp(14));
         background.setStroke(dp(1), 0x22000000);
         menu.setBackground(background);
+        menu.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_OUTSIDE) {
+                hideMenu();
+                return true;
+            }
+            return false;
+        });
 
         menu.addView(menuButton("打开 KOD", view -> { hideMenu(); openApp(); }));
         if (full) menu.addView(menuButton("恢复默认位置", view -> { hideMenu(); resetPosition(); }));
@@ -464,8 +475,8 @@ public class SuanbaoOverlayService extends Service {
         return new SuanbaoOverlayPreferences(context).get();
     }
 
-    public static SuanbaoOverlayPreferences.Snapshot updateAppearance(android.content.Context context, String size, Float opacity, String motion, Boolean edgeSnap) {
-        SuanbaoOverlayPreferences.Snapshot snapshot = new SuanbaoOverlayPreferences(context).update(size, opacity, motion, edgeSnap);
+    public static SuanbaoOverlayPreferences.Snapshot updateAppearance(android.content.Context context, String size, Float opacity, String motion, Boolean edgeSnap, Boolean positionLocked) {
+        SuanbaoOverlayPreferences.Snapshot snapshot = new SuanbaoOverlayPreferences(context).update(size, opacity, motion, edgeSnap, positionLocked);
         Intent intent = new Intent(context, SuanbaoOverlayService.class).setAction("com.kod.app.agent.REFRESH_SUANBAO_OVERLAY");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && visible) context.startForegroundService(intent);
         else if (visible) context.startService(intent);

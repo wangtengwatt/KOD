@@ -205,7 +205,8 @@ public class AndroidAgentPlugin extends Plugin {
     public void updateOverlayPreferences(PluginCall call) {
         Float opacity = call.hasOption("opacity") ? call.getFloat("opacity") : null;
         Boolean edgeSnap = call.hasOption("edgeSnap") ? call.getBoolean("edgeSnap") : null;
-        SuanbaoOverlayService.updateAppearance(getContext(), call.getString("size"), opacity, call.getString("motion"), edgeSnap);
+        Boolean positionLocked = call.hasOption("positionLocked") ? call.getBoolean("positionLocked") : null;
+        SuanbaoOverlayService.updateAppearance(getContext(), call.getString("size"), opacity, call.getString("motion"), edgeSnap, positionLocked);
         call.resolve(overlayStatus());
     }
 
@@ -221,6 +222,7 @@ public class AndroidAgentPlugin extends Plugin {
         result.put("opacity", appearance.opacity());
         result.put("motion", appearance.motion());
         result.put("edgeSnap", appearance.edgeSnap());
+        result.put("positionLocked", appearance.positionLocked());
         return result;
     }
 
