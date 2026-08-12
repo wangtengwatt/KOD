@@ -3,6 +3,8 @@ package com.kod.app.agent;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
 import android.provider.Settings;
 import android.text.TextUtils;
 
@@ -140,6 +142,46 @@ public class AndroidAgentPlugin extends Plugin {
     public void openAccessibilitySettings(PluginCall call) {
         Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); getContext().startActivity(intent); call.resolve();
+    }
+
+    @PluginMethod
+    public void getOverlayStatus(PluginCall call) {
+        call.resolve(overlayStatus());
+    }
+
+    @PluginMethod
+    public void openOverlaySettings(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:" + getContext().getPackageName()));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        getContext().startActivity(intent);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void startOverlayPet(PluginCall call) {
+        if (!SuanbaoOverlayService.canDraw(getContext())) {
+            reject(call, "OVERLAY_PERMISSION_REQUIRED", "Display over other apps permission is required"); return;
+        }
+        SuanbaoOverlayService.start(getContext());
+        JSObject result = overlayStatus();
+        result.put("running", true);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void stopOverlayPet(PluginCall call) {
+        SuanbaoOverlayService.stop(getContext());
+        JSObject result = overlayStatus();
+        result.put("running", false);
+        call.resolve(result);
+    }
+
+    private JSObject overlayStatus() {
+        JSObject result = new JSObject();
+        result.put("permissionGranted", SuanbaoOverlayService.canDraw(getContext()));
+        result.put("running", SuanbaoOverlayService.isRunning(getContext()));
+        return result;
     }
 
     @PluginMethod

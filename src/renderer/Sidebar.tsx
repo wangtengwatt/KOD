@@ -27,6 +27,7 @@ import useNeedRoomForMacWinControls from './hooks/useNeedRoomForWinControls'
 import { useIsSmallScreen, useSidebarWidth } from './hooks/useScreenChange'
 import useVersion from './hooks/useVersion'
 import { navigateToSettings } from './modals/Settings'
+import { isAndroidAgentAvailable } from './packages/android-agent/native'
 import { trackingEvent } from './packages/event'
 import icon from './static/icon.png'
 import { settingsStore, useLanguage } from './stores/settingsStore'
@@ -276,6 +277,21 @@ export default function Sidebar() {
                 p="xs"
               />
 
+              {isAndroidAgentAvailable() && (
+                <NavLink
+                  c="kod-secondary"
+                  className="rounded"
+                  label="蒜宝助手"
+                  leftSection={<ScalableIcon icon={IconDeviceMobile} size={20} />}
+                  onClick={() => {
+                    navigate({ to: '/android-agent' })
+                    setShowSidebar(false)
+                  }}
+                  variant="light"
+                  p="xs"
+                />
+              )}
+
               <ActionIcon
                 variant="transparent"
                 color="kod-secondary"
@@ -308,13 +324,16 @@ export default function Sidebar() {
                 variant="light"
                 p="xs"
               />
-              {CHATBOX_BUILD_PLATFORM === 'android' && (
+              {isAndroidAgentAvailable() && (
                 <NavLink
-                  c="chatbox-secondary"
+                  c="kod-secondary"
                   className="rounded"
-                  label="Android Agent"
+                  label="蒜宝助手"
                   leftSection={<ScalableIcon icon={IconDeviceMobile} size={20} />}
-                  onClick={() => navigate({ to: '/android-agent' })}
+                  onClick={() => {
+                    navigate({ to: '/android-agent' })
+                    if (isSmallScreen) setShowSidebar(false)
+                  }}
                   variant="light"
                   p="xs"
                 />

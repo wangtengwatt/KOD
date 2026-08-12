@@ -1,6 +1,6 @@
-import { Alert, Badge, Button, Card, Center, Group, NumberInput, Select, Stack, Text, Textarea, Title } from '@mantine/core'
+import { Alert, Badge, Box, Button, Card, Center, Group, NumberInput, Select, Stack, Text, Textarea, Title } from '@mantine/core'
 import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SuanbaoMascot } from '@/components/suanbao/SuanbaoMascot'
 import '@/components/suanbao/suanbao.css'
 import Page from '@/components/layout/Page'
@@ -22,10 +22,34 @@ function AndroidAgentPage() {
   const [now, setNow] = useState(Date.now())
   const [mobileFile, setMobileFile] = useState<MobileFile>()
   const [fileBusy, setFileBusy] = useState(false)
+  const [overlayPermission, setOverlayPermission] = useState(false)
+  const [overlayRunning, setOverlayRunning] = useState(false)
+  const [overlayBusy, setOverlayBusy] = useState(false)
+  const [petPosition, setPetPosition] = useState({ x: 0, y: 0 })
+  const petDrag = useRef<{ x: number; y: number; pointerX: number; pointerY: number }>()
+
+  const refreshOverlay = async () => {
+    const status = await androidAgentNative.getOverlayStatus()
+    setOverlayPermission(status.permissionGranted)
+    setOverlayRunning(status.running)
+  }
 
   useEffect(() => {
-    if (isAndroidAgentAvailable()) void store.refresh().catch((err) => setError(String(err)))
+    if (isAndroidAgentAvailable()) {
+      void store.refresh().catch((err) => setError(String(err)))
+      void refreshOverlay().catch((err) => setError(String(err)))
+    }
   }, [store.refresh])
+
+  useEffect(() => {
+    const onResume = () => void refreshOverlay().catch((err) => setError(String(err)))
+    document.addEventListener('visibilitychange', onResume)
+    window.addEventListener('focus', onResume)
+    return () => {
+      document.removeEventListener('visibilitychange', onResume)
+      window.removeEventListener('focus', onResume)
+    }
+  }, [])
 
   useEffect(() => {
     if (store.task.state !== 'running' && store.task.state !== 'paused') return
@@ -63,13 +87,56 @@ function AndroidAgentPage() {
         <Card withBorder maw={560} w="100%" padding="lg">
           <Stack>
             <Card withBorder padding="sm">
-              <Group align="center" wrap="nowrap">
-                <SuanbaoMascot state={store.task.state === 'running' ? 'executing' : 'idle'} animation="full" />
-                <Stack gap={2}>
-                  <Text fw={600}>蒜宝助手</Text>
-                  <Text size="xs" c="dimmed">Android 应用内桌宠预览；桌面浮窗和托盘能力不会在手机上启用。</Text>
-                </Stack>
-              </Group>
+              <Stack gap="xs">
+                <Group align="center" wrap="nowrap">
+                  <Box
+                    style={{ transform: `translate(${petPosition.x}px, ${petPosition.y}px)`, touchAction: 'none', cursor: 'grab' }}
+                    onPointerDown={(event) => {
+                      event.currentTarget.setPointerCapture(event.pointerId)
+                      petDrag.current = { x: petPosition.x, y: petPosition.y, pointerX: event.clientX, pointerY: event.clientY }
+                    }}
+                    onPointerMove={(event) => {
+                      if (!petDrag.current) return
+                      setPetPosition({
+                        x: petDrag.current.x + event.clientX - petDrag.current.pointerX,
+                        y: petDrag.current.y + event.clientY - petDrag.current.pointerY,
+                      })
+                    }}
+                    onPointerUp={() => { petDrag.current = undefined }}
+                    onPointerCancel={() => { petDrag.current = undefined }}
+                  >
+                    <SuanbaoMascot state={store.task.state === 'running' ? 'executing' : 'idle'} animation="full" />
+                  </Box>
+                  <Stack gap={2} style={{ flex: 1 }}>
+                    <Text fw={600}>蒜宝助手</Text>
+                    <Text size="xs" c="dimmed">按住蒜宝可以在 KOD 页面内拖动；系统悬浮桌宠可显示在其他应用上方。</Text>
+                  </Stack>
+                </Group>
+                <Group justify="space-between">
+                  <Stack gap={0}>
+                    <Text size="sm" fw={500}>系统悬浮桌宠</Text>
+                    <Text size="xs" c="dimmed">
+                      {overlayPermission ? (overlayRunning ? '蒜宝正在其他应用上方显示' : '权限已授予，当前未开启') : '需要授予“显示在其他应用上层”权限'}
+                    </Text>
+                  </Stack>
+                  {!overlayPermission ? (
+                    <Button size="xs" loading={overlayBusy} onClick={() => {
+                      setOverlayBusy(true)
+                      void androidAgentNative.openOverlaySettings().catch((err) => setError(String(err))).finally(() => setOverlayBusy(false))
+                    }}>授予权限</Button>
+                  ) : overlayRunning ? (
+                    <Button size="xs" color="red" variant="light" loading={overlayBusy} onClick={() => {
+                      setOverlayBusy(true)
+                      void androidAgentNative.stopOverlayPet().then((status) => setOverlayRunning(status.running)).catch((err) => setError(String(err))).finally(() => setOverlayBusy(false))
+                    }}>关闭桌宠</Button>
+                  ) : (
+                    <Button size="xs" loading={overlayBusy} onClick={() => {
+                      setOverlayBusy(true)
+                      void androidAgentNative.startOverlayPet().then((status) => setOverlayRunning(status.running)).catch((err) => setError(String(err))).finally(() => setOverlayBusy(false))
+                    }}>开启桌宠</Button>
+                  )}
+                </Group>
+              </Stack>
             </Card>
             <Group justify="space-between">
               <Title order={3}>手机任务控制</Title>

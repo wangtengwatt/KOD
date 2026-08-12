@@ -24,6 +24,10 @@ interface AndroidAgentNative {
   }): Promise<{ approvalToken: string; expiresAt: number }>
   getAccessibilityStatus(): Promise<{ enabled: boolean }>
   openAccessibilitySettings(): Promise<void>
+  getOverlayStatus(): Promise<{ permissionGranted: boolean; running: boolean }>
+  openOverlaySettings(): Promise<void>
+  startOverlayPet(): Promise<{ permissionGranted: boolean; running: boolean }>
+  stopOverlayPet(): Promise<{ permissionGranted: boolean; running: boolean }>
   getForegroundApp(): Promise<{ packageName?: string; allowed: boolean }>
   readUiTree(options: { taskId: string; generation: number; limit?: number }): Promise<AndroidAgentActionResult>
   clickElement(options: { taskId: string; generation: number; approvalToken: string; actionId: string; snapshotId: string } & AndroidAgentSelector): Promise<AndroidAgentActionResult>
@@ -47,6 +51,10 @@ export const androidAgentNative = {
     requireAndroid().registerApproval({ taskId, generation, actionId, action, snapshotId }),
   getAccessibilityStatus: () => requireAndroid().getAccessibilityStatus(),
   openAccessibilitySettings: () => requireAndroid().openAccessibilitySettings(),
+  getOverlayStatus: () => requireAndroid().getOverlayStatus(),
+  openOverlaySettings: () => requireAndroid().openOverlaySettings(),
+  startOverlayPet: () => requireAndroid().startOverlayPet(),
+  stopOverlayPet: () => requireAndroid().stopOverlayPet(),
   getForegroundApp: () => requireAndroid().getForegroundApp(),
   readUiTree: (taskId: string, generation: number, limit = 80) => requireAndroid().readUiTree({ taskId, generation, limit }),
   clickElement: (taskId: string, generation: number, approvalToken: string, actionId: string, snapshotId: string, selector: AndroidAgentSelector) =>
