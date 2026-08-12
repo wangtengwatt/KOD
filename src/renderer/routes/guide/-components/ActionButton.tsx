@@ -14,6 +14,7 @@ import { navigateToSettings } from '@/modals/Settings'
 import { openLinkWithAuth } from '@/packages/openLinkWithAuth'
 import { buildChatboxUrl, getUserProfile, listLicensesByUser, type UserLicense } from '@/packages/remote'
 import { EmailCodeLoginModal } from '@/routes/settings/provider/chatbox-ai/-components/EmailCodeLoginModal'
+import type { AuthTokens } from '@/routes/settings/provider/chatbox-ai/-components/types'
 import { authInfoStore } from '@/stores/authInfoStore'
 import * as premiumActions from '@/stores/premiumActions'
 import { settingsStore, useLanguage } from '@/stores/settingsStore'
@@ -66,7 +67,7 @@ export function LoginButton({ onLoginSuccess }: LoginButtonProps) {
   )
 
   const handleLoginSuccessInternal = useCallback(
-    async (tokens: { accessToken: string; refreshToken: string }) => {
+    async (tokens: AuthTokens) => {
       // Save tokens
       authInfoStore.getState().setTokens(tokens)
 

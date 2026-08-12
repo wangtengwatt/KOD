@@ -15,6 +15,7 @@ import {
   IconSparkles,
   IconWand,
   IconWorldWww,
+  IconWallet,
 } from '@tabler/icons-react'
 import { createFileRoute, Link, Outlet, useCanGoBack, useRouter, useRouterState } from '@tanstack/react-router'
 import clsx from 'clsx'
@@ -33,6 +34,11 @@ const ITEMS = [
     key: 'chatbox-ai',
     label: 'KOD AI',
     icon: <IconSparkles className="w-full h-full" />,
+  },
+  {
+    key: 'wallet',
+    label: 'Wallet',
+    icon: <IconWallet className="w-full h-full" />,
   },
   {
     key: 'provider',

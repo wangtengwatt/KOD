@@ -19,6 +19,7 @@ function createListener<T extends unknown[]>(channel: string) {
 const electronHandler: ElectronIPC = {
   invoke: ipcRenderer.invoke,
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  openPaymentUrl: (url: string) => ipcRenderer.invoke('payment:open-url', url),
   onSystemThemeChange: (callback: () => void) => {
     ipcRenderer.on('system-theme-updated', callback)
     return () => ipcRenderer.off('system-theme-updated', callback)

@@ -36,6 +36,7 @@ import { SettingsRoot } from '@/routes/settings/route'
 import { RouteComponent as SettingsSkillsRouteComponent } from '@/routes/settings/skills'
 import { RouteComponent as SettingsSuanbaoRouteComponent } from '@/routes/settings/suanbao'
 import { RouteComponent as SettingsWebSearchRouteComponent } from '@/routes/settings/web-search'
+import { RouteComponent as SettingsWalletRouteComponent } from '@/routes/settings/wallet'
 
 export const SettingsModal = () => {
   const { t } = useTranslation()
@@ -167,6 +168,12 @@ const SettingsChatboxAiRoute = createRoute({
   getParentRoute: () => RootRoute,
 })
 
+const SettingsWalletRoute = createRoute({
+  component: SettingsWalletRouteComponent,
+  path: '/settings/wallet',
+  getParentRoute: () => RootRoute,
+})
+
 const SettingsGeneralRoute = createRoute({
   component: SettingsGeneralRouteComponent,
   path: '/settings/general',
@@ -266,6 +273,7 @@ const routeTree = RootRoute.addChildren([
   SettingsMcpRoute,
   SettingsSkillsRoute,
   SettingsSuanbaoRoute,
+  SettingsWalletRoute,
   SettingsKnowledgeBaseRoute,
   SettingsDocumentParserRoute,
   SettingsHotkeysRoute,

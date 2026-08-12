@@ -13,6 +13,7 @@ export interface ElectronIPC {
   onNavigate: (callback: (path: string) => void) => () => void
   suanbao?: SuanbaoHostBridgeApi
   tinpay: TinpayRendererApi
+  openPaymentUrl: (url: string) => Promise<void>
 
   // Auto-updater events
   onUpdaterChecking: (callback: () => void) => () => void

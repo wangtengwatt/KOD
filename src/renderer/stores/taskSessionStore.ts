@@ -64,6 +64,15 @@ function getStorage(): TaskSessionStorage {
 }
 
 /** Reset task session storage singleton — call when account changes. */
+export async function purgeTaskSessionData(accountKey: string): Promise<void> {
+  const target = _currentTaskAccountKey === accountKey && storage ? storage : platform.getTaskSessionStorage(accountKey)
+  await target.deleteDatabase()
+  resetTaskSessionStorage()
+  taskSessionStore.setState({ currentTaskId: null, initialized: false })
+  queryClient.removeQueries({ queryKey: [TASK_SESSION_QUERY_KEY] })
+  queryClient.removeQueries({ queryKey: [TASK_SESSION_LIST_QUERY_KEY] })
+}
+
 export function resetTaskSessionStorage() {
   storage = null
   _currentTaskAccountKey = null

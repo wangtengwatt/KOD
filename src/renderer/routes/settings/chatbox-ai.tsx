@@ -3,6 +3,7 @@ import { type ModelProvider, ModelProviderEnum } from '@shared/types'
 import { createFileRoute } from '@tanstack/react-router'
 import useChatboxAIModels from '@/hooks/useChatboxAIModels'
 import { useLanguage, useProviderSettings } from '@/stores/settingsStore'
+import { deleteCurrentKodAccount } from './provider/chatbox-ai/-components/accountDeletion'
 import { LoggedInView } from './provider/chatbox-ai/-components/LoggedInView'
 import { LoginView } from './provider/chatbox-ai/-components/LoginView'
 import { ModelManagement } from './provider/chatbox-ai/-components/ModelManagement'
@@ -37,7 +38,7 @@ export function RouteComponent() {
     <Stack gap="xxl" p="md">
       {isLoggedIn ? (
         <>
-          <LoggedInView onLogout={clearAuthTokens} />
+          <LoggedInView onLogout={clearAuthTokens} onDeleteAccount={deleteCurrentKodAccount} />
           <TinpayDemoCard />
         </>
       ) : (

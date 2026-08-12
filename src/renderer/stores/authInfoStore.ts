@@ -10,7 +10,7 @@ interface AuthTokensState {
 }
 
 interface AuthTokensActions {
-  setTokens: (tokens: AuthTokens) => void
+  setTokens: (tokens: AuthTokens, options?: { preserveEmail?: boolean }) => void
   clearTokens: () => void
   getTokens: () => AuthTokens | null
 }
@@ -27,12 +27,12 @@ export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
       immer((set, get) => ({
         ...initialState,
 
-        setTokens: (tokens: AuthTokens & { email?: string }) => {
+        setTokens: (tokens: AuthTokens & { email?: string }, options) => {
           set((state) => {
             state.accessToken = tokens.accessToken
             state.refreshToken = tokens.refreshToken
-            if (tokens.email) {
-              state.loginEmail = tokens.email
+            if (!options?.preserveEmail || tokens.email) {
+              state.loginEmail = tokens.email ? tokens.email.trim().toLowerCase() : null
             }
           })
         },

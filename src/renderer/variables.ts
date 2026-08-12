@@ -23,3 +23,5 @@ export const USE_BETA_CHATBOX = process.env.USE_BETA_CHATBOX || ''
 export const KOD_API_ORIGIN = process.env.KOD_API_ORIGIN || 'https://kod.kai.com'
 
 export const NODE_ENV = process.env.NODE_ENV || 'development'
+
+export const KOD_PAYMENT_HOSTS = process.env.KOD_PAYMENT_HOSTS || ''

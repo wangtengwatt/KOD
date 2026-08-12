@@ -100,6 +100,12 @@ export default class DesktopPlatform implements Platform {
   public async openLink(url: string): Promise<void> {
     return this.ipc.invoke('openLink', url)
   }
+  public async openPaymentUrl(url: string): Promise<void> {
+    const { assertPaymentUrl, parsePaymentHosts } = await import('@shared/payment-url')
+    const { KOD_API_ORIGIN, KOD_PAYMENT_HOSTS } = await import('@/variables')
+    assertPaymentUrl(url, parsePaymentHosts(KOD_PAYMENT_HOSTS, KOD_API_ORIGIN))
+    return this.ipc.openPaymentUrl(url)
+  }
   public async getDeviceName(): Promise<string> {
     const deviceName = await cache('ipc:getDeviceName', () => this.ipc.invoke('getDeviceName'), {
       ttl: 5 * 60 * 1000,

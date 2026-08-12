@@ -30,9 +30,7 @@ export function getSuanbaoAccountKey(email?: string | null): string {
   return email ? deriveAccountKey(email) : 'guest'
 }
 
-export function sanitizeSuanbaoPreferences(
-  value?: Partial<StoredSuanbaoPreferences> | null
-): StoredSuanbaoPreferences {
+export function sanitizeSuanbaoPreferences(value?: Partial<StoredSuanbaoPreferences> | null): StoredSuanbaoPreferences {
   return {
     schemaVersion: 2,
     enabled: value?.enabled ?? false,
@@ -115,6 +113,16 @@ authInfoStore.subscribe(
   (state) => state.loginEmail,
   (email) => suanbaoStore.getState().switchAccount(email)
 )
+
+export function purgeSuanbaoPreferences(accountKey: string): void {
+  getLocalStorage()?.removeItem(storageKey(accountKey))
+  if (suanbaoStore.getState().accountKey === accountKey) {
+    suanbaoStore.setState({
+      accountKey: 'guest',
+      ...sanitizeSuanbaoPreferences(DEFAULT_PREFERENCES),
+    })
+  }
+}
 
 export function useSuanbaoStore<U>(selector: Parameters<typeof useStore<typeof suanbaoStore, U>>[1]) {
   return useStore<typeof suanbaoStore, U>(suanbaoStore, selector)

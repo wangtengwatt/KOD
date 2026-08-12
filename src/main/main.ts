@@ -19,6 +19,7 @@ import electronDebug from 'electron-debug'
 import log from 'electron-log/main'
 import os from 'os'
 import path from 'path'
+import { assertPaymentUrl, parsePaymentHosts } from 'src/shared/payment-url'
 import type { ShortcutSetting } from 'src/shared/types'
 import * as analystic from './analystic-node'
 import { AppUpdater } from './app-updater'
@@ -768,6 +769,11 @@ ipcMain.handle('getLocale', () => {
 })
 ipcMain.handle('openLink', (event, link) => {
   return shell.openExternal(link)
+})
+ipcMain.handle('payment:open-url', async (_event, url: string) => {
+  const apiOrigin = process.env.KOD_API_ORIGIN || 'https://kod.kai.com'
+  const safeUrl = assertPaymentUrl(url, parsePaymentHosts(process.env.KOD_PAYMENT_HOSTS, apiOrigin))
+  await shell.openExternal(safeUrl.toString())
 })
 ipcMain.handle('ensureShortcutConfig', (event, json) => {
   const config: ShortcutSetting = JSON.parse(json)

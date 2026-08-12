@@ -1,4 +1,4 @@
-import * as defaults from '@shared/defaults'
+﻿import * as defaults from '@shared/defaults'
 import type { Config, Settings, ShortcutSetting } from '@shared/types'
 import localforage from 'localforage'
 import { v4 as uuidv4 } from 'uuid'
@@ -60,6 +60,10 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
   public onUpdateDownloaded(callback: () => void): () => void {
     return () => null
   }
+  public async openPaymentUrl(url: string): Promise<void> {
+    throw new Error('安全支付链接仅支持桌面客户端')
+  }
+
   public async openLink(url: string): Promise<void> {
     window.open(url)
   }

@@ -1,4 +1,4 @@
-import { App } from '@capacitor/app'
+﻿import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Device } from '@capacitor/device'
 import * as defaults from '@shared/defaults'
@@ -115,6 +115,10 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
   public onUpdateDownloaded(callback: () => void): () => void {
     return () => null
   }
+  public async openPaymentUrl(url: string): Promise<void> {
+    throw new Error('安全支付链接仅支持桌面客户端')
+  }
+
   public async openLink(url: string): Promise<void> {
     try {
       // 使用 Browser.open 打开

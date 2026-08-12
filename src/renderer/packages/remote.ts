@@ -77,7 +77,7 @@ async function initAuthenticatedAfetch(): Promise<ReturnType<typeof createAuthen
       },
       refreshTokens: async (refreshToken: string) => {
         const result = await refreshAccessToken({ refreshToken })
-        authInfoStore.getState().setTokens(result)
+        authInfoStore.getState().setTokens(result, { preserveEmail: true })
         return result
       },
       clearTokens: async () => {
@@ -160,6 +160,26 @@ function unwrapKodResult<T>(result: { code: number; message?: string; data?: T |
     throw new Error(result.message || 'Kod API response missing data')
   }
   return result.data
+}
+
+export const KOD_ACCOUNT_DELETE_CONFIRMATION = 'DELETE'
+
+export async function deleteKodAccount(params: { accessToken: string; password: string; confirmation?: string }) {
+  const json = await ofetch(`${KOD_API_ORIGIN}/api/account`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: {
+      password: params.password,
+      confirmation: params.confirmation ?? KOD_ACCOUNT_DELETE_CONFIRMATION,
+    },
+    ignoreResponseError: true,
+  })
+
+  const result = KodResultSchema(z.unknown()).parse(json)
+  if (result.code !== 0) throw new Error(result.message || 'Kod account deletion failed')
 }
 
 export async function loginWithKod(params: {

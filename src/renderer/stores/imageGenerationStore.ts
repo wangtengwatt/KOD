@@ -51,6 +51,36 @@ function getStorage(): ImageGenerationStorage {
 }
 
 /** Reset image generation storage singleton — call when account changes. */
+export async function purgeImageGenerationData(accountKey: string): Promise<void> {
+  const target =
+    _currentImageGenAccountKey === accountKey && storage ? storage : platform.getImageGenerationStorage(accountKey)
+  await target.initialize()
+  const blobKeys = new Set<string>()
+  let cursor = 0
+  while (true) {
+    const page = await target.getPage(cursor, 100)
+    for (const record of page.items) {
+      for (const key of [...record.generatedImages, ...record.referenceImages]) {
+        if (key.startsWith('picture:image-gen:') || key.startsWith('picture:image-creator-ref:')) blobKeys.add(key)
+      }
+    }
+    if (page.nextCursor === null) break
+    cursor = page.nextCursor
+  }
+  const blobErrors: unknown[] = []
+  for (const key of blobKeys) {
+    try {
+      await blobStorage.delBlob(key)
+    } catch (error) {
+      blobErrors.push(error)
+    }
+  }
+  await target.deleteDatabase()
+  resetImageGenerationStorage()
+  imageGenerationStore.setState({ currentGeneratingId: null, currentRecordId: null, initialized: false })
+  if (blobErrors.length) throw new AggregateError(blobErrors, 'Failed to delete some image blobs')
+}
+
 export function resetImageGenerationStorage() {
   storage = null
   _currentImageGenAccountKey = null

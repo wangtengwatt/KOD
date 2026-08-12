@@ -13,6 +13,7 @@ export interface ImageGenerationStorage {
   delete(id: string): Promise<void>
   getPage(cursor: number, limit?: number): Promise<ImageGenerationPage>
   getTotal(): Promise<number>
+  deleteDatabase(): Promise<void>
 }
 
 /** In-memory fallback when IndexedDB is corrupted / unavailable (session-only). */
@@ -50,6 +51,10 @@ class MemoryImageGenerationStorage implements ImageGenerationStorage {
 
   async getTotal(): Promise<number> {
     return this.records.size
+  }
+
+  async deleteDatabase(): Promise<void> {
+    this.records.clear()
   }
 }
 
@@ -134,7 +139,7 @@ export class IndexedDBImageGenerationStorage implements ImageGenerationStorage {
     })
   }
 
-  private deleteDatabase(): Promise<void> {
+  deleteDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.db) {
         this.db.close()

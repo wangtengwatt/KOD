@@ -218,6 +218,24 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
     return { items, nextCursor, total }
   }
 
+  async deleteDatabase(): Promise<void> {
+    const dbName = getAccountDBName(DB_NAME, this.accountKey)
+    try {
+      if (this.initPromise) {
+        await this.initPromise
+        await this.database.close()
+      }
+    } finally {
+      this.initPromise = null
+    }
+    try {
+      await this.sqlite.closeConnection(dbName, false)
+    } catch {
+      // The connection may already be closed or absent.
+    }
+    await CapacitorSQLite.deleteDatabase({ database: dbName, readonly: false })
+  }
+
   async getTotal(): Promise<number> {
     await this.initialize()
     const result = await this.database.query('SELECT COUNT(*) as total FROM image_generation')

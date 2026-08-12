@@ -7,6 +7,7 @@ import { type ModelProvider, ModelProviderEnum } from '@shared/types'
 import { createFileRoute } from '@tanstack/react-router'
 import useChatboxAIModels from '@/hooks/useChatboxAIModels'
 import { useLanguage, useProviderSettings } from '@/stores/settingsStore'
+import { deleteCurrentKodAccount } from './-components/accountDeletion'
 import { LoggedInView } from './-components/LoggedInView'
 import { LoginView } from './-components/LoginView'
 import { ModelManagement } from './-components/ModelManagement'
@@ -39,7 +40,7 @@ export function RouteComponent() {
   return (
     <Stack gap="xxl" p="md">
       {isLoggedIn ? (
-        <LoggedInView onLogout={clearAuthTokens} />
+        <LoggedInView onLogout={clearAuthTokens} onDeleteAccount={deleteCurrentKodAccount} />
       ) : (
         <LoginView language={language} saveAuthTokens={saveAuthTokens} />
       )}

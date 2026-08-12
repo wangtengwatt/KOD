@@ -45,6 +45,7 @@ export interface Platform extends Storage {
   checkForUpdate?(): Promise<{ started: boolean }>
   onNavigate?(callback: (path: string) => void): () => void
   openLink(url: string): Promise<void>
+  openPaymentUrl(url: string): Promise<void>
   getDeviceName(): Promise<string>
   getInstanceName(): Promise<string>
   getLocale(): Promise<Language>
