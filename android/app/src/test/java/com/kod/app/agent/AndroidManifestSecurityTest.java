@@ -3,6 +3,7 @@ package com.kod.app.agent;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -16,7 +17,7 @@ public class AndroidManifestSecurityTest {
         if (!Files.exists(manifest)) {
             return;
         }
-        String xml = Files.readString(manifest);
+        String xml = new String(Files.readAllBytes(manifest), StandardCharsets.UTF_8);
         assertFalse(xml.contains("MANAGE_EXTERNAL_STORAGE"));
         assertFalse(xml.contains("READ_EXTERNAL_STORAGE"));
         assertFalse(xml.contains("WRITE_EXTERNAL_STORAGE"));
