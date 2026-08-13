@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Alert,
   Badge,
   Box,
@@ -27,10 +28,12 @@ import {
 import {
   IconBell,
   IconBuildingStore,
+  IconCopy,
   IconCpu,
   IconDatabaseDollar,
   IconGauge,
   IconReceipt,
+  IconRefresh,
   IconServer,
   IconShieldCheck,
   IconTransfer,
@@ -56,13 +59,18 @@ import {
   type ComputeNodeInput,
   type ComputeNotification,
   type ComputeOrder,
+  type ComputePackageCredential,
+  type ComputePackagePurchase,
   type ComputeProduct,
   type ComputeReservation,
   type ComputeSupplier,
+  type ComputeSuspendedProxyKey,
   type ComputeTransfer,
+  type ComputeUpstreamOption,
   type ComputeWithdrawal,
   cancelComputeReservation,
   cancelComputeTransfer,
+  configureAdminProductUpstream,
   createAdminApiProduct,
   createComputeReservation,
   createComputeTransfer,
@@ -77,6 +85,7 @@ import {
   getComputeAdminOverview,
   getComputeConfig,
   getComputeIdentity,
+  getComputePackageCredential,
   getComputeSupplier,
   grantAdminCardHours,
   listAdminIdentities,
@@ -84,12 +93,14 @@ import {
   listAdminProducts,
   listAdminReservations,
   listAdminSuppliers,
+  listAdminSuspendedProxyKeys,
   listAdminTransfers,
+  listAdminUpstreams,
   listComputeApiUsage,
   listComputeLedger,
   listComputeNotifications,
   listComputeOrders,
-  listComputePackageBalances,
+  listComputePackagePurchases,
   listComputeProducts,
   listComputeReservations,
   listComputeTransfers,
@@ -99,6 +110,8 @@ import {
   markComputeNotificationRead,
   type ProductType,
   purchaseCardHours,
+  regenerateComputePackageKey,
+  repairAdminProxyKey,
   resolveAdminReservation,
   reviewAdminIdentity,
   reviewAdminNode,
@@ -111,6 +124,7 @@ import {
   updateComputeAdminSettings,
   withdrawComputeCardHours,
 } from '@/packages/computeCenter'
+import { copyToClipboard } from '@/packages/navigator'
 import platform from '@/platform'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
 
@@ -162,6 +176,20 @@ function ComputeCenterPage() {
     queryFn: getComputeAccount,
     enabled: isLoggedIn,
   })
+
+  useEffect(() => {
+    if (!isLoggedIn) return
+    const refreshWallet = () => void queryClient.invalidateQueries({ queryKey: ['compute', 'account'] })
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshWallet()
+    }
+    window.addEventListener('focus', refreshWallet)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('focus', refreshWallet)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [isLoggedIn, queryClient])
 
   const run: RunAction = async (key, action, success) => {
     setBusy(key)
@@ -240,7 +268,13 @@ function ComputeCenterPage() {
     <Page title="KOD 算力中心">
       <Container size="xl" py={isSmallScreen ? 'sm' : 'md'} px={isSmallScreen ? 'xs' : 'md'}>
         <Stack gap="md">
-          <Hero account={account} rate={configQuery.data?.cardHourCnyRate} onOpen={setActiveTab} />
+          <Hero
+            account={account}
+            rate={configQuery.data?.cardHourCnyRate}
+            onOpen={setActiveTab}
+            refreshing={accountQuery.isFetching}
+            onRefresh={() => void accountQuery.refetch()}
+          />
 
           {!isLoggedIn && (
             <Alert color="blue" title="公开浏览模式">
@@ -436,7 +470,19 @@ function CardHourTopUpModal({ prompt }: { prompt: CardHourPrompt | null }) {
   )
 }
 
-function Hero({ account, rate, onOpen }: { account?: ComputeAccount; rate?: number; onOpen: (value: string) => void }) {
+function Hero({
+  account,
+  rate,
+  onOpen,
+  refreshing,
+  onRefresh,
+}: {
+  account?: ComputeAccount
+  rate?: number
+  onOpen: (value: string) => void
+  refreshing: boolean
+  onRefresh: () => void
+}) {
   return (
     <Paper
       p="lg"
@@ -471,11 +517,21 @@ function Hero({ account, rate, onOpen }: { account?: ComputeAccount; rate?: numb
                   ))}
                 </Group>
               </Box>
-              {account.isAdmin && (
-                <Button leftSection={<IconShieldCheck size={18} />} onClick={() => onOpen('admin')}>
-                  进入算力管理后台
+              <Group>
+                <Button
+                  variant="light"
+                  leftSection={<IconRefresh size={18} />}
+                  loading={refreshing}
+                  onClick={onRefresh}
+                >
+                  刷新官网余额
                 </Button>
-              )}
+                {account.isAdmin && (
+                  <Button leftSection={<IconShieldCheck size={18} />} onClick={() => onOpen('admin')}>
+                    进入算力管理后台
+                  </Button>
+                )}
+              </Group>
             </Flex>
             <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="md">
               <Metric label="可用卡时" value={formatCardHours(account.availableCardHours)} />
@@ -689,9 +745,12 @@ function ProductCard({
             仅内测，不代表真实资源
           </Badge>
         )}
+        {product.productType === 'API' && !product.upstreamKeyId && (
+          <Alert color="orange">管理员尚未配置零售站上游，当前不可购买。</Alert>
+        )}
         <Button
           mt="auto"
-          disabled={!isLoggedIn}
+          disabled={!isLoggedIn || (product.productType === 'API' && !product.upstreamKeyId)}
           loading={busy === actionKey}
           onClick={() =>
             product.productType === 'API'
@@ -785,7 +844,7 @@ function AccountPanel({
   onOpen: (value: string) => void
 }) {
   const ledgerQuery = useQuery({ queryKey: ['compute', 'ledger'], queryFn: listComputeLedger })
-  const packagesQuery = useQuery({ queryKey: ['compute', 'package-balances'], queryFn: listComputePackageBalances })
+  const packagesQuery = useQuery({ queryKey: ['compute', 'package-purchases'], queryFn: listComputePackagePurchases })
   const usageQuery = useQuery({ queryKey: ['compute', 'api-usage'], queryFn: listComputeApiUsage })
   const withdrawalsQuery = useQuery({ queryKey: ['compute', 'withdrawals'], queryFn: listComputeWithdrawals })
   const [amount, setAmount] = useState(10)
@@ -796,6 +855,19 @@ function AccountPanel({
   return (
     <Stack gap="md">
       <AssetDashboard account={account} onOpen={onOpen} />
+
+      <Alert color="blue" title="官网充值与客户端共用同一人民币钱包">
+        <Flex justify="space-between" align="center" gap="md" wrap="wrap">
+          <Text size="sm">官网充值成功后返回客户端，窗口重新获得焦点时会自动刷新；也可以点击顶部“刷新官网余额”。</Text>
+          <Button
+            size="xs"
+            variant="light"
+            onClick={() => void platform.openLink('https://kod.kai.com/console/wallet')}
+          >
+            去官网充值
+          </Button>
+        </Flex>
+      </Alert>
 
       <Alert color="orange" title="“提现”仅指内部钱包兑换">
         卡时按 1 卡时 = ¥{formatNumber(account?.cardHourRedeemRate || 1, 4)} 直接转入 KOD
@@ -875,19 +947,7 @@ function AccountPanel({
 
         <Tabs.Panel value="packages" pt="md">
           <Stack>
-            <Section title="模型 Token 套餐余额（永久有效）">
-              <SimpleTable
-                columns={['模型', '输入剩余 / 总额', '输出剩余 / 总额', '累计支付卡时', '最后购买']}
-                rows={(packagesQuery.data || []).map((item) => [
-                  item.modelId,
-                  `${formatTokens(item.promptTokensRemaining)} / ${formatTokens(item.promptTokensTotal)}`,
-                  `${formatTokens(item.completionTokensRemaining)} / ${formatTokens(item.completionTokensTotal)}`,
-                  formatCardHours(item.paidCardHours),
-                  formatDate(item.lastPurchasedAt),
-                ])}
-                empty="尚未购买模型 Token 套餐"
-              />
-            </Section>
+            <TokenPackageAssets purchases={packagesQuery.data || []} busy={busy} run={run} />
             <Section title="模型 API Token 记账">
               <ApiUsageTable entries={usageQuery.data || []} />
             </Section>
@@ -904,11 +964,169 @@ function AccountPanel({
 
 function PurchasesPanel() {
   const ordersQuery = useQuery({ queryKey: ['compute', 'orders'], queryFn: listComputeOrders })
+  const packagesQuery = useQuery({ queryKey: ['compute', 'package-purchases'], queryFn: listComputePackagePurchases })
   return (
     <Stack>
-      <Alert color="blue">统一展示人民币购买卡时、Token 套餐购买和 GPU 预订三类记录。</Alert>
-      <OrdersTable orders={ordersQuery.data || []} />
+      <Alert color="blue">购买记录保存订单与扣费；API 地址和套餐 Key 请到“我的资产 → Token 套餐”查看。</Alert>
+      <Section title="Token 套餐购买记录">
+        <SimpleTable
+          columns={['订单号', '套餐', '指定模型', '输入剩余 / 总额', '输出剩余 / 总额', '支付卡时', '时间']}
+          rows={(packagesQuery.data || []).map((item) => [
+            item.orderNo,
+            item.productName,
+            item.modelId,
+            `${formatTokens(item.promptTokensRemaining)} / ${formatTokens(item.promptTokensTotal)}`,
+            `${formatTokens(item.completionTokensRemaining)} / ${formatTokens(item.completionTokensTotal)}`,
+            formatCardHours(item.priceCardHours),
+            formatDate(item.createTime),
+          ])}
+          empty="暂无 Token 套餐购买记录"
+        />
+      </Section>
+      <Section title="全部购买流水">
+        <OrdersTable orders={ordersQuery.data || []} />
+      </Section>
     </Stack>
+  )
+}
+
+function TokenPackageAssets({
+  purchases,
+  busy,
+  run,
+}: {
+  purchases: ComputePackagePurchase[]
+  busy: string | null
+  run: RunAction
+}) {
+  const [credentials, setCredentials] = useState<Record<number, ComputePackageCredential>>({})
+  const [revealing, setRevealing] = useState<number | null>(null)
+
+  const reveal = async (purchaseId: number) => {
+    setRevealing(purchaseId)
+    try {
+      const credential = await getComputePackageCredential(purchaseId)
+      setCredentials((current) => ({ ...current, [purchaseId]: credential }))
+    } finally {
+      setRevealing(null)
+    }
+  }
+
+  return (
+    <Section title="Token 套餐交付与余额（永久有效）">
+      <Alert color="blue" mb="md">
+        套餐 Key 仅供外部工具调用 KOD 平台代理；客户端内置对话和生图仍走你手动选择的零售站/节点及官网人民币余额。
+      </Alert>
+      {purchases.length === 0 ? (
+        <Text c="chatbox-tertiary">尚未购买模型 Token 套餐</Text>
+      ) : (
+        <Stack>
+          {purchases.map((item) => {
+            const credential = credentials[item.id]
+            const apiKey = credential?.apiKey || `kodpk_••••••••${item.accessKeyLast4 || ''}`
+            return (
+              <Paper key={item.id} withBorder p="md" radius="md">
+                <Stack gap="sm">
+                  <Flex justify="space-between" align="flex-start" gap="md" wrap="wrap">
+                    <Box>
+                      <Group gap="xs">
+                        <Title order={5}>{item.productName}</Title>
+                        <StatusBadge status={item.keyStatus} />
+                      </Group>
+                      <Text size="sm">指定模型：{item.modelId}</Text>
+                      <Text size="xs" c="chatbox-tertiary">
+                        订单 {item.orderNo} · {formatDate(item.createTime)}
+                      </Text>
+                    </Box>
+                    <Text fw={700}>{formatCardHours(item.priceCardHours)} 卡时</Text>
+                  </Flex>
+                  <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                    <Metric
+                      label="输入 Token 剩余 / 总额"
+                      value={`${formatTokens(item.promptTokensRemaining)} / ${formatTokens(item.promptTokensTotal)}`}
+                    />
+                    <Metric
+                      label="输出 Token 剩余 / 总额"
+                      value={`${formatTokens(item.completionTokensRemaining)} / ${formatTokens(item.completionTokensTotal)}`}
+                    />
+                  </SimpleGrid>
+                  {item.suspendedReason && <Alert color="red">暂停原因：{item.suspendedReason}</Alert>}
+                  <TextInput
+                    label="Base URL"
+                    readOnly
+                    value={item.baseUrl}
+                    rightSection={
+                      <ActionIcon
+                        variant="subtle"
+                        aria-label="复制 Base URL"
+                        onClick={() => copyToClipboard(item.baseUrl)}
+                      >
+                        <IconCopy size={17} />
+                      </ActionIcon>
+                    }
+                  />
+                  <TextInput
+                    label="API Key"
+                    readOnly
+                    value={apiKey}
+                    rightSection={
+                      <ActionIcon
+                        variant="subtle"
+                        aria-label="复制 API Key"
+                        disabled={!credential}
+                        onClick={() => credential && copyToClipboard(credential.apiKey)}
+                      >
+                        <IconCopy size={17} />
+                      </ActionIcon>
+                    }
+                  />
+                  <Text size="sm">
+                    API 格式：{item.apiFormat}；认证字段：<code>{item.authenticationHeader}</code>
+                  </Text>
+                  <Text size="sm">可用接口：{item.endpoints.join('、')}</Text>
+                  <Group>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      loading={revealing === item.id}
+                      onClick={() => {
+                        if (!credential) return reveal(item.id)
+                        setCredentials((current) => {
+                          const next = { ...current }
+                          delete next[item.id]
+                          return next
+                        })
+                      }}
+                    >
+                      {credential ? '隐藏 API Key' : '显示 API Key'}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="orange"
+                      loading={busy === `regenerate-package-${item.id}`}
+                      onClick={() => {
+                        if (!window.confirm('重新生成后旧 Key 将立即失效，Token 剩余额度保持不变。是否继续？')) return
+                        void run(
+                          `regenerate-package-${item.id}`,
+                          async () => {
+                            const next = await regenerateComputePackageKey(item.id)
+                            setCredentials((current) => ({ ...current, [item.id]: next }))
+                          },
+                          '套餐 API Key 已重新生成'
+                        )
+                      }}
+                    >
+                      重新生成 Key
+                    </Button>
+                  </Group>
+                </Stack>
+              </Paper>
+            )
+          })}
+        </Stack>
+      )}
+    </Section>
   )
 }
 
@@ -962,7 +1180,13 @@ function ReservationCard({
   run: RunAction
   view: 'buyer' | 'supplier'
 }) {
-  const [deliveryInfo, setDeliveryInfo] = useState('')
+  const [sshDelivery, setSshDelivery] = useState({
+    host: '',
+    port: 22,
+    username: '',
+    authType: 'PASSWORD' as 'PASSWORD' | 'PRIVATE_KEY',
+    credential: '',
+  })
   const key = `${view}-reservation-${reservation.id}`
   const cancellable = ['PENDING_DELIVERY', 'CONFIRMED'].includes(reservation.status)
   return (
@@ -988,7 +1212,13 @@ function ReservationCard({
         {reservation.deliveryInfo && (
           <Alert color="teal" title="交付信息">
             <Text style={{ whiteSpace: 'pre-wrap' }}>{reservation.deliveryInfo}</Text>
+            <Text size="xs" mt="xs">
+              交付时间：{formatDate(reservation.deliveredAt)}；系统将在交付 30 天后删除凭证。
+            </Text>
           </Alert>
+        )}
+        {view === 'buyer' && reservation.status === 'PENDING_DELIVERY' && !reservation.deliveryInfo && (
+          <Alert color="yellow">订单已进入买方账号，正在等待供应商提交 SSH 交付凭证。</Alert>
         )}
         {view === 'buyer' && cancellable && (
           <Button
@@ -1002,22 +1232,66 @@ function ReservationCard({
         )}
         {view === 'supplier' && reservation.status === 'PENDING_DELIVERY' && (
           <Stack gap="xs">
+            <Alert color="blue">提交后立即加密交付到买方“我的订单”；凭证将在交付 30 天后自动删除。</Alert>
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              <TextInput
+                label="SSH 地址"
+                value={sshDelivery.host}
+                onChange={(event) => setSshDelivery({ ...sshDelivery, host: event.target.value })}
+              />
+              <NumberInput
+                label="SSH 端口"
+                min={1}
+                max={65535}
+                value={sshDelivery.port}
+                onChange={(value) => setSshDelivery({ ...sshDelivery, port: Number(value) || 22 })}
+              />
+              <TextInput
+                label="用户名"
+                value={sshDelivery.username}
+                onChange={(event) => setSshDelivery({ ...sshDelivery, username: event.target.value })}
+              />
+              <Select
+                label="认证方式"
+                value={sshDelivery.authType}
+                data={[
+                  { value: 'PASSWORD', label: '密码' },
+                  { value: 'PRIVATE_KEY', label: '私钥' },
+                ]}
+                onChange={(value) =>
+                  setSshDelivery({ ...sshDelivery, authType: (value || 'PASSWORD') as 'PASSWORD' | 'PRIVATE_KEY' })
+                }
+              />
+            </SimpleGrid>
             <Textarea
-              label="加密交付信息"
-              description="可填写临时 SSH、Jupyter、API 或联系说明，仅订单双方可见"
-              value={deliveryInfo}
-              onChange={(e) => setDeliveryInfo(e.target.value)}
+              label={sshDelivery.authType === 'PASSWORD' ? 'SSH 密码' : 'SSH 私钥'}
+              value={sshDelivery.credential}
+              onChange={(event) => setSshDelivery({ ...sshDelivery, credential: event.target.value })}
               autosize
-              minRows={3}
+              minRows={sshDelivery.authType === 'PRIVATE_KEY' ? 5 : 2}
             />
             <Button
               loading={busy === key}
-              disabled={!deliveryInfo.trim()}
+              disabled={!sshDelivery.host.trim() || !sshDelivery.username.trim() || !sshDelivery.credential.trim()}
               onClick={() =>
-                run(key, () => deliverComputeReservation(reservation.id, deliveryInfo), '交付信息已安全提交')
+                run(
+                  key,
+                  () =>
+                    deliverComputeReservation(
+                      reservation.id,
+                      [
+                        `SSH 地址：${sshDelivery.host}`,
+                        `端口：${sshDelivery.port}`,
+                        `用户名：${sshDelivery.username}`,
+                        `认证方式：${sshDelivery.authType === 'PASSWORD' ? '密码' : '私钥'}`,
+                        `${sshDelivery.authType === 'PASSWORD' ? '密码' : '私钥'}：${sshDelivery.credential}`,
+                      ].join('\n')
+                    ),
+                  'GPU SSH 凭证已加密交付到买方订单'
+                )
               }
             >
-              确认资源并交付
+              加密交付给买方
             </Button>
           </Stack>
         )}
@@ -1684,6 +1958,11 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
   const productsQuery = useQuery({ queryKey: ['compute', 'admin-products'], queryFn: listAdminProducts })
   const transfersQuery = useQuery({ queryKey: ['compute', 'admin-transfers'], queryFn: listAdminTransfers })
   const reservationsQuery = useQuery({ queryKey: ['compute', 'admin-reservations'], queryFn: listAdminReservations })
+  const upstreamsQuery = useQuery({ queryKey: ['compute', 'admin-upstreams'], queryFn: listAdminUpstreams })
+  const suspendedKeysQuery = useQuery({
+    queryKey: ['compute', 'admin-suspended-proxy-keys'],
+    queryFn: listAdminSuspendedProxyKeys,
+  })
   const [api, setApi] = useState({
     name: 'KOD 测试模型 API',
     description: '内部测试模型，购买固定 Token 套餐后使用。',
@@ -1693,8 +1972,16 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
     packageCompletionTokens: 500000,
     packagePriceCardHours: 1,
     slaDescription: '内部测试价与 SLA，正式使用前需重新确认',
+    upstreamStationId: 0,
+    upstreamKeyId: 0,
   })
   const [grant, setGrant] = useState({ recipientEmail: '', cardHours: 100, expiresAt: '', reason: '内部 MVP 测试' })
+
+  useEffect(() => {
+    const first = upstreamsQuery.data?.[0]
+    if (!first || api.upstreamKeyId) return
+    setApi((current) => ({ ...current, upstreamStationId: first.stationId, upstreamKeyId: first.keyId }))
+  }, [api.upstreamKeyId, upstreamsQuery.data])
 
   return (
     <Stack gap="md">
@@ -1791,6 +2078,19 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                   value={api.packagePriceCardHours}
                   onChange={(value) => setApi({ ...api, packagePriceCardHours: Number(value) || 0 })}
                 />
+                <Select
+                  label="上游零售站与 API Key"
+                  description="买家只会看到 KOD 平台代理 Key"
+                  value={api.upstreamKeyId ? `${api.upstreamStationId}:${api.upstreamKeyId}` : null}
+                  data={(upstreamsQuery.data || []).map((item) => ({
+                    value: `${item.stationId}:${item.keyId}`,
+                    label: `${item.stationUrl} · ${item.keyLabel}`,
+                  }))}
+                  onChange={(value) => {
+                    const [stationId, keyId] = (value || '0:0').split(':').map(Number)
+                    setApi({ ...api, upstreamStationId: stationId, upstreamKeyId: keyId })
+                  }}
+                />
               </SimpleGrid>
               <Textarea
                 mt="sm"
@@ -1807,12 +2107,18 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
               <Button
                 mt="md"
                 loading={busy === 'admin-api-product'}
-                disabled={!api.modelId.trim() || !api.name.trim()}
+                disabled={!api.modelId.trim() || !api.name.trim() || !api.upstreamKeyId}
                 onClick={() => run('admin-api-product', () => createAdminApiProduct(api), '模型 API 商品已上架')}
               >
                 创建并上架
               </Button>
             </Section>
+            <AdminApiUpstreamAssignments
+              products={productsQuery.data || []}
+              upstreams={upstreamsQuery.data || []}
+              busy={busy}
+              run={run}
+            />
           </Stack>
         </Tabs.Panel>
 
@@ -1830,10 +2136,138 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
           <Stack>
             <AdminNodeOperations nodes={nodesQuery.data || []} busy={busy} run={run} />
             <AdminReservationOperations reservations={reservationsQuery.data || []} busy={busy} run={run} />
+            <AdminSuspendedProxyKeys keys={suspendedKeysQuery.data || []} busy={busy} run={run} />
           </Stack>
         </Tabs.Panel>
       </Tabs>
     </Stack>
+  )
+}
+
+function AdminApiUpstreamAssignments({
+  products,
+  upstreams,
+  busy,
+  run,
+}: {
+  products: ComputeProduct[]
+  upstreams: ComputeUpstreamOption[]
+  busy: string | null
+  run: RunAction
+}) {
+  const apiProducts = products.filter((item) => item.productType === 'API')
+  const [selections, setSelections] = useState<Record<number, string>>({})
+  return (
+    <Section title="已上架 API 套餐的上游配置">
+      <Alert color="blue" mb="md">
+        可为旧套餐补配或切换上游。切换后用户已复制的 KOD 套餐 Key 不变，零售站真实 Key 不会暴露。
+      </Alert>
+      {apiProducts.length === 0 ? (
+        <Text c="chatbox-tertiary">暂无 API 套餐</Text>
+      ) : (
+        <Stack>
+          {apiProducts.map((product) => {
+            const current = product.upstreamKeyId ? `${product.upstreamStationId}:${product.upstreamKeyId}` : null
+            const selected = selections[product.id] || current
+            return (
+              <Flex key={product.id} align="end" gap="md" wrap="wrap">
+                <Box style={{ flex: 1, minWidth: 220 }}>
+                  <Text fw={600}>{product.name}</Text>
+                  <Text size="sm" c="chatbox-tertiary">
+                    固定模型：{product.modelId}；{current ? '已配置上游' : '尚未配置，用户无法购买或取得 Key'}
+                  </Text>
+                </Box>
+                <Select
+                  label="零售站与 Key"
+                  w={360}
+                  value={selected}
+                  data={upstreams.map((item) => ({
+                    value: `${item.stationId}:${item.keyId}`,
+                    label: `${item.stationUrl} · ${item.keyLabel}`,
+                  }))}
+                  onChange={(value) => value && setSelections({ ...selections, [product.id]: value })}
+                />
+                <Button
+                  loading={busy === `upstream-${product.id}`}
+                  disabled={!selected || selected === current}
+                  onClick={() => {
+                    const [stationId, keyId] = (selected || '').split(':').map(Number)
+                    return run(
+                      `upstream-${product.id}`,
+                      () => configureAdminProductUpstream(product.id, stationId, keyId),
+                      'API 套餐上游已更新'
+                    )
+                  }}
+                >
+                  保存上游
+                </Button>
+              </Flex>
+            )
+          })}
+        </Stack>
+      )}
+    </Section>
+  )
+}
+
+function AdminSuspendedProxyKeys({
+  keys,
+  busy,
+  run,
+}: {
+  keys: ComputeSuspendedProxyKey[]
+  busy: string | null
+  run: RunAction
+}) {
+  return (
+    <Section title={`异常套餐 Key（${keys.length}）`}>
+      {keys.length === 0 ? (
+        <Text c="chatbox-tertiary">暂无因 usage 异常而暂停的套餐 Key</Text>
+      ) : (
+        <Stack>
+          {keys.map((item) => (
+            <Paper key={item.id} withBorder p="md" radius="md">
+              <Stack gap="xs">
+                <Group justify="space-between">
+                  <Text fw={600}>
+                    {item.productName} · {item.email}
+                  </Text>
+                  <StatusBadge status={item.keyStatus} />
+                </Group>
+                <Text size="sm">
+                  模型：{item.modelId}；Key 尾号：{item.accessKeyLast4}；上游：{item.stationUrl || '-'}
+                </Text>
+                <Alert color="red">{item.suspendedReason}</Alert>
+                <Group justify="flex-end">
+                  <Button
+                    variant="light"
+                    loading={busy === `restore-key-${item.id}`}
+                    onClick={() =>
+                      run(`restore-key-${item.id}`, () => repairAdminProxyKey(item.id, false), '套餐 Key 已恢复')
+                    }
+                  >
+                    原 Key 恢复
+                  </Button>
+                  <Button
+                    color="orange"
+                    loading={busy === `regenerate-key-${item.id}`}
+                    onClick={() =>
+                      run(
+                        `regenerate-key-${item.id}`,
+                        () => repairAdminProxyKey(item.id, true),
+                        '已重新生成套餐 Key，用户可在我的资产查看'
+                      )
+                    }
+                  >
+                    重新生成并恢复
+                  </Button>
+                </Group>
+              </Stack>
+            </Paper>
+          ))}
+        </Stack>
+      )}
+    </Section>
   )
 }
 
@@ -2549,13 +2983,13 @@ function LedgerTable({ entries }: { entries: ComputeLedgerEntry[] }) {
 function ApiUsageTable({ entries }: { entries: ComputeApiUsage[] }) {
   return (
     <SimpleTable
-      columns={['时间', '模型', '输入（扣除/赠送）', '输出（扣除/赠送）', '状态']}
+      columns={['时间', '模型', '输入（扣除/赠送）', '输出（扣除/赠送）', '状态/异常']}
       rows={entries.map((entry) => [
         formatDate(entry.createTime),
         entry.modelId,
         `${formatTokens(entry.deductedPromptTokens)} / ${formatTokens(entry.giftedPromptTokens)}`,
         `${formatTokens(entry.deductedCompletionTokens)} / ${formatTokens(entry.giftedCompletionTokens)}`,
-        statusLabel(entry.status),
+        entry.errorMessage ? `${statusLabel(entry.status)}：${entry.errorMessage}` : statusLabel(entry.status),
       ])}
       empty="尚无模型 API Token 用量"
     />
@@ -2584,9 +3018,9 @@ function StatusBadge({ status }: { status: string }) {
   const color =
     status.includes('COMPLETED') || status === 'PUBLISHED' || status === 'APPROVED'
       ? 'green'
-      : status.includes('REJECT') || status.includes('CANCEL') || status === 'EXPIRED'
+      : status.includes('REJECT') || status.includes('CANCEL') || ['EXPIRED', 'EXHAUSTED', 'SUSPENDED'].includes(status)
         ? 'red'
-        : status.includes('PENDING')
+        : status.includes('PENDING') || status === 'CONFIG_REQUIRED'
           ? 'yellow'
           : 'blue'
   return (
@@ -2603,6 +3037,7 @@ const STATUS_LABELS: Record<string, string> = {
   TEST_APPROVED: '仅内测认证已通过',
   REVOKED: '已注销',
   SUSPENDED: '已暂停',
+  CONFIG_REQUIRED: '待配置上游',
   OFFLINE: '已离线/下架',
   DEPLOYING: '部署中',
   RUNNING: '运行中',
@@ -2635,6 +3070,8 @@ const STATUS_LABELS: Record<string, string> = {
   NO_PACKAGE: '无套餐，未扣人民币',
   PARTIAL: '部分额度已耗尽',
   EXHAUSTED: '已耗尽',
+  USAGE_MISSING: 'usage 异常',
+  UPSTREAM_ERROR: '上游错误',
   SUPPLIER_INCOME: '供应方收入',
   GPU_RENTAL_INCOME: 'GPU 租金收益',
   API_SALES_INCOME: 'Token 套餐销售收益',

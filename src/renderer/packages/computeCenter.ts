@@ -21,6 +21,8 @@ export interface ComputeProduct {
   packagePromptTokens?: number | null
   packageCompletionTokens?: number | null
   packagePriceCardHours?: number | null
+  upstreamStationId?: number | null
+  upstreamKeyId?: number | null
   gpuModel?: string | null
   gpuMemoryGb?: number | null
   gpuCount?: number | null
@@ -196,6 +198,7 @@ export interface ComputeApiUsage {
   giftedPromptTokens: number
   giftedCompletionTokens: number
   status: string
+  errorMessage?: string
   createTime: string
 }
 
@@ -208,6 +211,63 @@ export interface ComputePackageBalance {
   paidCardHours: number
   firstPurchasedAt: string
   lastPurchasedAt: string
+}
+
+export interface ComputePackagePurchase {
+  id: number
+  productId: number
+  productName: string
+  orderNo: string
+  modelId: string
+  promptTokensTotal: number
+  promptTokensRemaining: number
+  completionTokensTotal: number
+  completionTokensRemaining: number
+  priceCardHours: number
+  status: string
+  keyStatus: 'ACTIVE' | 'SUSPENDED' | 'EXHAUSTED' | 'CONFIG_REQUIRED'
+  accessKeyLast4: string
+  suspendedReason?: string
+  baseUrl: string
+  apiFormat: string
+  authenticationHeader: string
+  endpoints: string[]
+  upstreamStationId?: number | null
+  upstreamKeyId?: number | null
+  createTime: string
+}
+
+export interface ComputePackageCredential {
+  purchaseId: number
+  modelId: string
+  baseUrl: string
+  apiKey: string
+  apiFormat: string
+  authenticationHeader: string
+  endpoints: string[]
+  keyStatus: string
+}
+
+export interface ComputeUpstreamOption {
+  stationId: number
+  stationUrl: string
+  keyId: number
+  keyLabel: string
+  occupancyStatus: number
+}
+
+export interface ComputeSuspendedProxyKey {
+  id: number
+  userId: number
+  email: string
+  productId: number
+  productName: string
+  modelId: string
+  keyStatus: string
+  accessKeyLast4: string
+  suspendedReason: string
+  stationUrl?: string
+  updateTime: string
 }
 
 export interface ComputeIdentity {
@@ -349,6 +409,20 @@ export function listComputePackageBalances() {
   return request<ComputePackageBalance[]>('/api/compute/packages/balances')
 }
 
+export function listComputePackagePurchases() {
+  return request<ComputePackagePurchase[]>('/api/compute/packages/purchases')
+}
+
+export function getComputePackageCredential(purchaseId: number) {
+  return request<ComputePackageCredential>(`/api/compute/packages/purchases/${purchaseId}/credential`)
+}
+
+export function regenerateComputePackageKey(purchaseId: number) {
+  return request<ComputePackageCredential>(`/api/compute/packages/purchases/${purchaseId}/regenerate-key`, {
+    method: 'POST',
+  })
+}
+
 export function authorizeComputePackage(modelId: string) {
   return request<{
     managed: boolean
@@ -485,6 +559,8 @@ export interface ComputeProductInput {
   packagePromptTokens?: number
   packageCompletionTokens?: number
   packagePriceCardHours?: number
+  upstreamStationId?: number
+  upstreamKeyId?: number
 }
 
 export function createSupplierGpuProduct(input: ComputeProductInput) {
@@ -598,6 +674,28 @@ export function reviewAdminSupplier(supplierId: number, approved: boolean, reaso
 
 export function listAdminProducts() {
   return request<ComputeProduct[]>('/api/compute/admin/products')
+}
+
+export function listAdminUpstreams() {
+  return request<ComputeUpstreamOption[]>('/api/compute/admin/upstreams')
+}
+
+export function configureAdminProductUpstream(productId: number, stationId: number, keyId: number) {
+  return request<ComputeProduct>(`/api/compute/admin/products/${productId}/upstream`, {
+    method: 'POST',
+    body: { stationId, keyId },
+  })
+}
+
+export function listAdminSuspendedProxyKeys() {
+  return request<ComputeSuspendedProxyKey[]>('/api/compute/admin/proxy-keys/suspended')
+}
+
+export function repairAdminProxyKey(purchaseId: number, regenerate: boolean) {
+  return request<{ purchaseId: number; keyStatus: string; regenerated: boolean }>(
+    `/api/compute/admin/proxy-keys/${purchaseId}/repair`,
+    { method: 'POST', body: { regenerate } }
+  )
 }
 
 export function createAdminApiProduct(input: ComputeProductInput) {

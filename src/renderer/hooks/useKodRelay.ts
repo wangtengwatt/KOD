@@ -1,7 +1,6 @@
 import type { ProviderModelInfo } from '@shared/types'
 import { useCallback, useEffect, useMemo } from 'react'
 import { createStore, useStore } from 'zustand'
-import { authorizeComputePackage } from '@/packages/computeCenter'
 import {
   applyKodRelayProvider,
   fetchKodRelayModels,
@@ -21,7 +20,6 @@ import {
   releaseKodRelayKey,
   selectKodRelayKey,
   startKodRelayLogSync,
-  syncKodRelayLogsNow,
 } from '@/packages/kodRelay'
 import { getKodApiOrigin } from '@/packages/remote'
 import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
@@ -320,21 +318,10 @@ export function useKodRelay() {
       return false
     }
     try {
-      const entitlement = await authorizeComputePackage(selection.modelId)
-      if (entitlement.managed) {
-        await syncKodRelayLogsNow(apiOrigin, token)
-        const refreshed = await authorizeComputePackage(selection.modelId)
-        if (!refreshed.allowed) {
-          setNotice('package')
-          return false
-        }
-      }
-      if (!entitlement.managed) {
-        const balance = await getKodRelayBalance(apiOrigin, token)
-        if (balance.can_chat === false) {
-          setNotice('balance')
-          return false
-        }
+      const balance = await getKodRelayBalance(apiOrigin, token)
+      if (balance.can_chat === false) {
+        setNotice('balance')
+        return false
       }
     } catch (error) {
       console.warn('[Kod relay] entitlement check failed', error)
