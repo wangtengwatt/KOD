@@ -19,6 +19,8 @@ interface AndroidOverlayStatus {
   motion?: 'full' | 'reduced' | 'off'
   edgeSnap?: boolean
   positionLocked?: boolean
+  assistantState?: 'idle' | 'thinking' | 'executing' | 'success' | 'error' | 'waitingApproval'
+  lastMessage?: string
 }
 
 interface AndroidAgentNative {
@@ -42,6 +44,7 @@ interface AndroidAgentNative {
   startOverlayPet(): Promise<AndroidOverlayStatus>
   stopOverlayPet(): Promise<AndroidOverlayStatus>
   updateOverlayPreferences(options: { size?: 'small' | 'medium' | 'large'; opacity?: number; motion?: 'full' | 'reduced' | 'off'; edgeSnap?: boolean; positionLocked?: boolean }): Promise<AndroidOverlayStatus>
+  setOverlayAssistantState(options: { state: AndroidOverlayStatus['assistantState']; message?: string }): Promise<void>
   addListener(eventName: 'overlayStateChanged', listener: (status: AndroidOverlayStatus) => void): Promise<PluginListenerHandle>
   getForegroundApp(): Promise<{ packageName?: string; allowed: boolean }>
   readUiTree(options: { taskId: string; generation: number; limit?: number }): Promise<AndroidAgentActionResult>
@@ -71,6 +74,7 @@ export const androidAgentNative = {
   startOverlayPet: () => requireAndroid().startOverlayPet(),
   stopOverlayPet: () => requireAndroid().stopOverlayPet(),
   updateOverlayPreferences: (options: { size?: 'small' | 'medium' | 'large'; opacity?: number; motion?: 'full' | 'reduced' | 'off'; edgeSnap?: boolean; positionLocked?: boolean }) => requireAndroid().updateOverlayPreferences(options),
+  setOverlayAssistantState: (state: AndroidOverlayStatus['assistantState'], message?: string) => requireAndroid().setOverlayAssistantState({ state, message }),
   onOverlayStateChanged: (listener: (status: AndroidOverlayStatus) => void) => requireAndroid().addListener('overlayStateChanged', listener),
   getForegroundApp: () => requireAndroid().getForegroundApp(),
   readUiTree: (taskId: string, generation: number, limit = 80) => requireAndroid().readUiTree({ taskId, generation, limit }),

@@ -29,6 +29,7 @@ import { useAndroidAgentStore } from '@/packages/android-agent/controller'
 import { isMobileFilePickerAvailable, mobileFileNative } from '@/packages/android-agent/file-native'
 import type { MobileFile } from '@/packages/android-agent/file-types'
 import { androidAgentNative, isAndroidAgentAvailable } from '@/packages/android-agent/native'
+import { useAndroidAgentApprovalStore } from '@/packages/android-agent/approval-store'
 import type { AndroidAgentAppId, AndroidAgentTaskState } from '@/packages/android-agent/types'
 
 export const Route = createFileRoute('/android-agent/')({ component: AndroidAgentPage })
@@ -52,6 +53,22 @@ const terminalReasonText: Record<string, string> = {
   deadline_exceeded: '任务已达到时间限制',
 }
 
+function petStateForTask(task: { state: AndroidAgentTaskState; terminalReason?: string }, hasPendingApproval: boolean) {
+  if (hasPendingApproval && (task.state === 'running' || task.state === 'paused')) {
+    return { state: 'waitingApproval' as const, message: '等待你的批准' }
+  }
+  switch (task.state) {
+    case 'running':
+      return { state: 'executing' as const, message: '正在执行任务…' }
+    case 'paused':
+      return { state: 'executing' as const, message: '任务已暂停' }
+    case 'failed':
+      return { state: 'error' as const, message: (task.terminalReason && terminalReasonText[task.terminalReason]) || '任务执行失败' }
+    default:
+      return { state: 'idle' as const }
+  }
+}
+
 function friendlyError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   const code = message.match(/([A-Z_]{3,}):/)?.[1]
@@ -69,6 +86,7 @@ function friendlyError(error: unknown) {
 
 function AndroidAgentPage() {
   const store = useAndroidAgentStore()
+  const approvalRequest = useAndroidAgentApprovalStore((state) => state.request)
   const [tab, setTab] = useState<TabName>('pet')
   const [appId, setAppId] = useState<AndroidAgentAppId>('wechat')
   const [goal, setGoal] = useState('')
@@ -146,6 +164,12 @@ function AndroidAgentPage() {
   }, [])
 
   useEffect(() => {
+    if (!isAndroidAgentAvailable()) return
+    const petState = petStateForTask(store.task, Boolean(approvalRequest))
+    void androidAgentNative.setOverlayAssistantState(petState.state, petState.message).catch(() => undefined)
+  }, [store.task, approvalRequest])
+
+  useEffect(() => {
     const installed = store.apps.find((app) => app.installed)
     if (installed && !store.apps.find((app) => app.id === appId)?.installed) setAppId(installed.id)
   }, [store.apps, appId])
@@ -172,6 +196,15 @@ function AndroidAgentPage() {
   const canStart = Boolean(goal.trim() && store.accessibilityEnabled && selectedApp?.installed && !activeAction)
   const remainingSeconds = store.task.deadlineAt ? Math.max(0, Math.ceil((store.task.deadlineAt - now) / 1000)) : undefined
   const taskStatus = taskPresentation[store.task.state]
+  const petState = petStateForTask(store.task, Boolean(approvalRequest))
+  const petStateLabel: Record<string, string> = {
+    idle: '空闲',
+    thinking: '思考中',
+    executing: '正在执行',
+    success: '任务完成',
+    error: '遇到问题',
+    waitingApproval: '等待你的批准',
+  }
 
   const runTaskAction = async (name: ActionName, action: () => Promise<unknown>) => {
     setTaskError('')
@@ -229,6 +262,8 @@ function AndroidAgentPage() {
               if (options.positionLocked !== undefined) setPositionLocked(options.positionLocked)
               void runOverlayAction(() => androidAgentNative.updateOverlayPreferences(options))
             }}
+            petState={petState}
+            petStateLabel={petStateLabel}
           /></Tabs.Panel>
 
           <Tabs.Panel value="assistant"><AssistantPanel
@@ -262,6 +297,19 @@ function AndroidAgentPage() {
             setFileBusy={setFileBusy}
             fileError={fileError}
             setFileError={setFileError}
+            petSize={petSize}
+            petOpacity={petOpacity}
+            petMotion={petMotion}
+            edgeSnap={edgeSnap}
+            positionLocked={positionLocked}
+            onAppearanceChange={(options: any) => {
+              if (options.size) setPetSize(options.size)
+              if (options.opacity !== undefined) setPetOpacity(options.opacity)
+              if (options.motion) setPetMotion(options.motion)
+              if (options.edgeSnap !== undefined) setEdgeSnap(options.edgeSnap)
+              if (options.positionLocked !== undefined) setPositionLocked(options.positionLocked)
+              void runOverlayAction(() => androidAgentNative.updateOverlayPreferences(options))
+            }}
           /></Tabs.Panel>
         </Tabs>
       </Box>
@@ -273,6 +321,10 @@ function PermissionCard({ complete, title, description, action }: { complete: bo
   return <Card withBorder padding="md" radius="md"><Group align="flex-start" wrap="nowrap"><ThemeIcon color={complete ? 'green' : 'blue'} variant="light" radius="xl">{complete ? <IconCheck size={18} /> : <IconShieldCheck size={18} />}</ThemeIcon><Stack gap={4} style={{ flex: 1 }}><Group justify="space-between" align="flex-start"><Box><Text fw={600}>{title}</Text><Text size="sm" c="dimmed">{description}</Text></Box><Badge color={complete ? 'green' : 'yellow'} variant="light">{complete ? '已完成' : '待设置'}</Badge></Group>{action}</Stack></Group></Card>
 }
 
+function PetAppearanceCard(props: any) {
+  return <Card withBorder radius="lg" padding="md"><Stack gap="md"><Box><Text fw={600}>快捷外观</Text><Text size="sm" c="dimmed">设置会立即同步到系统悬浮桌宠。</Text></Box><Box><Text size="sm" mb={6}>桌宠大小</Text><SegmentedControl fullWidth value={props.petSize} onChange={(size) => props.onAppearanceChange({ size })} data={[{ label: '小', value: 'small' }, { label: '中', value: 'medium' }, { label: '大', value: 'large' }]} /></Box><Box><Group justify="space-between"><Text size="sm">透明度</Text><Text size="sm" c="dimmed">{Math.round(props.petOpacity * 100)}%</Text></Group><Slider min={50} max={100} step={5} value={Math.round(props.petOpacity * 100)} onChangeEnd={(value) => props.onAppearanceChange({ opacity: value / 100 })} /></Box><Box><Text size="sm" mb={6}>动画</Text><SegmentedControl fullWidth value={props.petMotion} onChange={(motion) => props.onAppearanceChange({ motion })} data={[{ label: '完整', value: 'full' }, { label: '减少', value: 'reduced' }, { label: '关闭', value: 'off' }]} /></Box><Switch label="松手后自动吸附屏幕边缘" description="关闭后可以停留在屏幕安全区域内的任意位置" checked={props.edgeSnap} onChange={(event) => props.onAppearanceChange({ edgeSnap: event.currentTarget.checked })} /><Switch label="锁定当前位置，防止误触拖动" description="锁定后单击仍可打开快捷菜单" checked={props.positionLocked} onChange={(event) => props.onAppearanceChange({ positionLocked: event.currentTarget.checked })} /></Stack></Card>
+}
+
 function PetPanel(props: any) {
   return <Stack>
     <Card withBorder padding="lg" radius="lg" style={{ background: 'rgba(225, 245, 224, 0.38)' }}>
@@ -282,15 +334,16 @@ function PetPanel(props: any) {
           onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); props.petDrag.current = { x: props.petPosition.x, y: props.petPosition.y, pointerX: event.clientX, pointerY: event.clientY } }}
           onPointerMove={(event) => { if (props.petDrag.current) props.setPetPosition({ x: props.petDrag.current.x + event.clientX - props.petDrag.current.pointerX, y: props.petDrag.current.y + event.clientY - props.petDrag.current.pointerY }) }}
           onPointerUp={() => { props.petDrag.current = undefined }} onPointerCancel={() => { props.petDrag.current = undefined }}
-        ><SuanbaoMascot state={props.taskState === 'running' ? 'executing' : 'idle'} animation="full" /></Box>
-        <Title order={3}>你好，我是蒜宝</Title>
+        ><SuanbaoMascot state={props.petState.state === 'executing' || props.petState.state === 'thinking' ? 'executing' : props.petState.state === 'error' ? 'error' : props.petState.state === 'success' ? 'success' : 'idle'} animation="full" /></Box>
+        <Group gap={6}><Title order={3}>你好，我是蒜宝</Title><Badge color={props.petState.state === 'waitingApproval' ? 'yellow' : props.petState.state === 'error' ? 'red' : props.petState.state === 'executing' ? 'green' : 'gray'}>{props.petStateLabel[props.petState.state]}</Badge></Group>
+        {props.petState.message && <Text size="sm" ta="center" c={props.petState.state === 'error' ? 'red' : 'dimmed'}>{props.petState.message}</Text>}
         <Text size="sm" c="dimmed" ta="center">在 KOD 里拖动我，或开启系统悬浮桌宠，让我陪你使用其他应用。</Text>
       </Stack>
     </Card>
     {props.error && <Alert color="red" title="桌宠操作失败">{props.error}</Alert>}
     <PermissionCard complete={props.overlayPermission} title="第 1 步 · 允许悬浮显示" description="用于把蒜宝显示在其他应用上方；你可以随时在系统设置中撤销。" action={!props.overlayPermission ? <Button mt="xs" loading={props.overlayBusy} onClick={props.onGrant}>前往系统设置</Button> : undefined} />
     <PermissionCard complete={props.overlayRunning} title="第 2 步 · 开启系统桌宠" description={props.overlayLifecycle === 'starting' ? '系统正在启动悬浮桌宠…' : props.overlayRunning ? '蒜宝正在其他应用上方显示。' : '授权后由你主动开启，不会在后台偷偷启动。'} action={props.overlayPermission ? <Button mt="xs" color={props.overlayRunning ? 'red' : 'blue'} variant={props.overlayRunning ? 'light' : 'filled'} loading={props.overlayBusy || props.overlayLifecycle === 'starting'} onClick={props.overlayRunning ? props.onStop : props.onStart}>{props.overlayRunning ? '关闭桌宠' : '开启桌宠'}</Button> : undefined} />
-    <Card withBorder radius="lg" padding="md"><Stack gap="md"><Box><Text fw={600}>快捷外观</Text><Text size="sm" c="dimmed">设置会立即同步到系统悬浮桌宠。</Text></Box><Box><Text size="sm" mb={6}>桌宠大小</Text><SegmentedControl fullWidth value={props.petSize} onChange={(size) => props.onAppearanceChange({ size })} data={[{ label: '小', value: 'small' }, { label: '中', value: 'medium' }, { label: '大', value: 'large' }]} /></Box><Box><Group justify="space-between"><Text size="sm">透明度</Text><Text size="sm" c="dimmed">{Math.round(props.petOpacity * 100)}%</Text></Group><Slider min={50} max={100} step={5} value={Math.round(props.petOpacity * 100)} onChangeEnd={(value) => props.onAppearanceChange({ opacity: value / 100 })} /></Box><Box><Text size="sm" mb={6}>动画</Text><SegmentedControl fullWidth value={props.petMotion} onChange={(motion) => props.onAppearanceChange({ motion })} data={[{ label: '完整', value: 'full' }, { label: '减少', value: 'reduced' }, { label: '关闭', value: 'off' }]} /></Box><Switch label="松手后自动吸附屏幕边缘" description="关闭后可以停留在屏幕安全区域内的任意位置" checked={props.edgeSnap} onChange={(event) => props.onAppearanceChange({ edgeSnap: event.currentTarget.checked })} /><Switch label="锁定当前位置，防止误触拖动" description="锁定后单击仍可打开快捷菜单" checked={props.positionLocked} onChange={(event) => props.onAppearanceChange({ positionLocked: event.currentTarget.checked })} /></Stack></Card>
+    <PetAppearanceCard {...props} />
   </Stack>
 }
 
@@ -322,6 +375,7 @@ function SettingsPanel(props: any) {
   const fileAction = (action: () => Promise<void>) => { props.setFileError(''); props.setFileBusy(true); void action().catch((error) => props.setFileError(friendlyError(error))).finally(() => props.setFileBusy(false)) }
   return <Stack>
     <Card withBorder radius="md" padding="md"><Stack><Title order={4}>任务限制</Title><Text size="sm" c="dimmed">更低的预算和时限可以减少误操作风险。</Text><Group grow><NumberInput label="操作预算" min={1} max={100} value={props.budget} onChange={(value) => props.setBudget(Number(value) || 1)} /><NumberInput label="时限（分钟）" min={1} max={15} value={props.durationMinutes} onChange={(value) => props.setDurationMinutes(Number(value) || 1)} /></Group></Stack></Card>
+    <PetAppearanceCard {...props} />
     <Alert color="blue" title="安全边界">仅支持微信和 QQ；每个写操作都需要批准，支付、转账、密码、验证码和凭证字段始终阻断。</Alert>
     {isMobileFilePickerAvailable() && <Card withBorder radius="md" padding="md"><Stack gap="xs"><Title order={4}>手机文件</Title><Text size="sm" c="dimmed">选择图片、PDF 或文本文件；文件不会自动上传。</Text>{props.fileError && <Alert color="red">{props.fileError}</Alert>}<Group><Button size="sm" loading={props.fileBusy} onClick={() => fileAction(async () => { const result = await mobileFileNative.pickFile('image'); if (!result.cancelled) props.setMobileFile(result.files[0]) })}>选择照片</Button><Button size="sm" variant="light" loading={props.fileBusy} onClick={() => fileAction(async () => { const result = await mobileFileNative.pickFile('document'); if (!result.cancelled) props.setMobileFile(result.files[0]) })}>选择文档</Button>{props.mobileFile && <Button size="sm" variant="light" loading={props.fileBusy} onClick={() => fileAction(() => mobileFileNative.shareFile(props.mobileFile.token).then(() => undefined))}>分享</Button>}{props.mobileFile && <Button size="sm" color="red" variant="light" loading={props.fileBusy} onClick={() => fileAction(() => mobileFileNative.revokeFile(props.mobileFile.token).then(() => props.setMobileFile(undefined)))}>撤销</Button>}</Group>{props.mobileFile && <Text size="xs" truncate>{props.mobileFile.name} · {props.mobileFile.mimeType} · {Math.ceil(props.mobileFile.size / 1024)} KiB</Text>}</Stack></Card>}
   </Stack>

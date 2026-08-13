@@ -210,6 +210,12 @@ public class AndroidAgentPlugin extends Plugin {
         call.resolve(overlayStatus());
     }
 
+    @PluginMethod
+    public void setOverlayAssistantState(PluginCall call) {
+        SuanbaoOverlayService.setAssistantState(getContext(), call.getString("state"), call.getString("message"));
+        call.resolve();
+    }
+
     private JSObject overlayStatus() {
         JSObject result = new JSObject();
         result.put("permissionGranted", SuanbaoOverlayService.canDraw(getContext()));
@@ -217,6 +223,8 @@ public class AndroidAgentPlugin extends Plugin {
         result.put("lifecycleState", SuanbaoOverlayService.lifecycleState());
         result.put("interactionState", SuanbaoOverlayService.interactionState());
         result.put("lastError", SuanbaoOverlayService.lastError());
+        result.put("assistantState", SuanbaoOverlayService.assistantState());
+        result.put("lastMessage", SuanbaoOverlayService.lastMessage());
         SuanbaoOverlayPreferences.Snapshot appearance = SuanbaoOverlayService.appearance(getContext());
         result.put("size", appearance.size());
         result.put("opacity", appearance.opacity());

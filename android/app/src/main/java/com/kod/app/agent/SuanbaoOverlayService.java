@@ -27,6 +27,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.core.app.NotificationCompat;
 
@@ -39,16 +40,22 @@ public class SuanbaoOverlayService extends Service {
     private static final String PREFS = "suanbao_overlay";
     private static final String ACTION_STOP = "com.kod.app.agent.STOP_SUANBAO_OVERLAY";
     private static final int POSITION_SCHEMA = 2;
+    private static final int BUBBLE_DP = 36;
 
     private static volatile boolean visible;
     private static volatile String lifecycleState = "stopped";
     private static volatile String interactionState = "idle";
     private static volatile String lastError;
+    private static volatile String assistantState = "idle";
+    private static volatile String lastMessage;
+    private static volatile SuanbaoOverlayService instance;
 
     private WindowManager windowManager;
     private View overlayView;
     private View menuView;
     private ImageView mascotView;
+    private TextView bubbleView;
+    private final Runnable hideBubbleRunnable = this::hideBubble;
     private WindowManager.LayoutParams layoutParams;
     private WindowManager.LayoutParams menuLayoutParams;
     private ValueAnimator snapAnimator;
@@ -72,6 +79,7 @@ public class SuanbaoOverlayService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         lifecycleState = "starting";
         interactionState = "idle";
         lastError = null;
@@ -106,17 +114,28 @@ public class SuanbaoOverlayService extends Service {
 
         int visibleWidth = dp(SuanbaoOverlayPreferences.visibleWidthDp(appearance.size()));
         int visibleHeight = dp(SuanbaoOverlayPreferences.visibleHeightDp(appearance.size()));
+
+        bubbleView = new TextView(this);
+        bubbleView.setVisibility(View.GONE);
+        bubbleView.setTextSize(12);
+        bubbleView.setGravity(Gravity.CENTER);
+        bubbleView.setPadding(dp(10), dp(6), dp(10), dp(6));
+        bubbleView.setMaxWidth(dp(150));
+        bubbleView.setBackground(bubbleBackground(assistantState));
+        root.addView(bubbleView, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP));
+
         mascotView = new ImageView(this);
         mascotView.setImageResource(R.drawable.suanbao_mascot);
         mascotView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         mascotView.setAlpha(appearance.opacity());
-        root.addView(mascotView, new FrameLayout.LayoutParams(visibleWidth, visibleHeight));
+        root.addView(mascotView, new FrameLayout.LayoutParams(visibleWidth, visibleHeight, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM));
 
         layoutParams = createLayoutParams(visibleWidth + dp(6), visibleHeight + dp(6), false);
         layoutParams.gravity = Gravity.TOP | Gravity.START;
         overlayView = root;
         restorePosition();
         root.setOnTouchListener(new PetTouchListener());
+        if (lastMessage != null) updateBubbleInternal();
 
         try {
             windowManager.addView(overlayView, layoutParams);
@@ -236,13 +255,116 @@ public class SuanbaoOverlayService extends Service {
         if (overlayView == null || mascotView == null) { sendStateChanged(); return; }
         int width = dp(SuanbaoOverlayPreferences.visibleWidthDp(appearance.size()));
         int height = dp(SuanbaoOverlayPreferences.visibleHeightDp(appearance.size()));
-        FrameLayout.LayoutParams mascotParams = new FrameLayout.LayoutParams(width, height);
+        FrameLayout.LayoutParams mascotParams = new FrameLayout.LayoutParams(width, height, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM);
         mascotView.setLayoutParams(mascotParams);
         mascotView.setAlpha(appearance.opacity());
         layoutParams.width = width + dp(6);
         layoutParams.height = height + dp(6);
+        if (bubbleView != null && bubbleView.getVisibility() == View.VISIBLE) layoutParams.height += dp(BUBBLE_DP);
         moveTo(layoutParams.x, layoutParams.y);
         sendStateChanged();
+    }
+
+    public static void setAssistantState(android.content.Context context, String state, String message) {
+        assistantState = state == null ? "idle" : state;
+        lastMessage = message == null ? null : message.trim();
+        SuanbaoOverlayService service = instance;
+        if (service != null) service.postBubbleUpdate();
+        else if (visible) {
+            Intent intent = new Intent(context, SuanbaoOverlayService.class).setAction("com.kod.app.agent.REFRESH_SUANBAO_OVERLAY");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent);
+            else context.startService(intent);
+        }
+    }
+
+    private void postBubbleUpdate() {
+        if (overlayView != null) overlayView.post(this::updateBubbleInternal);
+    }
+
+    public static String assistantState() { return assistantState; }
+    public static String lastMessage() { return lastMessage; }
+
+    private void updateBubbleInternal() {
+        if (bubbleView == null || overlayView == null) return;
+        boolean show = lastMessage != null && !lastMessage.isEmpty() && !"idle".equals(assistantState);
+        boolean visibleNow = bubbleView.getVisibility() == View.VISIBLE;
+        overlayView.removeCallbacks(hideBubbleRunnable);
+        if (!show) {
+            if (visibleNow) {
+                bubbleView.setVisibility(View.GONE);
+                layoutParams.height -= dp(BUBBLE_DP);
+                layoutParams.y += dp(BUBBLE_DP);
+                applyLayoutAndClamp();
+            }
+            sendStateChanged();
+            return;
+        }
+        bubbleView.setText(lastMessage);
+        bubbleView.setTextColor(bubbleTextColor(assistantState));
+        bubbleView.setBackground(bubbleBackground(assistantState));
+        if (!visibleNow) {
+            bubbleView.setVisibility(View.VISIBLE);
+            layoutParams.height += dp(BUBBLE_DP);
+            layoutParams.y -= dp(BUBBLE_DP);
+            applyLayoutAndClamp();
+        }
+        if ("success".equals(assistantState) || "error".equals(assistantState)) {
+            overlayView.postDelayed(hideBubbleRunnable, 3500);
+        }
+        sendStateChanged();
+    }
+
+    private void hideBubble() {
+        if (bubbleView == null) return;
+        lastMessage = null;
+        updateBubbleInternal();
+    }
+
+    private void applyLayoutAndClamp() {
+        SuanbaoOverlayGeometry.Point point = SuanbaoOverlayGeometry.clamp(
+            new SuanbaoOverlayGeometry.Point(layoutParams.x, layoutParams.y), safeBounds(layoutParams.width, layoutParams.height));
+        layoutParams.x = point.x();
+        layoutParams.y = point.y();
+        try { windowManager.updateViewLayout(overlayView, layoutParams); } catch (RuntimeException ignored) {}
+    }
+
+    private GradientDrawable bubbleBackground(String state) {
+        GradientDrawable background = new GradientDrawable();
+        background.setCornerRadius(dp(10));
+        background.setStroke(dp(1), bubbleStrokeColor(state));
+        background.setColor(bubbleFillColor(state));
+        background.setAlpha(240);
+        return background;
+    }
+
+    private int bubbleFillColor(String state) {
+        switch (state == null ? "" : state) {
+            case "success": return 0xFFE6F4EA;
+            case "error": return 0xFFFDECEA;
+            case "waitingApproval": return 0xFFFFF4E5;
+            case "thinking": return 0xFFF1F3F5;
+            default: return 0xFFFFFFFF;
+        }
+    }
+
+    private int bubbleStrokeColor(String state) {
+        switch (state == null ? "" : state) {
+            case "success": return 0xFF4CAF7D;
+            case "error": return 0xFFEF8A82;
+            case "waitingApproval": return 0xFFE6A23C;
+            case "thinking": return 0xFFADB5BD;
+            default: return 0xFFCBD2D9;
+        }
+    }
+
+    private int bubbleTextColor(String state) {
+        switch (state == null ? "" : state) {
+            case "success": return 0xFF1E7B45;
+            case "error": return 0xFFB3261E;
+            case "waitingApproval": return 0xFF7A4E00;
+            case "thinking": return 0xFF495057;
+            default: return 0xFF1F2933;
+        }
     }
 
     private void restoreMascotFeedback() {
@@ -493,6 +615,7 @@ public class SuanbaoOverlayService extends Service {
 
     @Override
     public void onDestroy() {
+        instance = null;
         cancelSnap();
         hideMenu();
         if (overlayView != null && windowManager != null) {
