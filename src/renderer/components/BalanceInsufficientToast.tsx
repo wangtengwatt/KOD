@@ -1,9 +1,16 @@
 import { Text } from '@mantine/core'
 import { IconAlertTriangle } from '@tabler/icons-react'
+import { Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { getChatboxOrigin } from '@/packages/remote'
 
-export function BalanceInsufficientToast({ onClose }: { onClose: () => void }) {
+export function BalanceInsufficientToast({
+  onClose,
+  kind = 'balance',
+}: {
+  onClose: () => void
+  kind?: 'balance' | 'package'
+}) {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
@@ -27,16 +34,22 @@ export function BalanceInsufficientToast({ onClose }: { onClose: () => void }) {
           <IconAlertTriangle size={20} className="text-red-500" />
         </span>
         <Text size="sm" fw={600} c="red.9">
-          余额不足，请前往
-          <a
-            href={getChatboxOrigin()}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mx-1 font-bold text-indigo-600 underline"
-          >
-            官网
-          </a>
-          充值
+          {kind === 'package' ? '该模型输入或输出 Token 套餐已耗尽，请前往' : '余额不足，请前往'}
+          {kind === 'package' ? (
+            <Link to="/compute-center" className="mx-1 font-bold text-indigo-600 underline">
+              算力中心
+            </Link>
+          ) : (
+            <a
+              href={getChatboxOrigin()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mx-1 font-bold text-indigo-600 underline"
+            >
+              官网
+            </a>
+          )}
+          {kind === 'package' ? '购买套餐' : '充值'}
         </Text>
       </div>
     </div>

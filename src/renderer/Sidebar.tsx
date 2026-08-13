@@ -3,6 +3,7 @@ import SwipeableDrawer from '@mui/material/SwipeableDrawer'
 import {
   IconCirclePlus,
   IconCode,
+  IconCpu,
   IconDownload,
   IconInfoCircle,
   IconLayoutSidebarLeftCollapse,
@@ -267,6 +268,19 @@ export default function Sidebar() {
                 variant="transparent"
                 color="chatbox-secondary"
                 size={24}
+                aria-label="算力中心"
+                onClick={() => {
+                  navigate({ to: '/compute-center' })
+                  setShowSidebar(false)
+                }}
+              >
+                <ScalableIcon icon={IconCpu} size={20} />
+              </ActionIcon>
+
+              <ActionIcon
+                variant="transparent"
+                color="chatbox-secondary"
+                size={24}
                 onClick={() => {
                   navigateToSettings()
                   setShowSidebar(false)
@@ -298,23 +312,21 @@ export default function Sidebar() {
               <NavLink
                 c="chatbox-secondary"
                 className="rounded"
+                label="算力中心"
+                leftSection={<ScalableIcon icon={IconCpu} size={20} />}
+                onClick={() => navigate({ to: '/compute-center' })}
+                variant="light"
+                p="xs"
+              />
+              <NavLink
+                c="chatbox-secondary"
+                className="rounded"
                 label={t('Settings')}
                 leftSection={<ScalableIcon icon={IconSettingsFilled} size={20} />}
                 onClick={() => navigateToSettings()}
                 variant="light"
                 p="xs"
               />
-              {FORCE_ENABLE_DEV_PAGES && (
-                <NavLink
-                  c="chatbox-secondary"
-                  className="rounded"
-                  label="Dev Tools"
-                  leftSection={<ScalableIcon icon={IconCode} size={20} />}
-                  onClick={() => navigate({ to: '/dev' })}
-                  variant="light"
-                  p="xs"
-                />
-              )}
               <AboutNavLink versionHook={versionHook} navigate={navigate} />
             </>
           )}

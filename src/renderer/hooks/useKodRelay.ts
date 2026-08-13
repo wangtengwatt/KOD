@@ -1,6 +1,7 @@
 import type { ProviderModelInfo } from '@shared/types'
 import { useCallback, useEffect, useMemo } from 'react'
 import { createStore, useStore } from 'zustand'
+import { authorizeComputePackage } from '@/packages/computeCenter'
 import {
   applyKodRelayProvider,
   fetchKodRelayModels,
@@ -20,12 +21,13 @@ import {
   releaseKodRelayKey,
   selectKodRelayKey,
   startKodRelayLogSync,
+  syncKodRelayLogsNow,
 } from '@/packages/kodRelay'
 import { getKodApiOrigin } from '@/packages/remote'
 import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
 import { settingsStore } from '@/stores/settingsStore'
 
-export type KodRelayNotice = 'conflict' | 'balance' | 'unavailable' | null
+export type KodRelayNotice = 'conflict' | 'balance' | 'package' | 'unavailable' | null
 
 export interface KodRelayRecommendation {
   requirement: KodRelayModelRequirement
@@ -318,13 +320,26 @@ export function useKodRelay() {
       return false
     }
     try {
-      const balance = await getKodRelayBalance(apiOrigin, token)
-      if (balance.can_chat === false) {
-        setNotice('balance')
-        return false
+      const entitlement = await authorizeComputePackage(selection.modelId)
+      if (entitlement.managed) {
+        await syncKodRelayLogsNow(apiOrigin, token)
+        const refreshed = await authorizeComputePackage(selection.modelId)
+        if (!refreshed.allowed) {
+          setNotice('package')
+          return false
+        }
+      }
+      if (!entitlement.managed) {
+        const balance = await getKodRelayBalance(apiOrigin, token)
+        if (balance.can_chat === false) {
+          setNotice('balance')
+          return false
+        }
       }
     } catch (error) {
-      console.warn('[Kod relay] balance check failed', error)
+      console.warn('[Kod relay] entitlement check failed', error)
+      setNotice('unavailable')
+      return false
     }
     void startKodRelayLogSync(apiOrigin, token).catch((error) =>
       console.warn('[Kod relay] failed to start log sync', error)

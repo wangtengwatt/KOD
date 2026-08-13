@@ -6,6 +6,7 @@ import { authInfoStore } from '@/stores/authInfoStore'
 import {
   CHATBOX_BUILD_CHANNEL,
   KOD_API_ORIGIN,
+  NODE_ENV,
   USE_BETA_API,
   USE_BETA_CHATBOX,
   USE_LOCAL_API,
@@ -125,7 +126,7 @@ export function getChatboxOrigin() {
 }
 
 export function getKodApiOrigin() {
-  return KOD_API_ORIGIN
+  return USE_LOCAL_API || NODE_ENV === 'development' ? 'http://localhost:8080' : KOD_API_ORIGIN
 }
 
 export function buildChatboxUrl(path: string) {
@@ -168,7 +169,7 @@ export async function loginWithKod(params: {
   inviteCode?: string
   emailCode?: string
 }) {
-  const json = await ofetch(`${KOD_API_ORIGIN}/api/auth/login`, {
+  const json = await ofetch(`${getKodApiOrigin()}/api/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -202,7 +203,7 @@ export async function loginWithKod(params: {
  * 发送邮箱验证码。
  */
 export async function sendKodEmailCode(email: string) {
-  const json = await ofetch(`${KOD_API_ORIGIN}/api/auth/send-code`, {
+  const json = await ofetch(`${getKodApiOrigin()}/api/auth/send-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: { email },
@@ -224,7 +225,7 @@ export async function getKodRelayStationConfig(token?: string | null): Promise<K
     throw new Error('Missing Kod login token')
   }
 
-  const json = await ofetch(`${KOD_API_ORIGIN}/api/relay-station/config`, {
+  const json = await ofetch(`${getKodApiOrigin()}/api/relay-station/config`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
