@@ -134,6 +134,14 @@ export async function startKodRelayLogSync(apiOrigin: string, token: string) {
   }
 }
 
+export async function syncKodRelayLogsNow(apiOrigin: string, token: string) {
+  const response = await fetch(`${normalizeBaseUrl(apiOrigin)}/api/log/sync/now`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error(`Kod immediate log sync failed (${response.status})`)
+}
+
 export async function fetchKodRelayModels(selection: KodRelaySelection, signal?: AbortSignal) {
   const response = await fetch(`${normalizeBaseUrl(selection.stationUrl)}/models`, {
     headers: { Authorization: `Bearer ${selection.apiKey}` },

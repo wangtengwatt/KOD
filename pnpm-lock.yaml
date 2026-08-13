@@ -14,9 +14,15 @@ overrides:
   fast-xml-parser: '>=5.5.7'
 
 patchedDependencies:
-  '@ai-sdk/deepseek@2.0.17': 38ca8fe1e6bf5a471413f4cbe6d1fe49d0cd4e74e9494fe802c3a7036497eb41
-  libsql@0.5.22: 1cd6cac4cce1855ac60c054495f98b9ba467098185ea666dff300e0245a4c75f
-  mdast-util-gfm-autolink-literal@2.0.1: 934e31b0ea322d46e1ed0b965746902ff8d2260983709b5a81337f6cc26e4b09
+  '@ai-sdk/deepseek@2.0.17':
+    hash: 38ca8fe1e6bf5a471413f4cbe6d1fe49d0cd4e74e9494fe802c3a7036497eb41
+    path: patches/@ai-sdk__deepseek@2.0.17.patch
+  libsql@0.5.22:
+    hash: 1cd6cac4cce1855ac60c054495f98b9ba467098185ea666dff300e0245a4c75f
+    path: patches/libsql@0.5.22.patch
+  mdast-util-gfm-autolink-literal@2.0.1:
+    hash: 934e31b0ea322d46e1ed0b965746902ff8d2260983709b5a81337f6cc26e4b09
+    path: patches/mdast-util-gfm-autolink-literal@2.0.1.patch
 
 importers:
 
@@ -26920,7 +26926,7 @@ snapshots:
 
   rimraf@2.6.3:
     dependencies:
-      glob: 7.2.0
+      glob: 7.2.3
 
   rimraf@2.7.1:
     dependencies:

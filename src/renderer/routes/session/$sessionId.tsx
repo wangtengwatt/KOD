@@ -259,6 +259,7 @@ function RouteComponent() {
       </Box>
       <ThreadHistoryDrawer session={currentSession} />
       {relay.notice === 'balance' && <BalanceInsufficientToast onClose={() => relay.setNotice(null)} />}
+      {relay.notice === 'package' && <BalanceInsufficientToast kind="package" onClose={() => relay.setNotice(null)} />}
       {relay.notice === 'conflict' && (
         <RelayNoticeToast message="所选节点已被占用，请重新选择" onClose={() => relay.setNotice(null)} />
       )}
