@@ -24,6 +24,9 @@ export const StorageKeyGenerator = {
   picture(category: string) {
     return `picture:${category}:${uuidv4()}`
   },
+  video(category: string) {
+    return `video:${category}:${uuidv4()}`
+  },
   file(sessionId: string, msgId: string) {
     return `file:${sessionId}:${msgId}:${uuidv4()}`
   },

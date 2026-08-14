@@ -188,6 +188,8 @@ export default defineConfig(({ mode }) => {
         'process.env.USE_BETA_CHATBOX': JSON.stringify(process.env.USE_BETA_CHATBOX || ''),
         'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
         'process.env.KOD_PAYMENT_HOSTS': JSON.stringify(process.env.KOD_PAYMENT_HOSTS || 'kod.kai.com,mzf.mapay.cc'),
+        'process.env.KOD_VIDEO_API_HOST': JSON.stringify(process.env.KOD_VIDEO_API_HOST || ''),
+        'process.env.KOD_VIDEO_API_KEY': JSON.stringify(process.env.KOD_VIDEO_API_KEY || ''),
       },
     },
     preload: {
@@ -342,6 +344,8 @@ export default defineConfig(({ mode }) => {
         'process.env.USE_BETA_CHATBOX': JSON.stringify(process.env.USE_BETA_CHATBOX || ''),
         'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
         'process.env.KOD_PAYMENT_HOSTS': JSON.stringify(process.env.KOD_PAYMENT_HOSTS || 'kod.kai.com,mzf.mapay.cc'),
+        'process.env.KOD_VIDEO_API_HOST': JSON.stringify(process.env.KOD_VIDEO_API_HOST || ''),
+        'process.env.KOD_VIDEO_API_KEY': JSON.stringify(process.env.KOD_VIDEO_API_KEY || ''),
       },
       optimizeDeps: {
         // KOD opt: disabled force to allow Vite dependency cache (saves ~200MB on repeated dev starts).

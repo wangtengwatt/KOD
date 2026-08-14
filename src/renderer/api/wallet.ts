@@ -69,6 +69,28 @@ export const WalletSchema = WalletWireSchema.transform((value) => ({
   balance: decimalNumber.parse(value.balance),
   historicalConsumption: decimalNumber.parse(value.historical_consumption),
 }))
+export const VideoConsumeReportSchema = z
+  .object({
+    duplicated: z.boolean().default(false),
+    amount: decimalWire.pipe(nonnegativeNumber),
+    balance: decimalWire,
+  })
+  .transform((value) => ({
+    duplicated: value.duplicated,
+    amount: Number(value.amount),
+    balance: Number(value.balance),
+  }))
+
+export interface VideoConsumeReportInput {
+  requestId: string
+  model: string
+  tokens: number
+  upstreamTaskId?: string
+  duration?: number
+  resolution?: string
+  hasVideoInput?: boolean
+  hasAudio?: boolean
+}
 export const TopupRecordWireSchema = z.object({
   id: longIdWire,
   user_id: longIdWire,
@@ -200,6 +222,21 @@ export const walletApi = {
     }
     return history
   },
+  reportVideoConsumption: (input: VideoConsumeReportInput) =>
+    request('/api/user/consume/video', VideoConsumeReportSchema, {
+      method: 'POST',
+      body: {
+        request_id: input.requestId,
+        model: input.model,
+        tokens: input.tokens,
+        upstream_task_id: input.upstreamTaskId,
+        duration: input.duration,
+        resolution: input.resolution,
+        has_video_input: input.hasVideoInput,
+        has_audio: input.hasAudio,
+      },
+      retry: 0,
+    }),
 }
 export type PayMethod = z.infer<typeof PayMethodSchema>
 export type TopupInfo = z.infer<typeof TopupInfoSchema>

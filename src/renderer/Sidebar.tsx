@@ -10,6 +10,7 @@ import {
   IconMessageChatbot,
   IconPhotoPlus,
   IconSettingsFilled,
+  IconVideoPlus,
 } from '@tabler/icons-react'
 import { useNavigate } from '@tanstack/react-router'
 import clsx from 'clsx'
@@ -76,6 +77,14 @@ export default function Sidebar() {
       setShowSidebar(false)
     }
     trackingEvent('open_image_creator', { event_category: 'user' })
+  }, [isSmallScreen, setShowSidebar, navigate])
+
+  const handleCreateNewVideoSession = useCallback(() => {
+    navigate({ to: '/video-creator' })
+    if (isSmallScreen) {
+      setShowSidebar(false)
+    }
+    trackingEvent('open_video_creator', { event_category: 'user' })
   }, [isSmallScreen, setShowSidebar, navigate])
 
   const handleCreateNewTask = useCallback(() => {
@@ -242,6 +251,10 @@ export default function Sidebar() {
                 >
                   <ScalableIcon icon={IconPhotoPlus} className="mr-2" />
                   {t('Create Image')}
+                </Button>
+                <Button variant="light" fullWidth data-testid="new-video-button" onClick={handleCreateNewVideoSession}>
+                  <ScalableIcon icon={IconVideoPlus} className="mr-2" />
+                  生成视频
                 </Button>
               </>
             )}

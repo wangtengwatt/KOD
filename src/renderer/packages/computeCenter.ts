@@ -1,4 +1,10 @@
 import { type FetchOptions, ofetch } from 'ofetch'
+import {
+  COMPUTE_IMAGE_UPLOAD_MAX_BYTES,
+  COMPUTE_IMAGE_UPLOAD_RETRY_BYTES,
+  isComputeUploadSizeExceeded,
+  prepareComputeImageUpload,
+} from '@/packages/computeImageUpload'
 import { getKodApiOrigin } from '@/packages/remote'
 import { authInfoStore } from '@/stores/authInfoStore'
 
@@ -27,6 +33,10 @@ export interface ComputeProduct {
   gpuMemoryGb?: number | null
   gpuCount?: number | null
   pricePerGpuHour?: number | null
+  tradeMode?: 'LEGACY_RESERVATION' | 'MARKETPLACE_FIXED' | null
+  packageDurationHours?: number | null
+  deliveryDeadlineHours?: number | null
+  coverImageId?: number | null
   availableFrom?: string | null
   availableTo?: string | null
   deliveryMode?: string | null
@@ -112,6 +122,15 @@ export interface ComputeReservation {
   nodeStatus?: string | null
   deliveryInfo?: string
   deliveredAt?: string | null
+  tradeMode?: 'LEGACY_RESERVATION' | 'MARKETPLACE_FIXED'
+  packageDurationHours?: number | null
+  buyerPublicKey?: string
+  deliveryDeadlineAt?: string | null
+  autoConfirmAt?: string | null
+  buyerConfirmedAt?: string | null
+  disputeReason?: string
+  disputeEvidence?: string
+  disputedAt?: string | null
   productName: string
   gpuModel: string
   createTime: string
@@ -368,6 +387,10 @@ export function listComputeProducts(type?: ProductType) {
   return request<ComputeProduct[]>(`/api/compute/products${query}`, undefined, false)
 }
 
+export function getComputeProductImageUrl(productId: number, imageId: number) {
+  return `${getKodApiOrigin()}/api/compute/products/${productId}/images/${imageId}`
+}
+
 export function getComputeAccount() {
   return request<ComputeAccount>('/api/compute/account')
 }
@@ -456,9 +479,7 @@ export function listComputeApiUsage() {
 export function createComputeReservation(
   input: {
     productId: number
-    gpuCount: number
-    startTime: string
-    endTime: string
+    buyerPublicKey: string
   },
   autoTopUp = false
 ) {
@@ -478,10 +499,31 @@ export function cancelComputeReservation(reservationId: number) {
   })
 }
 
-export function deliverComputeReservation(reservationId: number, deliveryInfo: string) {
+export function deliverComputeReservation(
+  reservationId: number,
+  input: {
+    sshHost: string
+    sshPort: number
+    sshUsername: string
+    actualStart: string
+    actualEnd: string
+    deliveryNote: string
+  }
+) {
   return request<ComputeReservation>(`/api/compute/reservations/${reservationId}/delivery`, {
     method: 'POST',
-    body: { deliveryInfo },
+    body: input,
+  })
+}
+
+export function confirmComputeReservation(reservationId: number) {
+  return request<ComputeReservation>(`/api/compute/reservations/${reservationId}/confirm`, { method: 'POST' })
+}
+
+export function disputeComputeReservation(reservationId: number, reason: string, evidence: string) {
+  return request<ComputeReservation>(`/api/compute/reservations/${reservationId}/dispute`, {
+    method: 'POST',
+    body: { reason, evidence },
   })
 }
 
@@ -497,13 +539,26 @@ export function createTestComputeIdentity() {
   return request<ComputeIdentity>('/api/compute/identity/test', { method: 'POST' })
 }
 
-export function submitComputeIdentity(input: { realName: string; identityNo: string; front: File; back: File }) {
-  const body = new FormData()
-  body.append('realName', input.realName)
-  body.append('identityNo', input.identityNo)
-  body.append('front', input.front)
-  body.append('back', input.back)
-  return request<ComputeIdentity>('/api/compute/identity', { method: 'POST', body })
+export async function submitComputeIdentity(input: { realName: string; identityNo: string; front: File; back: File }) {
+  const submit = async (maxBytes: number) => {
+    const [front, back] = await Promise.all([
+      prepareComputeImageUpload(input.front, maxBytes),
+      prepareComputeImageUpload(input.back, maxBytes),
+    ])
+    const body = new FormData()
+    body.append('realName', input.realName)
+    body.append('identityNo', input.identityNo)
+    body.append('front', front)
+    body.append('back', back)
+    return request<ComputeIdentity>('/api/compute/identity', { method: 'POST', body })
+  }
+
+  try {
+    return await submit(COMPUTE_IMAGE_UPLOAD_MAX_BYTES)
+  } catch (error) {
+    if (!isComputeUploadSizeExceeded(error)) throw error
+    return submit(COMPUTE_IMAGE_UPLOAD_RETRY_BYTES)
+  }
 }
 
 export function listSupplierNodes() {
@@ -520,15 +575,26 @@ export interface ComputeNodeInput {
   ramGb: number
   storageGb: number
   networkDescription: string
-  sshHost: string
-  sshPort: number
-  sshUsername: string
-  sshAuthType: 'PASSWORD' | 'PRIVATE_KEY'
-  sshCredential: string
+  resourceProof: File | null
 }
 
-export function createSupplierNode(input: ComputeNodeInput) {
-  return request<ComputeGpuNode>('/api/compute/supplier/nodes', { method: 'POST', body: input })
+export async function createSupplierNode(input: ComputeNodeInput) {
+  const { resourceProof, ...payload } = input
+  if (!resourceProof) throw new Error('请上传 GPU 资源证明图片')
+  const submit = async (maxBytes: number) => {
+    const proof = await prepareComputeImageUpload(resourceProof, maxBytes)
+    const body = new FormData()
+    body.append('payload', JSON.stringify(payload))
+    body.append('resourceProof', proof)
+    return request<ComputeGpuNode>('/api/compute/supplier/nodes', { method: 'POST', body })
+  }
+
+  try {
+    return await submit(COMPUTE_IMAGE_UPLOAD_MAX_BYTES)
+  } catch (error) {
+    if (!isComputeUploadSizeExceeded(error)) throw error
+    return submit(COMPUTE_IMAGE_UPLOAD_RETRY_BYTES)
+  }
 }
 
 export function applyComputeSupplier(input: { displayName: string; contact: string; description: string }) {
@@ -559,12 +625,31 @@ export interface ComputeProductInput {
   packagePromptTokens?: number
   packageCompletionTokens?: number
   packagePriceCardHours?: number
+  packageDurationHours?: number
+  deliveryDeadlineHours?: number
   upstreamStationId?: number
   upstreamKeyId?: number
 }
 
-export function createSupplierGpuProduct(input: ComputeProductInput) {
-  return request<ComputeProduct>('/api/compute/supplier/products', { method: 'POST', body: input })
+export async function createSupplierGpuProduct(input: ComputeProductInput, images: File[] = []) {
+  const product = await request<ComputeProduct>('/api/compute/supplier/products', { method: 'POST', body: input })
+  for (const image of images) {
+    const uploadImage = async (maxBytes: number) => {
+      const body = new FormData()
+      body.append('image', await prepareComputeImageUpload(image, maxBytes))
+      return request<{ imageId: number; productId: number }>(`/api/compute/supplier/products/${product.id}/images`, {
+        method: 'POST',
+        body,
+      })
+    }
+    try {
+      await uploadImage(COMPUTE_IMAGE_UPLOAD_MAX_BYTES)
+    } catch (error) {
+      if (!isComputeUploadSizeExceeded(error)) throw error
+      await uploadImage(COMPUTE_IMAGE_UPLOAD_RETRY_BYTES)
+    }
+  }
+  return product
 }
 
 export function createComputeTransfer(
@@ -640,15 +725,14 @@ export function listAdminNodes() {
   return request<ComputeGpuNode[]>('/api/compute/admin/nodes')
 }
 
-export function getAdminNodeCredential(nodeId: number) {
-  return request<{
-    id: number
-    sshHost: string
-    sshPort: number
-    sshUsername: string
-    sshAuthType: string
-    sshCredential: string
-  }>(`/api/compute/admin/nodes/${nodeId}/credential`)
+export async function getAdminNodeProof(nodeId: number) {
+  const token = authInfoStore.getState().accessToken
+  if (!token) throw new Error('请先登录 KOD 账号')
+  const response = await fetch(`${getKodApiOrigin()}/api/compute/admin/nodes/${nodeId}/proof`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new Error('资源证明读取失败')
+  return response.blob()
 }
 
 export function reviewAdminNode(nodeId: number, approved: boolean, reason = '', verificationNote = '') {

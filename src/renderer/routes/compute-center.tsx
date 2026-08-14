@@ -71,6 +71,7 @@ import {
   cancelComputeReservation,
   cancelComputeTransfer,
   configureAdminProductUpstream,
+  confirmComputeReservation,
   createAdminApiProduct,
   createComputeReservation,
   createComputeTransfer,
@@ -78,14 +79,16 @@ import {
   createSupplierNode,
   createTestComputeIdentity,
   deliverComputeReservation,
+  disputeComputeReservation,
   getAdminIdentity,
   getAdminIdentityDocument,
-  getAdminNodeCredential,
+  getAdminNodeProof,
   getComputeAccount,
   getComputeAdminOverview,
   getComputeConfig,
   getComputeIdentity,
   getComputePackageCredential,
+  getComputeProductImageUrl,
   getComputeSupplier,
   grantAdminCardHours,
   listAdminIdentities,
@@ -124,6 +127,7 @@ import {
   updateComputeAdminSettings,
   withdrawComputeCardHours,
 } from '@/packages/computeCenter'
+import { addHoursToLocalDateTime, resolvePackageDurationHours } from '@/packages/computeDeliveryTime'
 import { copyToClipboard } from '@/packages/navigator'
 import platform from '@/platform'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
@@ -279,7 +283,7 @@ function ComputeCenterPage() {
           {!isLoggedIn && (
             <Alert color="blue" title="公开浏览模式">
               <Flex align="center" justify="space-between" gap="md" wrap="wrap">
-                <Text size="sm">你可以浏览商品；购买卡时、开通模型、预订、转让和供应方操作需要登录。</Text>
+                <Text size="sm">你可以浏览商品；购买卡时、购买套餐、转让和资源商操作需要登录。</Text>
                 <Button size="xs" onClick={() => navigate({ to: '/settings/provider/chatbox-ai' })}>
                   登录 KOD
                 </Button>
@@ -497,7 +501,7 @@ function Hero({
             </ThemeIcon>
             <Title order={2}>让每一份算力都有清晰价格与去向</Title>
           </Group>
-          <Text c="chatbox-tertiary">模型按固定 Token 套餐销售、GPU 按预订时段结算，统一使用 KAI 标准卡时。</Text>
+          <Text c="chatbox-tertiary">模型与 GPU 均按固定套餐交易，统一使用 KAI 标准卡时。</Text>
           <Text size="sm" c="chatbox-tertiary" mt={4}>
             1 KAI 标准卡时 = ¥{formatNumber(rate || account?.cardHourCnyRate || 1.002, 3)}
             ；卡时可按 ¥1.0000 兑换到 KOD 内部人民币钱包，不支持外部打款。
@@ -639,7 +643,7 @@ function MarketPanel({
         <Box>
           <Title order={4}>算力市场</Title>
           <Text size="sm" c="chatbox-tertiary">
-            模型 API 先用卡时购买固定 Token 套餐；GPU 预订时按时段冻结卡时。
+            模型 API 和 GPU 均按固定套餐交易；GPU 由已审核商家自主交付，平台只提供卡时担保与争议处理。
           </Text>
         </Box>
         <Group gap="sm">
@@ -708,6 +712,15 @@ function ProductCard({
   return (
     <Card withBorder radius="md" padding="lg">
       <Stack gap="sm" h="100%">
+        {product.coverImageId ? (
+          <Box
+            component="img"
+            src={getComputeProductImageUrl(product.id, product.coverImageId)}
+            alt={product.name}
+            h={150}
+            style={{ width: '100%', objectFit: 'cover', borderRadius: 8 }}
+          />
+        ) : null}
         <Flex justify="space-between" align="flex-start" gap="sm">
           <Badge color={product.productType === 'API' ? 'blue' : 'teal'} variant="light">
             {product.productType === 'API' ? '模型 API' : 'GPU 资源'}
@@ -733,8 +746,10 @@ function ProductCard({
         ) : (
           <Stack gap={4}>
             <DataRow label="规格" value={`${product.gpuModel || '-'} ${product.gpuMemoryGb || '-'}GB`} />
-            <DataRow label="库存" value={`${product.gpuCount || 0} 张`} />
-            <DataRow label="价格" value={`${formatCardHours(product.pricePerGpuHour)} 卡时 / GPU·小时`} />
+            <DataRow label="套餐资源" value={`${product.gpuCount || 0} 张 GPU`} />
+            <DataRow label="使用时长" value={`${product.packageDurationHours || 0} 小时`} />
+            <DataRow label="套餐价格" value={`${formatCardHours(product.packagePriceCardHours)} 卡时`} />
+            <DataRow label="承诺交付" value={`付款后 ${product.deliveryDeadlineHours || 0} 小时内`} />
           </Stack>
         )}
         <Text size="xs" c="chatbox-tertiary">
@@ -762,7 +777,7 @@ function ProductCard({
               : onReserve()
           }
         >
-          {!isLoggedIn ? '登录后操作' : product.productType === 'API' ? '用卡时购买套餐' : '预订 GPU'}
+          {!isLoggedIn ? '登录后操作' : product.productType === 'API' ? '用卡时购买套餐' : '购买 GPU 套餐'}
         </Button>
       </Stack>
     </Card>
@@ -780,52 +795,38 @@ function ReservationModal({
   busy: string | null
   runCardHourAction: RunCardHourAction
 }) {
-  const [gpuCount, setGpuCount] = useState(1)
-  const [startTime, setStartTime] = useState('')
-  const [endTime, setEndTime] = useState('')
+  const [buyerPublicKey, setBuyerPublicKey] = useState('')
   if (!product) return null
   const key = `reserve-${product.id}`
-  const durationHours = Math.max(0, (new Date(endTime).getTime() - new Date(startTime).getTime()) / 3_600_000)
-  const estimatedCardHours = Math.ceil(durationHours * gpuCount * Number(product.pricePerGpuHour || 0) * 1000) / 1000
   return (
-    <Modal opened onClose={onClose} title={`预订 ${product.name}`} centered>
+    <Modal opened onClose={onClose} title={`购买 ${product.name}`} centered size="lg">
       <Stack>
-        <Alert color="yellow">第一版按预订时段自动计费，不代表已自动开通真实 H100。</Alert>
-        <NumberInput
-          label="GPU 数量"
-          min={1}
-          max={product.gpuCount || 1}
-          value={gpuCount}
-          onChange={(value) => setGpuCount(Number(value) || 1)}
+        <Alert color="blue" title="中介担保交易">
+          本订单冻结 {formatCardHours(product.packagePriceCardHours)} 卡时。商家将在付款后{' '}
+          {product.deliveryDeadlineHours || 0} 小时内自行交付 {product.gpuCount || 0} 张 GPU、
+          {product.packageDurationHours || 0} 小时的固定套餐；平台不登录或控制商家服务器。
+        </Alert>
+        <Textarea
+          label="你的 SSH 公钥"
+          description="请粘贴 .pub 文件的一整行内容，例如 ssh-ed25519 AAAA…；私钥必须留在你的电脑，禁止上传。"
+          placeholder="ssh-ed25519 AAAA... your-name"
+          value={buyerPublicKey}
+          onChange={(event) => setBuyerPublicKey(event.target.value)}
+          autosize
+          minRows={4}
         />
-        <TextInput
-          label="开始时间"
-          type="datetime-local"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-        />
-        <TextInput
-          label="结束时间"
-          type="datetime-local"
-          value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
-        />
-        <Text size="sm" fw={600}>
-          预计冻结：{formatCardHours(estimatedCardHours)} 卡时（{formatNumber(durationHours, 2)} 小时 × {gpuCount} 张）
-        </Text>
         <Button
           loading={busy === key}
-          disabled={!startTime || !endTime}
+          disabled={!buyerPublicKey.trim()}
           onClick={() =>
             runCardHourAction(
               key,
-              (autoTopUp) =>
-                createComputeReservation({ productId: product.id, gpuCount, startTime, endTime }, autoTopUp),
-              'GPU 预订已提交，卡时已冻结'
+              (autoTopUp) => createComputeReservation({ productId: product.id, buyerPublicKey }, autoTopUp),
+              'GPU 套餐购买成功，卡时已冻结并等待商家交付'
             ).then((succeeded) => succeeded && onClose())
           }
         >
-          确认预订并冻结卡时
+          确认购买并冻结卡时
         </Button>
       </Stack>
     </Modal>
@@ -1155,11 +1156,12 @@ function ReservationsPanel({ busy, run }: { busy: string | null; run: RunAction 
   const reservations = reservationsQuery.data || []
   return (
     <Stack>
-      <Alert color="blue" title="自动结算规则">
-        买方下单先冻结卡时，预订时段正常结束后自动结算给供应方；定时任务漏跑时管理员可立即补偿结算。设备异常会暂停自动结算，由管理员选择全额退款、按实际使用或按原订单结算。
+      <Alert color="blue" title="卡时担保规则">
+        购买时冻结全部卡时；商家标记交付后，买家可确认收货或在 24
+        小时内发起争议。无争议将自动确认，并把全部卡时一次性结算给商家。
       </Alert>
       {reservations.length === 0 ? (
-        <EmptyState title="暂无 GPU 预订" description="请从算力市场选择已上架的 GPU 商品。" />
+        <EmptyState title="暂无 GPU 订单" description="请从算力市场选择商家发布的固定 GPU 套餐。" />
       ) : (
         reservations.map((reservation) => (
           <ReservationCard key={reservation.id} reservation={reservation} busy={busy} run={run} view="buyer" />
@@ -1174,21 +1176,27 @@ function ReservationCard({
   busy,
   run,
   view,
+  productPackageDurationHours,
 }: {
   reservation: ComputeReservation
   busy: string | null
   run: RunAction
   view: 'buyer' | 'supplier'
+  productPackageDurationHours?: number | null
 }) {
   const [sshDelivery, setSshDelivery] = useState({
     host: '',
     port: 22,
     username: '',
-    authType: 'PASSWORD' as 'PASSWORD' | 'PRIVATE_KEY',
-    credential: '',
+    actualStart: '',
+    deliveryNote: '',
   })
+  const [dispute, setDispute] = useState({ reason: '', evidence: '' })
   const key = `${view}-reservation-${reservation.id}`
-  const cancellable = ['PENDING_DELIVERY', 'CONFIRMED'].includes(reservation.status)
+  const marketplace = reservation.tradeMode === 'MARKETPLACE_FIXED'
+  const cancellable = marketplace && reservation.status === 'PENDING_DELIVERY'
+  const packageDurationHours = resolvePackageDurationHours(reservation, productPackageDurationHours)
+  const actualEnd = addHoursToLocalDateTime(sshDelivery.actualStart, packageDurationHours)
   return (
     <Paper withBorder p="md" radius="md">
       <Stack gap="sm">
@@ -1199,8 +1207,12 @@ function ReservationCard({
               <StatusBadge status={reservation.status} />
             </Group>
             <Text size="sm" c="chatbox-tertiary">
-              {reservation.gpuModel} × {reservation.gpuCount} · {formatDate(reservation.startTime)} 至{' '}
-              {formatDate(reservation.endTime)}
+              {reservation.gpuModel} × {reservation.gpuCount}
+              {marketplace && reservation.deliveredAt
+                ? ` · 商定使用时间 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`
+                : marketplace
+                  ? ` · 交付截止 ${formatDate(reservation.deliveryDeadlineAt)}`
+                  : ` · 历史预订 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`}
             </Text>
           </Box>
           <Text fw={700}>{formatCardHours(reservation.frozenCardHours)} 卡时</Text>
@@ -1209,30 +1221,104 @@ function ReservationCard({
         {reservation.incidentReason && (
           <Alert color="red">异常原因：{reservation.incidentReason}，等待管理员处理。</Alert>
         )}
+        {!marketplace && <Alert color="gray">这是旧版预订记录，仅保留查看，不再使用旧版凭证交付功能。</Alert>}
         {reservation.deliveryInfo && (
           <Alert color="teal" title="交付信息">
             <Text style={{ whiteSpace: 'pre-wrap' }}>{reservation.deliveryInfo}</Text>
             <Text size="xs" mt="xs">
-              交付时间：{formatDate(reservation.deliveredAt)}；系统将在交付 30 天后删除凭证。
+              交付时间：{formatDate(reservation.deliveredAt)}
+              {marketplace && reservation.autoConfirmAt
+                ? `；无争议自动确认时间：${formatDate(reservation.autoConfirmAt)}`
+                : ''}
             </Text>
           </Alert>
         )}
-        {view === 'buyer' && reservation.status === 'PENDING_DELIVERY' && !reservation.deliveryInfo && (
-          <Alert color="yellow">订单已进入买方账号，正在等待供应商提交 SSH 交付凭证。</Alert>
+        {view === 'buyer' && marketplace && reservation.status === 'PENDING_DELIVERY' && !reservation.deliveryInfo && (
+          <Alert color="yellow">卡时已冻结，正在等待商家按承诺时限配置你的公钥并提交 SSH 地址。</Alert>
         )}
         {view === 'buyer' && cancellable && (
           <Button
             variant="light"
             color="red"
             loading={busy === key}
-            onClick={() => run(key, () => cancelComputeReservation(reservation.id), 'GPU 预订已取消，卡时已解冻')}
+            onClick={() => run(key, () => cancelComputeReservation(reservation.id), '订单已取消，卡时已全额解冻')}
           >
-            开始前取消预订
+            商家交付前取消订单
           </Button>
         )}
-        {view === 'supplier' && reservation.status === 'PENDING_DELIVERY' && (
+        {view === 'buyer' && marketplace && reservation.status === 'DELIVERED' && (
           <Stack gap="xs">
-            <Alert color="blue">提交后立即加密交付到买方“我的订单”；凭证将在交付 30 天后自动删除。</Alert>
+            <Alert color="yellow">
+              请先实际验证资源。确认后立即结算；如无法连接、规格不符或交付有误，请在 24 小时内提交争议证据。
+            </Alert>
+            <Group grow>
+              <Button
+                loading={busy === `${key}-confirm`}
+                onClick={() =>
+                  run(
+                    `${key}-confirm`,
+                    () => confirmComputeReservation(reservation.id),
+                    '已确认收到资源，卡时已结算给商家'
+                  )
+                }
+              >
+                确认收到资源
+              </Button>
+            </Group>
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              <TextInput
+                label="争议原因"
+                placeholder="例如无法连接、规格与商品不符"
+                value={dispute.reason}
+                onChange={(event) => setDispute({ ...dispute, reason: event.target.value })}
+              />
+              <Textarea
+                label="文字证据"
+                placeholder="填写错误信息、测试过程、约定内容等可核验事实"
+                value={dispute.evidence}
+                onChange={(event) => setDispute({ ...dispute, evidence: event.target.value })}
+                autosize
+                minRows={2}
+              />
+            </SimpleGrid>
+            <Button
+              color="red"
+              variant="light"
+              loading={busy === `${key}-dispute`}
+              disabled={!dispute.reason.trim() || !dispute.evidence.trim()}
+              onClick={() =>
+                run(
+                  `${key}-dispute`,
+                  () => disputeComputeReservation(reservation.id, dispute.reason, dispute.evidence),
+                  '争议已提交，卡时将继续冻结并等待管理员裁决'
+                )
+              }
+            >
+              发起争议
+            </Button>
+          </Stack>
+        )}
+        {view === 'supplier' && marketplace && reservation.status === 'PENDING_DELIVERY' && (
+          <Stack gap="xs">
+            <Alert color="blue">
+              平台不需要你的服务器密码或私钥。请把买家的公钥配置到订单专属临时账号，再填写连接地址和双方商定的使用时间。
+              只有资源已经可连接时才能标记交付；约定开通时间最多可晚于当前时间 15 分钟。
+            </Alert>
+            <Textarea
+              label="买家 SSH 公钥（只读）"
+              value={reservation.buyerPublicKey || ''}
+              readOnly
+              autosize
+              minRows={3}
+            />
+            <Button
+              size="xs"
+              variant="light"
+              w="fit-content"
+              onClick={() => copyToClipboard(reservation.buyerPublicKey || '')}
+            >
+              复制买家公钥
+            </Button>
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
               <TextInput
                 label="SSH 地址"
@@ -1247,51 +1333,57 @@ function ReservationCard({
                 onChange={(value) => setSshDelivery({ ...sshDelivery, port: Number(value) || 22 })}
               />
               <TextInput
-                label="用户名"
+                label="订单专属临时用户名"
                 value={sshDelivery.username}
                 onChange={(event) => setSshDelivery({ ...sshDelivery, username: event.target.value })}
               />
-              <Select
-                label="认证方式"
-                value={sshDelivery.authType}
-                data={[
-                  { value: 'PASSWORD', label: '密码' },
-                  { value: 'PRIVATE_KEY', label: '私钥' },
-                ]}
-                onChange={(value) =>
-                  setSshDelivery({ ...sshDelivery, authType: (value || 'PASSWORD') as 'PASSWORD' | 'PRIVATE_KEY' })
+              <TextInput
+                label="商定开通时间"
+                type="datetime-local"
+                value={sshDelivery.actualStart}
+                onChange={(event) => setSshDelivery({ ...sshDelivery, actualStart: event.target.value })}
+              />
+              <TextInput
+                label="商定到期时间"
+                type="datetime-local"
+                description={
+                  packageDurationHours
+                    ? `按该订单 ${packageDurationHours} 小时套餐自动计算，无需手工填写`
+                    : '未能读取套餐时长，请刷新订单后重试'
                 }
+                value={actualEnd}
+                readOnly
               />
             </SimpleGrid>
             <Textarea
-              label={sshDelivery.authType === 'PASSWORD' ? 'SSH 密码' : 'SSH 私钥'}
-              value={sshDelivery.credential}
-              onChange={(event) => setSshDelivery({ ...sshDelivery, credential: event.target.value })}
+              label="交付说明（禁止填写密码或私钥）"
+              value={sshDelivery.deliveryNote}
+              onChange={(event) => setSshDelivery({ ...sshDelivery, deliveryNote: event.target.value })}
               autosize
-              minRows={sshDelivery.authType === 'PRIVATE_KEY' ? 5 : 2}
+              minRows={2}
             />
             <Button
               loading={busy === key}
-              disabled={!sshDelivery.host.trim() || !sshDelivery.username.trim() || !sshDelivery.credential.trim()}
+              disabled={
+                !sshDelivery.host.trim() || !sshDelivery.username.trim() || !sshDelivery.actualStart || !actualEnd
+              }
               onClick={() =>
                 run(
                   key,
                   () =>
-                    deliverComputeReservation(
-                      reservation.id,
-                      [
-                        `SSH 地址：${sshDelivery.host}`,
-                        `端口：${sshDelivery.port}`,
-                        `用户名：${sshDelivery.username}`,
-                        `认证方式：${sshDelivery.authType === 'PASSWORD' ? '密码' : '私钥'}`,
-                        `${sshDelivery.authType === 'PASSWORD' ? '密码' : '私钥'}：${sshDelivery.credential}`,
-                      ].join('\n')
-                    ),
-                  'GPU SSH 凭证已加密交付到买方订单'
+                    deliverComputeReservation(reservation.id, {
+                      sshHost: sshDelivery.host,
+                      sshPort: sshDelivery.port,
+                      sshUsername: sshDelivery.username,
+                      actualStart: sshDelivery.actualStart,
+                      actualEnd,
+                      deliveryNote: sshDelivery.deliveryNote,
+                    }),
+                  'GPU 资源已交付，24 小时无争议将自动确认结算'
                 )
               }
             >
-              加密交付给买方
+              标记已交付
             </Button>
           </Stack>
         )}
@@ -1457,24 +1549,21 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
     ramGb: 0,
     storageGb: 0,
     networkDescription: '仅内测占位数据',
-    sshHost: '127.0.0.1',
-    sshPort: 22,
-    sshUsername: 'test-only',
-    sshAuthType: 'PASSWORD',
-    sshCredential: 'TEST_ONLY_DO_NOT_CONNECT',
+    resourceProof: null,
   })
+  const [productImages, setProductImages] = useState<File[]>([])
   const [gpu, setGpu] = useState({
     nodeId: 0,
     name: 'H100 GPU 资源',
-    description: '公司内部 H100 测试资源，第一版按预订时段结算。',
+    description: '公司内部 H100 固定套餐，由商家自主交付。',
     region: '待确认',
     gpuModel: 'H100',
     gpuMemoryGb: 80,
     gpuCount: 1,
-    pricePerGpuHour: 1,
-    availableFrom: '',
-    availableTo: '',
-    deliveryMode: '供应方加密填写交付信息',
+    packagePriceCardHours: 24,
+    packageDurationHours: 24,
+    deliveryDeadlineHours: 12,
+    deliveryMode: '买家公钥＋商家站内 SSH 地址交付',
     slaDescription: '内部测试，SLA 待验证',
   })
 
@@ -1545,7 +1634,7 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
         <Stack>
           <Title order={4}>申请成为算力供应方</Title>
           <Text c="chatbox-tertiary">
-            身份状态：{statusLabel(identity.status)}。入驻通过后先提交 GPU 节点验机，再基于已验机节点发布商品。
+            身份状态：{statusLabel(identity.status)}。入驻通过后提交 GPU 硬件信息和资源证明，审核通过即可发布固定套餐。
           </Text>
           <TextInput label="供应方名称" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
           <TextInput label="联系方式" value={contact} onChange={(e) => setContact(e.target.value)} />
@@ -1591,7 +1680,7 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
 
       <Tabs defaultValue="devices" keepMounted={false}>
         <Tabs.List>
-          <Tabs.Tab value="devices">设备与验机</Tabs.Tab>
+          <Tabs.Tab value="devices">资源资质</Tabs.Tab>
           <Tabs.Tab value="products">产品发布</Tabs.Tab>
           <Tabs.Tab value="orders">出租订单</Tabs.Tab>
         </Tabs.List>
@@ -1619,7 +1708,7 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
             )}
 
             {supplier.status === 'APPROVED' && (
-              <Section title="提交 GPU 节点人工验机">
+              <Section title="提交 GPU 资源资质">
                 {identity.status === 'TEST_APPROVED' && (
                   <Alert color="orange" mb="sm">
                     模拟认证只能创建、上架明确标记为“仅内测”的节点和商品。
@@ -1675,59 +1764,28 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     value={node.networkDescription}
                     onChange={(e) => setNode({ ...node, networkDescription: e.target.value })}
                   />
-                  <TextInput
-                    label="SSH 地址"
-                    value={node.sshHost}
-                    onChange={(e) => setNode({ ...node, sshHost: e.target.value })}
-                  />
-                  <NumberInput
-                    label="SSH 端口"
-                    min={1}
-                    max={65535}
-                    value={node.sshPort}
-                    onChange={(value) => setNode({ ...node, sshPort: Number(value) || 22 })}
-                  />
-                  <TextInput
-                    label="SSH 用户名"
-                    value={node.sshUsername}
-                    onChange={(e) => setNode({ ...node, sshUsername: e.target.value })}
-                  />
-                  <Select
-                    label="认证方式"
-                    value={node.sshAuthType}
-                    data={[
-                      { value: 'PASSWORD', label: '密码' },
-                      { value: 'PRIVATE_KEY', label: '私钥' },
-                    ]}
-                    onChange={(value) =>
-                      setNode({ ...node, sshAuthType: (value || 'PASSWORD') as 'PASSWORD' | 'PRIVATE_KEY' })
-                    }
-                  />
-                  <Textarea
-                    label="密码 / 私钥"
-                    value={node.sshCredential}
-                    onChange={(e) => setNode({ ...node, sshCredential: e.target.value })}
+                  <FileInput
+                    label="GPU 资源证明"
+                    description="上传设备后台、nvidia-smi 或资源授权证明截图；支持 JPG/PNG，超过 800 KB 会自动压缩。"
+                    accept="image/jpeg,image/png"
+                    value={node.resourceProof}
+                    onChange={(resourceProof) => setNode({ ...node, resourceProof })}
                   />
                 </SimpleGrid>
                 <Button
                   mt="md"
                   loading={busy === 'supplier-node'}
-                  disabled={
-                    !node.nodeName.trim() ||
-                    !node.sshHost.trim() ||
-                    !node.sshUsername.trim() ||
-                    !node.sshCredential.trim()
-                  }
-                  onClick={() => run('supplier-node', () => createSupplierNode(node), 'GPU 节点已提交人工验机')}
+                  disabled={!node.nodeName.trim() || !node.resourceProof}
+                  onClick={() => run('supplier-node', () => createSupplierNode(node), 'GPU 资源资质已提交审核')}
                 >
-                  提交验机
+                  提交资源审核
                 </Button>
               </Section>
             )}
 
             <Section title="我的托管节点">
               <SimpleTable
-                columns={['节点', '规格', '区域', '类型', '状态', '验机说明']}
+                columns={['资源', '规格', '区域', '类型', '状态', '审核说明']}
                 rows={(nodesQuery.data || []).map((item) => [
                   item.nodeName,
                   `${item.gpuModel} ${item.gpuMemoryGb}GB × ${item.gpuCount}`,
@@ -1745,10 +1803,10 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
         <Tabs.Panel value="products" pt="md">
           <Stack>
             {supplier.status === 'APPROVED' && (
-              <Section title="基于已验机节点发布 GPU 商品">
+              <Section title="基于已审核资源发布固定 GPU 套餐">
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                   <Select
-                    label="已验机节点"
+                    label="已审核 GPU 资源"
                     placeholder="选择节点"
                     value={gpu.nodeId ? String(gpu.nodeId) : null}
                     data={(nodesQuery.data || [])
@@ -1801,24 +1859,24 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     onChange={(value) => setGpu({ ...gpu, gpuCount: Number(value) || 0 })}
                   />
                   <NumberInput
-                    label="卡时 / GPU·小时"
+                    label="固定套餐价格（卡时）"
                     min={0.001}
                     step={0.001}
                     decimalScale={3}
-                    value={gpu.pricePerGpuHour}
-                    onChange={(value) => setGpu({ ...gpu, pricePerGpuHour: Number(value) || 0 })}
+                    value={gpu.packagePriceCardHours}
+                    onChange={(value) => setGpu({ ...gpu, packagePriceCardHours: Number(value) || 0 })}
                   />
-                  <TextInput
-                    label="可用开始时间"
-                    type="datetime-local"
-                    value={gpu.availableFrom}
-                    onChange={(e) => setGpu({ ...gpu, availableFrom: e.target.value })}
+                  <NumberInput
+                    label="套餐使用时长（小时）"
+                    min={1}
+                    value={gpu.packageDurationHours}
+                    onChange={(value) => setGpu({ ...gpu, packageDurationHours: Number(value) || 0 })}
                   />
-                  <TextInput
-                    label="可用结束时间"
-                    type="datetime-local"
-                    value={gpu.availableTo}
-                    onChange={(e) => setGpu({ ...gpu, availableTo: e.target.value })}
+                  <NumberInput
+                    label="承诺交付时限（付款后小时）"
+                    min={1}
+                    value={gpu.deliveryDeadlineHours}
+                    onChange={(value) => setGpu({ ...gpu, deliveryDeadlineHours: Number(value) || 0 })}
                   />
                 </SimpleGrid>
                 <Textarea
@@ -1838,12 +1896,26 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     value={gpu.slaDescription}
                     onChange={(e) => setGpu({ ...gpu, slaDescription: e.target.value })}
                   />
+                  <FileInput
+                    label="商品图片（最多 6 张）"
+                    description="第一张作为市场封面，其余作为详情图。"
+                    accept="image/jpeg,image/png"
+                    multiple
+                    value={productImages}
+                    onChange={(files) => setProductImages(files.slice(0, 6))}
+                  />
                 </SimpleGrid>
                 <Button
                   mt="md"
                   loading={busy === 'supplier-product'}
                   disabled={!gpu.nodeId}
-                  onClick={() => run('supplier-product', () => createSupplierGpuProduct(gpu), 'GPU 商品已提交审核')}
+                  onClick={() =>
+                    run(
+                      'supplier-product',
+                      () => createSupplierGpuProduct(gpu, productImages),
+                      'GPU 固定套餐已提交审核'
+                    )
+                  }
                 >
                   提交商品审核
                 </Button>
@@ -1860,7 +1932,9 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     ? `${product.gpuModel} ${product.gpuMemoryGb}GB × ${product.gpuCount}`
                     : product.modelId,
                   product.productType === 'GPU'
-                    ? `${formatCardHours(product.pricePerGpuHour)} / GPU·小时`
+                    ? product.tradeMode === 'MARKETPLACE_FIXED'
+                      ? `${formatCardHours(product.packagePriceCardHours)} 卡时 / ${product.packageDurationHours || 0} 小时`
+                      : '旧版时段商品（仅保留记录）'
                     : `${formatCardHours(product.promptRatePerMillion)} / 百万 Token`,
                   statusLabel(product.status),
                   product.rejectionReason || '-',
@@ -1872,10 +1946,10 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
         </Tabs.Panel>
 
         <Tabs.Panel value="orders" pt="md">
-          <Section title="待交付与历史预订">
+          <Section title="待交付与历史订单">
             <Stack>
               {(reservationsQuery.data || []).length === 0 ? (
-                <Text c="chatbox-tertiary">暂无买方预订</Text>
+                <Text c="chatbox-tertiary">暂无买方订单</Text>
               ) : (
                 (reservationsQuery.data || []).map((reservation) => (
                   <ReservationCard
@@ -1884,6 +1958,10 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     busy={busy}
                     run={run}
                     view="supplier"
+                    productPackageDurationHours={
+                      (productsQuery.data || []).find((product) => product.id === reservation.productId)
+                        ?.packageDurationHours
+                    }
                   />
                 ))
               )}
@@ -1987,13 +2065,13 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
     <Stack gap="md">
       <AdminOverview overview={overviewQuery.data} />
       <Alert color="violet" title="管理员可以处理什么">
-        审核实名认证、供应方、设备和商品；维护设备部署/运行/待处理状态；处理异常 GPU
-        订单。本人提交的资料、设备和商品必须由另一名管理员审核。
+        审核实名认证、资源商、GPU 资源证明和商品；维护商品可售状态；处理买家在交付后 24
+        小时内提交的交易争议。平台不登录或控制商家服务器。本人提交的资料和商品必须由另一名管理员审核。
       </Alert>
       <Tabs defaultValue="reviews" keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab value="reviews">审核中心</Tabs.Tab>
-          <Tabs.Tab value="operations">设备与订单</Tabs.Tab>
+          <Tabs.Tab value="operations">资源与争议</Tabs.Tab>
           <Tabs.Tab value="settings">运营设置</Tabs.Tab>
         </Tabs.List>
 
@@ -2276,13 +2354,13 @@ function AdminNodeOperations({ nodes, busy, run }: { nodes: ComputeGpuNode[]; bu
   const [targets, setTargets] = useState<Record<number, string>>({})
   const [reasons, setReasons] = useState<Record<number, string>>({})
   return (
-    <Section title={`设备状态管理（${manageable.length}）`}>
+    <Section title={`资源可售状态（${manageable.length}）`}>
       <Alert color="blue" mb="md">
-        验机通过先进入“部署中”；只有“运行中”设备可以上架和接受新订单。切为“待处理”或“已离线”会暂停商品，并把现有订单交给异常订单处理。
+        “运行中”表示资质有效且允许发布新商品；切为“待处理”或“已离线”只会暂停新商品接单，不会让平台接管或中断商家已经交付的资源。
       </Alert>
       <Stack>
         {manageable.length === 0 ? (
-          <Text c="chatbox-tertiary">暂无已验机设备</Text>
+          <Text c="chatbox-tertiary">暂无已审核资源</Text>
         ) : (
           manageable.map((item) => {
             const target = targets[item.id] || item.status
@@ -2354,20 +2432,20 @@ function AdminReservationOperations({
 }) {
   const actionable = reservations.filter(
     (item) =>
-      item.status === 'EXCEPTION_PENDING' ||
+      ['EXCEPTION_PENDING', 'DISPUTED'].includes(item.status) ||
       (['CONFIRMED', 'IN_USE'].includes(item.status) && new Date(item.endTime).getTime() <= Date.now())
   )
   const [resolutions, setResolutions] = useState<Record<number, 'FULL_REFUND' | 'ACTUAL_USAGE' | 'FULL_SETTLEMENT'>>({})
   const [actuals, setActuals] = useState<Record<number, number>>({})
   const [reasons, setReasons] = useState<Record<number, string>>({})
   return (
-    <Section title={`异常与待结算订单（${actionable.length}）`}>
+    <Section title={`交易争议与历史补偿结算（${actionable.length}）`}>
       {actionable.length === 0 ? (
         <Text c="chatbox-tertiary">暂无需要人工处理的订单</Text>
       ) : (
         <Stack>
           {actionable.map((item) => {
-            const exception = item.status === 'EXCEPTION_PENDING'
+            const exception = ['EXCEPTION_PENDING', 'DISPUTED'].includes(item.status)
             const resolution = resolutions[item.id] || 'FULL_REFUND'
             return (
               <Paper key={item.id} withBorder p="md" radius="md">
@@ -2379,13 +2457,14 @@ function AdminReservationOperations({
                         <StatusBadge status={item.status} />
                       </Group>
                       <Text size="sm" c="chatbox-tertiary">
-                        买方 {item.buyerEmail} · 供应方 {item.supplierEmail || '-'} · {formatDate(item.startTime)} 至{' '}
+                        买方 {item.buyerEmail} · 商家 {item.supplierEmail || '-'} · {formatDate(item.startTime)} 至{' '}
                         {formatDate(item.endTime)}
                       </Text>
                     </Box>
                     <Text fw={700}>冻结 {formatCardHours(item.frozenCardHours)} 卡时</Text>
                   </Flex>
                   {item.incidentReason && <Alert color="red">异常原因：{item.incidentReason}</Alert>}
+                  {item.disputeEvidence && <Alert color="orange">买家证据：{item.disputeEvidence}</Alert>}
                   {exception ? (
                     <>
                       <SimpleGrid cols={{ base: 1, sm: 3 }}>
@@ -2394,7 +2473,7 @@ function AdminReservationOperations({
                           value={resolution}
                           data={[
                             { value: 'FULL_REFUND', label: '全额退还买方' },
-                            { value: 'ACTUAL_USAGE', label: '按实际使用结算' },
+                            { value: 'ACTUAL_USAGE', label: '部分结算、剩余退款' },
                             { value: 'FULL_SETTLEMENT', label: '按原订单正常结算' },
                           ]}
                           onChange={(value) =>
@@ -2405,7 +2484,7 @@ function AdminReservationOperations({
                           }
                         />
                         <NumberInput
-                          label="实际结算卡时"
+                          label="结算给商家的卡时"
                           disabled={resolution !== 'ACTUAL_USAGE'}
                           min={0.001}
                           max={item.frozenCardHours}
@@ -2462,9 +2541,9 @@ function AdminOverview({ overview }: { overview?: ComputeAdminOverview }) {
   const items = [
     ['待审实名认证', overview?.identitiesPending || 0],
     ['待审供应方', overview?.suppliersPending || 0],
-    ['待验机设备', overview?.nodesPending || 0],
+    ['待审 GPU 资源', overview?.nodesPending || 0],
     ['待审产品', overview?.productsPending || 0],
-    ['待处理设备', overview?.nodesPendingAction || 0],
+    ['待处理资源', overview?.nodesPendingAction || 0],
   ]
   return (
     <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">
@@ -2492,12 +2571,10 @@ function AdminSettings({
   run: RunAction
 }) {
   const [transferReviewThreshold, setTransferReviewThreshold] = useState(1000)
-  const [platformFeePercent, setPlatformFeePercent] = useState(0)
 
   useEffect(() => {
     if (!overview) return
     setTransferReviewThreshold(Number(overview.transferReviewThreshold))
-    setPlatformFeePercent(Number(overview.platformFeeRate) * 100)
   }, [overview])
 
   return (
@@ -2512,25 +2589,22 @@ function AdminSettings({
           w={240}
         />
         <NumberInput
-          label="平台服务费（%）"
-          description="内部 MVP 默认 0%"
-          min={0}
-          max={100}
-          decimalScale={4}
-          value={platformFeePercent}
-          onChange={(value) => setPlatformFeePercent(Number(value) || 0)}
+          label="平台佣金（第一版固定）"
+          description="商家订单确认后获得全部卡时"
+          value={0}
+          disabled
           w={220}
         />
         <Button
           loading={busy === 'admin-settings'}
-          disabled={transferReviewThreshold <= 0 || platformFeePercent < 0 || platformFeePercent > 100}
+          disabled={transferReviewThreshold <= 0}
           onClick={() =>
             run(
               'admin-settings',
               () =>
                 updateComputeAdminSettings({
                   transferReviewThreshold,
-                  platformFeeRate: platformFeePercent / 100,
+                  platformFeeRate: 0,
                 }),
               '结算规则已更新'
             )
@@ -2640,11 +2714,16 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
   const pending = nodes.filter((item) => item.status === 'PENDING')
   const [reasons, setReasons] = useState<Record<number, string>>({})
   const [notes, setNotes] = useState<Record<number, string>>({})
-  const [credentials, setCredentials] = useState<Record<number, string>>({})
+  const openProof = async (nodeId: number) => {
+    const blob = await getAdminNodeProof(nodeId)
+    const url = URL.createObjectURL(blob)
+    window.open(url, '_blank', 'noopener,noreferrer')
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
   return (
-    <Section title={`GPU 节点验机（${pending.length}）`}>
+    <Section title={`GPU 资源证明审核（${pending.length}）`}>
       {pending.length === 0 ? (
-        <Text c="chatbox-tertiary">暂无待验机节点</Text>
+        <Text c="chatbox-tertiary">暂无待审核 GPU 资源</Text>
       ) : (
         <Stack>
           {pending.map((item) => (
@@ -2660,23 +2739,11 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
                   {item.gpuModel} {item.gpuMemoryGb}GB × {item.gpuCount}；CPU {item.cpuDescription || '-'}；内存{' '}
                   {item.ramGb}GB；存储 {item.storageGb}GB
                 </Text>
-                {credentials[item.id] && <Alert color="yellow">{credentials[item.id]}</Alert>}
-                <Button
-                  size="xs"
-                  variant="light"
-                  w="fit-content"
-                  onClick={async () => {
-                    const value = await getAdminNodeCredential(item.id)
-                    setCredentials({
-                      ...credentials,
-                      [item.id]: `${value.sshUsername}@${value.sshHost}:${value.sshPort}；${value.sshAuthType}；凭据：${value.sshCredential}`,
-                    })
-                  }}
-                >
-                  临时解密 SSH 凭据
+                <Button size="xs" variant="light" w="fit-content" onClick={() => openProof(item.id)}>
+                  查看资源证明
                 </Button>
                 <TextInput
-                  label="验机说明"
+                  label="资质审核说明"
                   value={notes[item.id] || ''}
                   onChange={(e) => setNotes({ ...notes, [item.id]: e.target.value })}
                 />
@@ -2695,7 +2762,7 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
                       run(
                         `node-${item.id}`,
                         () => reviewAdminNode(item.id, false, reasons[item.id] || '', notes[item.id] || ''),
-                        '节点验机已拒绝'
+                        'GPU 资源资质已拒绝'
                       )
                     }
                   >
@@ -2707,7 +2774,7 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
                       run(
                         `node-${item.id}`,
                         () => reviewAdminNode(item.id, true, '', notes[item.id] || ''),
-                        '节点验机已通过'
+                        'GPU 资源资质已通过，可以发布商品'
                       )
                     }
                   >
@@ -2773,7 +2840,9 @@ function AdminProductReviews({
           title: `${product.name} · ${product.productType}`,
           description:
             product.productType === 'GPU'
-              ? `${product.gpuModel} ${product.gpuMemoryGb}GB × ${product.gpuCount}，${formatCardHours(product.pricePerGpuHour)} 卡时/GPU·小时`
+              ? product.tradeMode === 'MARKETPLACE_FIXED'
+                ? `${product.gpuModel} ${product.gpuMemoryGb}GB × ${product.gpuCount}，${product.packageDurationHours || 0} 小时，${formatCardHours(product.packagePriceCardHours)} 卡时`
+                : `${product.gpuModel} ${product.gpuMemoryGb}GB × ${product.gpuCount}，旧版商品只保留记录`
               : `${product.modelId}`,
           onReview: (approved, reason) =>
             run(
@@ -3052,6 +3121,8 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING_REVIEW: '待管理员审核',
   PENDING_RECIPIENT: '待接收方确认',
   PENDING_DELIVERY: '待供应方交付',
+  DELIVERED: '已交付，待买家确认',
+  DISPUTED: '争议处理中',
   CONFIRMED: '已确认',
   IN_USE: '使用中',
   EXCEPTION_PENDING: '异常待处理',
@@ -3062,6 +3133,7 @@ const STATUS_LABELS: Record<string, string> = {
   API_PACKAGE: 'Token 套餐',
   API_PACKAGE_PURCHASE: '购买 Token 套餐',
   GPU_RESERVATION: 'GPU 预订',
+  GPU_MARKETPLACE: 'GPU 固定套餐',
   PURCHASE: '购买',
   ADMIN_GRANT: '管理员发放',
   API_USAGE: 'API 消耗',
@@ -3079,6 +3151,8 @@ const STATUS_LABELS: Record<string, string> = {
   GPU_SETTLEMENT: 'GPU 订单结算',
   GPU_REFUND: 'GPU 订单退款',
   AUTO_SETTLEMENT: '自动结算',
+  AUTO_CONFIRM_24H: '24 小时无争议自动确认',
+  BUYER_CONFIRMED: '买家确认收货',
   FULL_REFUND: '全额退款',
   ACTUAL_USAGE: '按实际使用结算',
   FULL_SETTLEMENT: '按原订单结算',

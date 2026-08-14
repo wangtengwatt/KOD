@@ -14,7 +14,19 @@ import './legacy-database-migration'
  */
 
 import fs from 'node:fs'
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeTheme, session, shell, Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeTheme,
+  safeStorage,
+  session,
+  shell,
+  Tray,
+} from 'electron'
 import electronDebug from 'electron-debug'
 import log from 'electron-log/main'
 import os from 'os'
@@ -697,6 +709,79 @@ app.on('open-url', async (_event, url) => {
 })
 
 // --------- IPC 监听 ---------
+
+const SAVED_LOGIN_ACCOUNTS_KEY = 'kodSavedLoginAccountsV1'
+const MAX_SAVED_LOGIN_ACCOUNTS = 10
+
+interface StoredLoginAccount {
+  email: string
+  encryptedPassword?: string
+  updatedAt: number
+}
+
+function normalizeLoginEmail(value: unknown) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+function readStoredLoginAccounts(): StoredLoginAccount[] {
+  const stored = store.get(SAVED_LOGIN_ACCOUNTS_KEY, []) as unknown
+  if (!Array.isArray(stored)) return []
+  return stored
+    .filter((item): item is StoredLoginAccount => Boolean(item && typeof item.email === 'string'))
+    .map((item) => ({
+      email: normalizeLoginEmail(item.email),
+      encryptedPassword: typeof item.encryptedPassword === 'string' ? item.encryptedPassword : undefined,
+      updatedAt: Number(item.updatedAt) || 0,
+    }))
+    .filter((item) => item.email)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, MAX_SAVED_LOGIN_ACCOUNTS)
+}
+
+function savedLoginAccountsResponse() {
+  const passwordStorageAvailable =
+    safeStorage.isEncryptionAvailable() &&
+    (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+  const accounts = readStoredLoginAccounts().map((item) => {
+    let password: string | undefined
+    if (passwordStorageAvailable && item.encryptedPassword) {
+      try {
+        password = safeStorage.decryptString(Buffer.from(item.encryptedPassword, 'base64'))
+      } catch (error) {
+        log.warn('[KOD Login] Failed to decrypt a saved password; returning email only', error)
+      }
+    }
+    return { email: item.email, password, updatedAt: item.updatedAt }
+  })
+  return { accounts, passwordStorageAvailable }
+}
+
+ipcMain.handle('kod-login:list-saved-accounts', () => savedLoginAccountsResponse())
+
+ipcMain.handle('kod-login:save-account', (_event, rawEmail: unknown, rawPassword: unknown) => {
+  const email = normalizeLoginEmail(rawEmail)
+  if (!email || email.length > 320) throw new Error('Invalid login email')
+  if (typeof rawPassword !== 'string' || rawPassword.length > 4096) throw new Error('Invalid login password')
+  const passwordStorageAvailable =
+    safeStorage.isEncryptionAvailable() &&
+    (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+  const encryptedPassword = passwordStorageAvailable
+    ? safeStorage.encryptString(rawPassword).toString('base64')
+    : undefined
+  const next = [
+    { email, encryptedPassword, updatedAt: Date.now() },
+    ...readStoredLoginAccounts().filter((item) => item.email !== email),
+  ].slice(0, MAX_SAVED_LOGIN_ACCOUNTS)
+  store.set(SAVED_LOGIN_ACCOUNTS_KEY, next)
+  return savedLoginAccountsResponse()
+})
+
+ipcMain.handle('kod-login:delete-account', (_event, rawEmail: unknown) => {
+  const email = normalizeLoginEmail(rawEmail)
+  const next = readStoredLoginAccounts().filter((item) => item.email !== email)
+  store.set(SAVED_LOGIN_ACCOUNTS_KEY, next)
+  return savedLoginAccountsResponse()
+})
 
 ipcMain.handle('getStoreValue', (event, key) => {
   return store.get(key)
