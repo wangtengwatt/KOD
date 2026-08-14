@@ -442,10 +442,10 @@ const CopilotPicker = ({ selectedId, onSelect }: { selectedId?: string; onSelect
           onScrollPositionChange={onScrollPositionChange}
           className="copilot-picker-scroll-area"
         >
-          {scrollPosition.x > 8 && !isSmallScreen && (
+          {scrollPosition.x > 8 && (
             <div className="absolute top-0 left-0 w-8 h-full bg-gradient-to-r from-kod-background-primary to-transparent"></div>
           )}
-          {!isSmallScreen && (
+          {(!isSmallScreen || scrollPosition.x > 8) && (
             <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-kod-background-primary to-transparent"></div>
           )}
           <Flex wrap="nowrap" gap="xs">
@@ -511,7 +511,7 @@ const CopilotItem = ({
       bd={selected ? 'none' : '1px solid var(--kod-border-primary)'}
       bg={selected ? 'var(--kod-background-brand-secondary)' : 'transparent'}
       className={clsx(
-        'max-w-[75vw] sm:max-w-[50vw] cursor-pointer shrink-0 shadow-[0px_2px_12px_0px_rgba(0,0,0,0.04)]',
+        'max-w-[60vw] sm:max-w-[50vw] cursor-pointer shrink-0 shadow-[0px_2px_12px_0px_rgba(0,0,0,0.04)]',
         isSmallScreen ? 'rounded-full' : 'rounded-md'
       )}
       onClick={onClick}

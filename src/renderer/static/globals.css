@@ -24,6 +24,28 @@
   --kod-spacing-xxl: 2rem;
 }
 
+@media (hover: none) and (pointer: coarse) {
+  :root {
+    --button-height-sm: 44px;
+  }
+
+  .mantine-Modal-close,
+  .mantine-Drawer-close {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 :root {
   /* colors */
   --kod-tint-primary: #212529;

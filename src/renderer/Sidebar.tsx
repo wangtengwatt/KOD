@@ -147,13 +147,13 @@ export default function Sidebar() {
           backgroundColor: isSmallScreen ? undefined : 'transparent',
           backgroundImage: 'none',
           boxSizing: 'border-box',
-          width: isSmallScreen ? '75vw' : sidebarWidth,
-          maxWidth: '75vw',
+          width: isSmallScreen ? 'min(85vw, 320px)' : sidebarWidth,
+          maxWidth: 'min(85vw, 320px)',
         },
       }}
       SlideProps={language === 'ar' ? { direction: 'left' } : undefined}
       PaperProps={
-        language === 'ar' ? { sx: { direction: 'rtl', overflowY: 'initial' } } : { sx: { overflowY: 'initial' } }
+        language === 'ar' ? { sx: { direction: 'rtl', overflowY: 'auto' } } : { sx: { overflowY: 'auto' } }
       }
       disableSwipeToOpen={CHATBOX_BUILD_PLATFORM !== 'ios'} // 只在iOS设备上启用SwipeToOpen
     >
@@ -182,7 +182,7 @@ export default function Sidebar() {
           </Flex>
 
           <Tooltip label={t('Collapse')} openDelay={1000} withArrow>
-            <ActionIcon variant="subtle" color="kod-tertiary" size={20} onClick={() => setShowSidebar(false)}>
+            <ActionIcon variant="subtle" color="kod-tertiary" size={isSmallScreen ? 'lg' : 20} onClick={() => setShowSidebar(false)}>
               <IconLayoutSidebarLeftCollapse />
             </ActionIcon>
           </Tooltip>

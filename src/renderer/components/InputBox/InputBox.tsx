@@ -1261,7 +1261,13 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     }
 
     return (
-      <Box pt={0} pb={isSmallScreen ? 'md' : 'sm'} px="sm" id={dom.InputBoxID} {...getRootProps()}>
+      <Box
+        pt={0}
+        pb={isSmallScreen ? 'calc(var(--mobile-safe-area-inset-bottom, 0px) + var(--mantine-spacing-xs))' : 'sm'}
+        px="sm"
+        id={dom.InputBoxID}
+        {...getRootProps()}
+      >
         <input className="hidden" {...getInputProps()} />
         <Stack className={cn(widthFull ? 'w-full' : 'max-w-4xl mx-auto')} gap="xs">
           {currentSessionId && <CompactionStatus sessionId={currentSessionId} />}
@@ -1300,7 +1306,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     hasBlockedSessionRagFiles) &&
                   !generating
                 }
-                size={32}
+                size={isSmallScreen ? 40 : 32}
                 variant="filled"
                 color={generating ? 'dark' : 'kod-brand'}
                 radius="xl"

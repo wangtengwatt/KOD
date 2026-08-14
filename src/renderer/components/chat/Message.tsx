@@ -560,7 +560,7 @@ const _Message: FC<Props> = (props) => {
       m="4px -4px -4px -4px"
       className={clsx(
         'group-hover/message:opacity-100 opacity-0 transition-opacity',
-        actionMenuOpened || buttonGroup === 'always' ? 'opacity-100' : '',
+        actionMenuOpened || buttonGroup === 'always' || isSmallScreen ? 'opacity-100' : '',
         isSmallScreen ? 'sticky bottom-4' : ''
       )}
       align="center"
@@ -680,11 +680,11 @@ const _Message: FC<Props> = (props) => {
         paddingBottom: '0.1rem',
         paddingX: '1rem',
         [theme.breakpoints.down('sm')]: {
-          paddingX: '0.3rem',
+          paddingX: '0.25rem',
         },
       }}
     >
-      <Grid container wrap="nowrap" spacing={1.5}>
+      <Grid container wrap="nowrap" spacing={isSmallScreen ? 1 : 1.5}>
         {(showAvatar ?? true) && (
           <Grid item>
             <Box className={cn('relative', msg.role !== 'assistant' ? 'mt-1' : 'mt-2')}>

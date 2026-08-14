@@ -27,23 +27,39 @@ export const Page: FC<PageProps> = ({ children, title, left, right }) => {
         px="md"
         className={clsx('title-bar', isSmallScreen ? 'bg-kod-background-primary' : '')}
       >
-        {left ||
-          ((!showSidebar || isSmallScreen) && (
-            <Flex align="center" className={needRoomForMacWindowControls ? 'pl-20' : ''}>
-              <ActionIcon
-                className="controls"
-                aria-label="Open navigation"
-                data-testid="page-menu-button"
-                variant="subtle"
-                size={isSmallScreen ? 24 : 20}
-                color={isSmallScreen ? 'kod-secondary' : 'kod-tertiary'}
-                mr="xs"
-                onClick={() => setShowSidebar(!showSidebar)}
-              >
-                {isSmallScreen ? <IconMenu2 /> : <IconLayoutSidebarLeftExpand />}
-              </ActionIcon>
-            </Flex>
-          ))}
+        {isSmallScreen && !showSidebar && (
+          <Flex align="center" className={needRoomForMacWindowControls ? 'pl-20' : ''}>
+            <ActionIcon
+              className="controls"
+              aria-label="Open navigation"
+              data-testid="page-menu-button"
+              variant="subtle"
+              size="lg"
+              color="kod-secondary"
+              mr="xs"
+              onClick={() => setShowSidebar(true)}
+            >
+              <IconMenu2 />
+            </ActionIcon>
+          </Flex>
+        )}
+        {left}
+        {!isSmallScreen && !showSidebar && (
+          <Flex align="center" className={needRoomForMacWindowControls ? 'pl-20' : ''}>
+            <ActionIcon
+              className="controls"
+              aria-label="Open navigation"
+              data-testid="page-menu-button-desktop"
+              variant="subtle"
+              size={20}
+              color="kod-tertiary"
+              mr="xs"
+              onClick={() => setShowSidebar(true)}
+            >
+              <IconLayoutSidebarLeftExpand />
+            </ActionIcon>
+          </Flex>
+        )}
 
         <Flex align="center" gap={'xxs'} flex={1} {...(isSmallScreen ? { justify: 'center', px: 'sm' } : {})}>
           {typeof title === 'string' ? (
@@ -55,8 +71,8 @@ export const Page: FC<PageProps> = ({ children, title, left, right }) => {
           )}
         </Flex>
         {right}
-        <WindowControls className="-mr-3 ml-2" />
-        {isSmallScreen && !right && <Box w={28} />}
+        {!isSmallScreen && <WindowControls className="-mr-3 ml-2" />}
+        {isSmallScreen && !right && <Box w={36} />}
       </Flex>
 
       <div className="flex-1 overflow-auto">{children}</div>

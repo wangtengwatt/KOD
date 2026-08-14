@@ -22,11 +22,11 @@
 .suanbao-name {
   font-size: 11px;
   font-weight: 700;
-  color: var(--chatbox-tint-secondary);
-  background: var(--chatbox-background-primary);
+  color: var(--kod-tint-secondary);
+  background: var(--kod-background-primary);
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid var(--chatbox-border-primary);
+  border: 1px solid var(--kod-border-primary);
 }
 
 .suanbao-mascot {
@@ -103,8 +103,8 @@
 }
 
 .suanbao-menu {
-  border-color: var(--chatbox-border-primary) !important;
-  background: var(--chatbox-background-primary) !important;
+  border-color: var(--kod-border-primary) !important;
+  background: var(--kod-background-primary) !important;
 }
 
 .suanbao-menu-item {
@@ -114,12 +114,12 @@
   width: 100%;
   padding: 8px 10px;
   border-radius: 8px;
-  color: var(--chatbox-tint-primary);
+  color: var(--kod-tint-primary);
   font-size: 14px;
 }
 
 .suanbao-menu-item:hover {
-  background: var(--chatbox-background-secondary);
+  background: var(--kod-background-secondary);
 }
 
 .suanbao-menu-item:disabled {
@@ -128,13 +128,13 @@
 }
 
 .suanbao-danger {
-  color: var(--chatbox-tint-error);
+  color: var(--kod-tint-error);
 }
 
 .suanbao-step-line {
   width: 2px;
   height: 36px;
-  background: var(--chatbox-border-primary);
+  background: var(--kod-border-primary);
   transition: background 200ms ease;
 }
 

@@ -66,7 +66,7 @@ export default function Header(props: { session: Session }) {
               aria-label="Open navigation"
               data-testid="header-menu-button"
               variant="subtle"
-              size={isSmallScreen ? 24 : 20}
+              size={isSmallScreen ? 'lg' : 20}
               color={isSmallScreen ? 'kod-secondary' : 'kod-tertiary'}
               mr="xs"
               onClick={() => setShowSidebar(!showSidebar)}
@@ -76,16 +76,11 @@ export default function Header(props: { session: Session }) {
           </Flex>
         )}
 
-        <Flex
-          align="center"
-          flex={1}
-          className="min-w-0"
-          {...(isSmallScreen ? { justify: 'center', pl: 28, pr: 8 } : {})}
-        >
-          <Text fw={600} size="18px" lineClamp={1}>
+        <Flex align="center" flex={1} className="min-w-0" justify={isSmallScreen ? 'center' : 'flex-start'}>
+          <Text fw={600} size={isSmallScreen ? '17px' : '18px'} lineClamp={1}>
             {currentSession?.name}
           </Text>
-          {currentSession?.threadName && currentSession.threadName !== currentSession.name && (
+          {!isSmallScreen && currentSession?.threadName && currentSession.threadName !== currentSession.name && (
             <Badge
               size="xs"
               variant="light"
@@ -103,7 +98,7 @@ export default function Header(props: { session: Session }) {
               className="controls"
               variant="subtle"
               color="kod-tertiary"
-              size={isSmallScreen ? 20 : 16}
+              size={isSmallScreen ? 'md' : 16}
               ml={4}
               onClick={editCurrentSession}
             >
@@ -114,7 +109,7 @@ export default function Header(props: { session: Session }) {
 
         <Toolbar sessionId={currentSession.id} />
 
-        <WindowControls className="-mr-3 ml-2" />
+        {!isSmallScreen && <WindowControls className="-mr-3 ml-2" />}
       </Flex>
 
       <Divider />

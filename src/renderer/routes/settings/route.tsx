@@ -113,7 +113,8 @@ export function RouteComponent() {
   const canGoBack = useCanGoBack()
   const isSmallScreen = useIsSmallScreen()
   const settingsParentPath = getSettingsParentPath(routerState.location.pathname)
-  const showBackButton = isSmallScreen && (settingsParentPath !== undefined || canGoBack)
+  const isSettingsRoot = routerState.location.pathname === '/settings'
+  const showBackButton = isSmallScreen && !isSettingsRoot && (settingsParentPath !== undefined || canGoBack)
 
   return (
     <Page
@@ -123,7 +124,7 @@ export function RouteComponent() {
           <ActionIcon
             className="controls"
             variant="subtle"
-            size={28}
+            size={isSmallScreen ? 'lg' : 28}
             color="kod-secondary"
             mr="sm"
             onClick={() => {
@@ -172,21 +173,22 @@ export function SettingsRoot() {
         >
           {ITEMS.map((item) => (
             <Link
+              key={item.key}
               disabled={
                 routerState.location.pathname === `/settings/${item.key}` ||
                 routerState.location.pathname.startsWith(`/settings/${item.key}/`)
               }
-              key={item.key}
               to={`/settings/${item.key}` as any}
               className={'block no-underline w-full'}
             >
               <Flex
                 component="span"
                 gap="xs"
-                p="md"
+                p={isSmallScreen ? 'sm' : 'md'}
+                px="md"
                 pr="xl"
-                py={isSmallScreen ? 'sm' : undefined}
                 align="center"
+                mih={isSmallScreen ? 48 : undefined}
                 c={item.key === key ? 'kod-brand' : 'kod-secondary'}
                 bg={item.key === key ? 'var(--kod-background-brand-secondary)' : 'transparent'}
                 className={clsx(
@@ -201,7 +203,7 @@ export function SettingsRoot() {
                   flex={1}
                   lineClamp={1}
                   span={true}
-                  className={`!text-inherit ${isSmallScreen ? 'min-h-[32px] leading-[32px]' : ''}`}
+                  className={`!text-inherit`}
                 >
                   {t(item.label)}
                 </Text>

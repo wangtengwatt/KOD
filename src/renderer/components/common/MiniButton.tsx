@@ -35,7 +35,7 @@ const MiniButton = forwardRef<HTMLButtonElement, MiniButtonProps>((props, ref) =
       className={cn(
         'bg-transparent hover:bg-slate-400/25',
         'border-none rounded',
-        'h-8 w-8 p-1',
+        'h-8 w-8 p-1 [@media(hover:none)_and_(pointer:coarse)]:h-11 [@media(hover:none)_and_(pointer:coarse)]:w-11',
         disabled ? '' : 'cursor-pointer',
         className
       )}
