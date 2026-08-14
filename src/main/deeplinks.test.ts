@@ -46,4 +46,14 @@ describe('Kod deep links', () => {
       path: '/settings/mcp?install=%7B%22name%22%3A%22demo%22%7D',
     })
   })
+
+  it('opens a validated compute referral link without accepting extra fields', () => {
+    const code = '0123456789abcdef0123456789abcdef'
+    expect(parseDeepLink(`kod://compute/invite?code=${code}`)).toEqual({
+      type: 'navigate',
+      path: `/compute-center?invite=${code}`,
+    })
+    expect(parseDeepLink(`kod://compute/invite?code=${code}&inviter=admin`)).toBeNull()
+    expect(parseDeepLink('kod://compute/invite?code=login-invite-code')).toBeNull()
+  })
 })

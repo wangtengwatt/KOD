@@ -32,6 +32,7 @@ import {
   IconCpu,
   IconDatabaseDollar,
   IconGauge,
+  IconGift,
   IconReceipt,
   IconRefresh,
   IconServer,
@@ -41,13 +42,16 @@ import {
 } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { zodValidator } from '@tanstack/zod-adapter'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { z } from 'zod'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import {
   acceptComputeTransfer,
   activateComputeApi,
   applyComputeSupplier,
+  bindComputeReferral,
   type CardHourTopUpQuote,
   type ComputeAccount,
   type ComputeAdminOverview,
@@ -62,6 +66,9 @@ import {
   type ComputePackageCredential,
   type ComputePackagePurchase,
   type ComputeProduct,
+  type ComputeReferralPreview,
+  type ComputeReferralProfile,
+  type ComputeReferralReward,
   type ComputeReservation,
   type ComputeSupplier,
   type ComputeSuspendedProxyKey,
@@ -89,6 +96,7 @@ import {
   getComputeIdentity,
   getComputePackageCredential,
   getComputeProductImageUrl,
+  getComputeReferralProfile,
   getComputeSupplier,
   grantAdminCardHours,
   listAdminIdentities,
@@ -105,6 +113,7 @@ import {
   listComputeOrders,
   listComputePackagePurchases,
   listComputeProducts,
+  listComputeReferralRewards,
   listComputeReservations,
   listComputeTransfers,
   listComputeWithdrawals,
@@ -112,6 +121,7 @@ import {
   listSupplierProducts,
   markComputeNotificationRead,
   type ProductType,
+  previewComputeReferral,
   purchaseCardHours,
   regenerateComputePackageKey,
   repairAdminProxyKey,
@@ -132,8 +142,13 @@ import { copyToClipboard } from '@/packages/navigator'
 import platform from '@/platform'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
 
+const computeSearchSchema = z.object({
+  invite: z.string().max(64).optional(),
+})
+
 export const Route = createFileRoute('/compute-center')({
   component: ComputeCenterPage,
+  validateSearch: zodValidator(computeSearchSchema),
 })
 
 type RunAction = (key: string, action: () => Promise<unknown>, success: string) => Promise<boolean>
@@ -155,14 +170,18 @@ const roleLabels: Record<string, string> = {
   ADMIN: '算力管理员',
 }
 
-const deviceStatuses = [
-  ['PENDING', '待审核'],
-  ['DEPLOYING', '部署中'],
-  ['RUNNING', '运行中'],
-  ['PENDING_ACTION', '待处理'],
+const gpuAssetStatuses = [
+  ['PENDING', '待审核', 'yellow'],
+  ['REJECTED', '审核失败', 'red'],
+  ['RUNNING', '可发布', 'teal'],
+  ['PENDING_DELIVERY', '待交付', 'orange'],
+  ['ACTIVE_RENTAL', '运行中', 'green'],
+  ['PENDING_ACTION', '待处理', 'red'],
+  ['OFFLINE', '已关闭', 'gray'],
 ] as const
 
 function ComputeCenterPage() {
+  const search = Route.useSearch()
   const isSmallScreen = useIsSmallScreen()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -180,6 +199,16 @@ function ComputeCenterPage() {
     queryFn: getComputeAccount,
     enabled: isLoggedIn,
   })
+  const referralPreviewQuery = useQuery({
+    queryKey: ['compute', 'referral-preview', search.invite],
+    queryFn: () => previewComputeReferral(search.invite || ''),
+    enabled: isLoggedIn && Boolean(search.invite),
+    retry: false,
+  })
+
+  useEffect(() => {
+    if (isLoggedIn && search.invite) setActiveTab('account')
+  }, [isLoggedIn, search.invite])
 
   useEffect(() => {
     if (!isLoggedIn) return
@@ -293,6 +322,27 @@ function ComputeCenterPage() {
 
           <FeedbackToast message={message} onClose={closeMessage} />
           <CardHourTopUpModal prompt={cardHourPrompt} />
+          <ReferralInviteModal
+            opened={isLoggedIn && Boolean(search.invite)}
+            preview={referralPreviewQuery.data}
+            loading={referralPreviewQuery.isLoading}
+            error={referralPreviewQuery.error}
+            busy={busy === 'referral-bind'}
+            onClose={() => navigate({ to: '/compute-center', search: {} })}
+            onConfirm={() => {
+              if (!search.invite) return
+              void run(
+                'referral-bind',
+                async () => {
+                  const config = await platform.getConfig()
+                  await bindComputeReferral(search.invite || '', config.uuid)
+                },
+                '邀请关系绑定成功'
+              ).then((success) => {
+                if (success) navigate({ to: '/compute-center', search: {} })
+              })
+            }}
+          />
 
           <Tabs value={activeTab} onChange={(value) => value && setActiveTab(value)} keepMounted={false}>
             <ScrollArea type="never" offsetScrollbars>
@@ -353,6 +403,55 @@ function ComputeCenterPage() {
         </Stack>
       </Container>
     </Page>
+  )
+}
+
+function ReferralInviteModal({
+  opened,
+  preview,
+  loading,
+  error,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  opened: boolean
+  preview?: ComputeReferralPreview
+  loading: boolean
+  error: unknown
+  busy: boolean
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  const errorMessage = error instanceof Error ? error.message : ''
+  return (
+    <Modal opened={opened} onClose={onClose} title="确认邀请关系" centered closeOnClickOutside={!busy}>
+      <Stack>
+        {loading ? (
+          <Text c="chatbox-tertiary">正在验证邀请链接…</Text>
+        ) : errorMessage ? (
+          <Alert color="red">{errorMessage}</Alert>
+        ) : preview ? (
+          <>
+            <Alert color={preview.canBind ? 'blue' : 'orange'}>
+              邀请人：<b>{preview.inviterEmail}</b>
+              <br />
+              绑定后永久不能更改。你首次充值成功并经过 7 天确认期后，邀请人将获得充值金额 5% 的人民币返佣，单人最高
+              ¥100。
+            </Alert>
+            {!preview.canBind && <Text c="red">{preview.reason}</Text>}
+          </>
+        ) : null}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose} disabled={busy}>
+            取消
+          </Button>
+          <Button onClick={onConfirm} loading={busy} disabled={!preview?.canBind}>
+            确认绑定
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }
 
@@ -537,12 +636,16 @@ function Hero({
                 )}
               </Group>
             </Flex>
-            <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="md">
-              <Metric label="可用卡时" value={formatCardHours(account.availableCardHours)} />
-              <Metric label="冻结卡时" value={formatCardHours(account.frozenCardHours)} />
+            <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="md">
               <Metric label="人民币余额" value={`¥${formatNumber(account.cnyBalance, 4)}`} />
-              <Metric label="累计收益" value={formatCardHours(account.lifetimeIncome)} />
-              <Metric label="租金收益" value={formatCardHours(account.rentalIncome)} />
+              <Metric label="可用卡时" value={`${formatCardHours(account.availableCardHours)} 卡时`} />
+              <Metric label="冻结卡时" value={`${formatCardHours(account.frozenCardHours)} 卡时`} />
+              <Metric label="累计收益" value={`¥${formatNumber(account.totalIncomeCny, 4)}`} />
+              <Metric
+                label="租金收益"
+                value={`${formatCardHours(account.rentalIncome)} 卡时 / ≈¥${formatNumber(account.rentalIncomeCnyEquivalent, 4)}`}
+              />
+              <Metric label="佣金收益" value={`¥${formatNumber(account.commissionIncome, 4)}`} />
             </SimpleGrid>
           </>
         )}
@@ -551,7 +654,15 @@ function Hero({
   )
 }
 
-function AssetDashboard({ account, onOpen }: { account?: ComputeAccount; onOpen: (value: string) => void }) {
+function AssetDashboard({
+  account,
+  referral,
+  onOpen,
+}: {
+  account?: ComputeAccount
+  referral?: ComputeReferralProfile
+  onOpen: (value: string) => void
+}) {
   if (!account) return <Text c="chatbox-tertiary">正在加载账户信息…</Text>
 
   const supplierEntryLabel =
@@ -559,17 +670,119 @@ function AssetDashboard({ account, onOpen }: { account?: ComputeAccount; onOpen:
 
   return (
     <Stack gap="md">
-      <Section title="设备状态">
-        <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm">
-          {deviceStatuses.map(([status, label]) => (
+      <Section title="我的收益">
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
+          <Card withBorder padding="md">
+            <Text size="sm" c="chatbox-tertiary">
+              累计收益
+            </Text>
+            <Text size="xl" fw={700}>
+              ¥{formatNumber(account.totalIncomeCny, 4)}
+            </Text>
+            <Text size="xs" c="chatbox-tertiary">
+              租金按当前回购汇率折算后与佣金合计
+            </Text>
+          </Card>
+          <Card withBorder padding="md">
+            <Text size="sm" c="chatbox-tertiary">
+              租金收益
+            </Text>
+            <Text size="xl" fw={700}>
+              {formatCardHours(account.rentalIncome)} 卡时
+            </Text>
+            <Text size="xs" c="chatbox-tertiary">
+              约 ¥{formatNumber(account.rentalIncomeCnyEquivalent, 4)}
+            </Text>
+          </Card>
+          <Card withBorder padding="md">
+            <Text size="sm" c="chatbox-tertiary">
+              佣金收益
+            </Text>
+            <Text size="xl" fw={700}>
+              ¥{formatNumber(account.commissionIncome, 4)}
+            </Text>
+            <Text size="xs" c="chatbox-tertiary">
+              已进入人民币钱包
+            </Text>
+          </Card>
+          <Card withBorder padding="md">
+            <Text size="sm" c="chatbox-tertiary">
+              待发放佣金
+            </Text>
+            <Text size="xl" fw={700}>
+              ¥{formatNumber(account.pendingCommission, 4)}
+            </Text>
+            <Text size="xs" c="chatbox-tertiary">
+              首次充值成功后等待 7 天
+            </Text>
+          </Card>
+        </SimpleGrid>
+      </Section>
+
+      <Section title="我的 GPU">
+        <SimpleGrid cols={{ base: 2, sm: 4, lg: 7 }} spacing="sm">
+          {gpuAssetStatuses.map(([status, label, color]) => (
             <Card key={status} withBorder padding="md" style={{ cursor: 'pointer' }} onClick={() => onOpen('supplier')}>
-              <Text size="xl" fw={700} c={status === 'PENDING_ACTION' ? 'red' : undefined}>
-                {account.deviceCounts?.[status] || 0}
+              <Text size="xl" fw={700} c={color}>
+                {account.gpuAssetCounts?.[status] || 0}
               </Text>
               <Text size="sm">{label}</Text>
             </Card>
           ))}
         </SimpleGrid>
+        <Text size="xs" c="chatbox-tertiary" mt="sm">
+          “可发布”表示资源审核通过；“待交付、运行中、待处理”来自你作为供应方的租赁订单。平台不替商家远程部署 GPU。
+        </Text>
+      </Section>
+
+      <Section title="邀请好友返佣">
+        <Paper withBorder p="md" radius="md">
+          <Stack gap="sm">
+            <Group gap="sm">
+              <ThemeIcon variant="light" color="violet">
+                <IconGift size={18} />
+              </ThemeIcon>
+              <Box>
+                <Text fw={700}>首次充值返佣 5%</Text>
+                <Text size="xs" c="chatbox-tertiary">
+                  被邀请人确认绑定且首次充值后，等待 7 天发放；每名好友最高奖励 ¥100。
+                </Text>
+              </Box>
+            </Group>
+            {referral ? (
+              <>
+                <TextInput
+                  label="我的专属邀请链接"
+                  readOnly
+                  value={referral.inviteLink}
+                  rightSection={
+                    <ActionIcon
+                      variant="subtle"
+                      aria-label="复制邀请链接"
+                      onClick={() => copyToClipboard(referral.inviteLink)}
+                    >
+                      <IconCopy size={17} />
+                    </ActionIcon>
+                  }
+                />
+                <Group gap="xl">
+                  <Metric label="已邀请" value={`${referral.invitedCount} 人`} />
+                  <Metric label="待发放" value={`¥${formatNumber(referral.pendingCommission, 4)}`} />
+                  <Metric label="已到账" value={`¥${formatNumber(referral.paidCommission, 4)}`} />
+                </Group>
+                {referral.bound && (
+                  <Text size="sm" c="chatbox-tertiary">
+                    我的邀请人：{referral.inviterEmail} · 绑定时间 {formatDate(referral.boundAt)}
+                  </Text>
+                )}
+              </>
+            ) : (
+              <Text size="sm" c="chatbox-tertiary">
+                正在生成专属邀请链接…
+              </Text>
+            )}
+          </Stack>
+        </Paper>
       </Section>
 
       <Section title="常用功能">
@@ -848,6 +1061,19 @@ function AccountPanel({
   const packagesQuery = useQuery({ queryKey: ['compute', 'package-purchases'], queryFn: listComputePackagePurchases })
   const usageQuery = useQuery({ queryKey: ['compute', 'api-usage'], queryFn: listComputeApiUsage })
   const withdrawalsQuery = useQuery({ queryKey: ['compute', 'withdrawals'], queryFn: listComputeWithdrawals })
+  const referralQuery = useQuery({ queryKey: ['compute', 'referrals', 'me'], queryFn: getComputeReferralProfile })
+  const referralRewardsQuery = useQuery({
+    queryKey: ['compute', 'referrals', 'rewards'],
+    queryFn: listComputeReferralRewards,
+  })
+  const buyerRentalsQuery = useQuery({
+    queryKey: ['compute', 'reservations', 'buyer'],
+    queryFn: () => listComputeReservations('buyer'),
+  })
+  const supplierRentalsQuery = useQuery({
+    queryKey: ['compute', 'reservations', 'supplier'],
+    queryFn: () => listComputeReservations('supplier'),
+  })
   const [amount, setAmount] = useState(10)
   const [withdrawalAmount, setWithdrawalAmount] = useState(0.1)
   const estimated = amount * (account?.cardHourCnyRate || 1.002)
@@ -855,7 +1081,7 @@ function AccountPanel({
 
   return (
     <Stack gap="md">
-      <AssetDashboard account={account} onOpen={onOpen} />
+      <AssetDashboard account={account} referral={referralQuery.data} onOpen={onOpen} />
 
       <Alert color="blue" title="官网充值与客户端共用同一人民币钱包">
         <Flex justify="space-between" align="center" gap="md" wrap="wrap">
@@ -870,15 +1096,17 @@ function AccountPanel({
         </Flex>
       </Alert>
 
-      <Alert color="orange" title="“提现”仅指内部钱包兑换">
+      <Alert color="orange" title="“卡时回购”仅指内部钱包兑换">
         卡时按 1 卡时 = ¥{formatNumber(account?.cardHourRedeemRate || 1, 4)} 直接转入 KOD
         人民币钱包，不会打款到银行卡、支付宝或其他第三方账户。冻结卡时不能兑换。
       </Alert>
 
       <Tabs defaultValue="exchange" keepMounted={false}>
         <Tabs.List>
-          <Tabs.Tab value="exchange">购买与提现</Tabs.Tab>
-          <Tabs.Tab value="withdrawals">提现记录</Tabs.Tab>
+          <Tabs.Tab value="exchange">资产兑换</Tabs.Tab>
+          <Tabs.Tab value="rentals">租赁订单</Tabs.Tab>
+          <Tabs.Tab value="buybacks">回购记录</Tabs.Tab>
+          <Tabs.Tab value="rewards">邀请佣金明细</Tabs.Tab>
           <Tabs.Tab value="packages">Token 套餐</Tabs.Tab>
           <Tabs.Tab value="ledger">资产流水</Tabs.Tab>
         </Tabs.List>
@@ -910,7 +1138,7 @@ function AccountPanel({
             </Paper>
             <Paper withBorder p="md" radius="md">
               <Stack>
-                <Title order={5}>提现申请</Title>
+                <Title order={5}>平台回购卡时</Title>
                 <NumberInput
                   label="兑换卡时"
                   description={`当前可兑换 ${formatCardHours(account?.withdrawableCardHours)} 卡时`}
@@ -931,19 +1159,30 @@ function AccountPanel({
                     run(
                       'withdrawal',
                       () => withdrawComputeCardHours(withdrawalAmount),
-                      `${withdrawalAmount.toFixed(1)} 卡时已转入 KOD 人民币钱包`
+                      `${withdrawalAmount.toFixed(1)} 卡时已回购并转入 KOD 人民币钱包`
                     )
                   }
                 >
-                  确认兑换并直接到账
+                  确认回购并直接到账
                 </Button>
               </Stack>
             </Paper>
           </SimpleGrid>
         </Tabs.Panel>
 
-        <Tabs.Panel value="withdrawals" pt="md">
+        <Tabs.Panel value="rentals" pt="md">
+          <RentalAssetsTable
+            buyerEntries={buyerRentalsQuery.data || []}
+            supplierEntries={supplierRentalsQuery.data || []}
+          />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="buybacks" pt="md">
           <WithdrawalTable entries={withdrawalsQuery.data || []} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="rewards" pt="md">
+          <ReferralRewardsTable entries={referralRewardsQuery.data || []} />
         </Tabs.Panel>
 
         <Tabs.Panel value="packages" pt="md">
@@ -1131,10 +1370,59 @@ function TokenPackageAssets({
   )
 }
 
+function RentalAssetsTable({
+  buyerEntries,
+  supplierEntries,
+}: {
+  buyerEntries: ComputeReservation[]
+  supplierEntries: ComputeReservation[]
+}) {
+  const rows = [
+    ...supplierEntries.map((item) => ({ ...item, directionLabel: '我出租' })),
+    ...buyerEntries.map((item) => ({ ...item, directionLabel: '我购买' })),
+  ].sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime())
+  return (
+    <SimpleTable
+      columns={['方向', 'GPU 商品', '规格', '交易状态', '卡时', '使用时间']}
+      rows={rows.map((item) => [
+        item.directionLabel,
+        item.productName,
+        `${item.gpuModel} × ${item.gpuCount}`,
+        statusLabel(item.status),
+        formatCardHours(item.frozenCardHours),
+        item.deliveredAt ? `${formatDate(item.startTime)} 至 ${formatDate(item.endTime)}` : '等待商家交付',
+      ])}
+      empty="暂无 GPU 租赁订单"
+    />
+  )
+}
+
+function ReferralRewardsTable({ entries }: { entries: ComputeReferralReward[] }) {
+  const rewardStatus: Record<ComputeReferralReward['status'], string> = {
+    WAITING: '7 天确认期',
+    PAID: '已到账',
+    CANCELLED: '已取消',
+  }
+  return (
+    <SimpleTable
+      columns={['被邀请人', '首次充值', '返佣比例', '返佣金额', '状态', '预计/实际到账时间']}
+      rows={entries.map((item) => [
+        item.inviteeEmail,
+        `¥${formatNumber(item.rechargeAmount, 4)}`,
+        `${formatNumber(item.rewardRate * 100, 2)}%`,
+        `¥${formatNumber(item.rewardAmount, 4)}`,
+        item.cancelReason ? `${rewardStatus[item.status]}：${item.cancelReason}` : rewardStatus[item.status],
+        formatDate(item.paidAt || item.releaseAt),
+      ])}
+      empty="暂无邀请佣金记录"
+    />
+  )
+}
+
 function WithdrawalTable({ entries }: { entries: ComputeWithdrawal[] }) {
   return (
     <SimpleTable
-      columns={['提现单号', '卡时', '到账人民币', '去向', '状态', '时间']}
+      columns={['回购单号', '回购卡时', '到账人民币', '去向', '状态', '时间']}
       rows={entries.map((item) => [
         item.withdrawalNo,
         formatCardHours(item.cardHours),
@@ -1143,7 +1431,7 @@ function WithdrawalTable({ entries }: { entries: ComputeWithdrawal[] }) {
         statusLabel(item.status),
         formatDate(item.completedAt || item.createTime),
       ])}
-      empty="暂无提现记录"
+      empty="暂无卡时回购记录"
     />
   )
 }

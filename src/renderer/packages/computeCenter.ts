@@ -55,6 +55,11 @@ export interface ComputeAccount {
   lifetimeIncome: number
   lifetimeConsumption: number
   rentalIncome: number
+  rentalIncomeCnyEquivalent: number
+  commissionIncome: number
+  pendingCommission: number
+  totalIncomeCny: number
+  invitedCount: number
   apiSalesIncome: number
   withdrawableCardHours: number
   supplierStatus: string
@@ -62,6 +67,10 @@ export interface ComputeAccount {
   isAdmin: boolean
   roles: Array<'BUYER' | 'SUPPLIER' | 'ADMIN'>
   deviceCounts: Record<'PENDING' | 'DEPLOYING' | 'RUNNING' | 'PENDING_ACTION', number>
+  gpuAssetCounts: Record<
+    'PENDING' | 'REJECTED' | 'RUNNING' | 'PENDING_DELIVERY' | 'ACTIVE_RENTAL' | 'PENDING_ACTION' | 'OFFLINE',
+    number
+  >
   cardHourCnyRate: number
   cardHourRedeemRate: number
   unitName: string
@@ -203,6 +212,43 @@ export interface ComputeWithdrawal {
   cnyBalanceBefore: number
   cnyBalanceAfter: number
   completedAt?: string | null
+  createTime: string
+}
+
+export interface ComputeReferralProfile {
+  inviteCode: string
+  inviteLink: string
+  rewardRate: number
+  rewardCap: number
+  invitedCount: number
+  pendingCommission: number
+  paidCommission: number
+  bound: boolean
+  inviterEmail?: string
+  boundAt?: string | null
+  canBind: boolean
+  bindReason: string
+}
+
+export interface ComputeReferralPreview {
+  inviteCode: string
+  inviterEmail: string
+  canBind: boolean
+  reason: string
+}
+
+export interface ComputeReferralReward {
+  id: number
+  topupOrderNo: string
+  inviteeEmail: string
+  rechargeAmount: number
+  rewardRate: number
+  rewardCap: number
+  rewardAmount: number
+  status: 'WAITING' | 'PAID' | 'CANCELLED'
+  releaseAt: string
+  paidAt?: string | null
+  cancelReason?: string
   createTime: string
 }
 
@@ -419,6 +465,25 @@ export function withdrawComputeCardHours(cardHours: number, requestId = crypto.r
 
 export function listComputeWithdrawals() {
   return request<ComputeWithdrawal[]>('/api/compute/withdrawals')
+}
+
+export function getComputeReferralProfile() {
+  return request<ComputeReferralProfile>('/api/compute/referrals/me')
+}
+
+export function previewComputeReferral(inviteCode: string) {
+  return request<ComputeReferralPreview>(`/api/compute/referrals/preview?code=${encodeURIComponent(inviteCode)}`)
+}
+
+export function bindComputeReferral(inviteCode: string, deviceId: string) {
+  return request<ComputeReferralProfile>('/api/compute/referrals/bind', {
+    method: 'POST',
+    body: { inviteCode, deviceId },
+  })
+}
+
+export function listComputeReferralRewards() {
+  return request<ComputeReferralReward[]>('/api/compute/referrals/rewards')
 }
 
 export function activateComputeApi(productId: number, autoTopUp = false) {

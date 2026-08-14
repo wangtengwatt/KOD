@@ -41,6 +41,13 @@ export function parseDeepLink(link: string): DeepLinkAction | null {
       return { type: 'navigate', path: `/settings/provider?import=${encodeURIComponent(encodedConfig)}` }
     }
 
+    if (url.hostname === 'compute' && url.pathname === '/invite') {
+      if ([...url.searchParams.keys()].some((key) => key !== 'code')) return null
+      const code = url.searchParams.get('code')?.trim().toLowerCase()
+      if (!code?.match(/^[0-9a-f]{32}$/)) return null
+      return { type: 'navigate', path: `/compute-center?invite=${encodeURIComponent(code)}` }
+    }
+
     if (url.hostname === 'tinpay' && url.pathname === '/result') {
       if ([...url.searchParams.keys()].some((key) => !['sessionId', 'callbackState'].includes(key))) return null
       const callbackState = url.searchParams.get('callbackState')
