@@ -130,3 +130,25 @@
 .suanbao-danger {
   color: var(--chatbox-tint-error);
 }
+
+.suanbao-step-line {
+  width: 2px;
+  height: 36px;
+  background: var(--chatbox-border-primary);
+  transition: background 200ms ease;
+}
+
+.suanbao-step-line-complete {
+  background: var(--mantine-color-green-6, #2f9e44);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suanbao-step-line {
+    transition: none;
+  }
+  button:active,
+  .mantine-Button-root:active,
+  [data-mantine-component='Button']:active {
+    transform: none !important;
+  }
+}

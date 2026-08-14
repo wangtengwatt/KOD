@@ -8,6 +8,8 @@ import {
   Group,
   Loader,
   NumberInput,
+  Progress,
+  RingProgress,
   SegmentedControl,
   Select,
   Slider,
@@ -19,7 +21,7 @@ import {
   ThemeIcon,
   Title,
 } from '@mantine/core'
-import { IconCheck, IconDeviceMobile, IconSettings, IconShieldCheck, IconSparkles } from '@tabler/icons-react'
+import { IconCheck, IconDeviceMobile, IconSettings, IconSparkles } from '@tabler/icons-react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { SuanbaoMascot } from '@/components/suanbao/SuanbaoMascot'
@@ -97,6 +99,7 @@ function AndroidAgentPage() {
   const [petError, setPetError] = useState('')
   const [fileError, setFileError] = useState('')
   const [activeAction, setActiveAction] = useState<ActionName>()
+  const [actionSuccess, setActionSuccess] = useState<{ action: ActionName; label: string } | null>(null)
   const [now, setNow] = useState(Date.now())
   const [mobileFile, setMobileFile] = useState<MobileFile>()
   const [fileBusy, setFileBusy] = useState(false)
@@ -206,10 +209,18 @@ function AndroidAgentPage() {
     waitingApproval: '等待你的批准',
   }
 
-  const runTaskAction = async (name: ActionName, action: () => Promise<unknown>) => {
+  const runTaskAction = async (name: ActionName, action: () => Promise<unknown>, successLabel: string) => {
     setTaskError('')
     setActiveAction(name)
-    try { await action() } catch (error) { setTaskError(friendlyError(error)) } finally { setActiveAction(undefined) }
+    try {
+      await action()
+      setActionSuccess({ action: name, label: successLabel })
+      window.setTimeout(() => setActionSuccess(null), 1200)
+    } catch (error) {
+      setTaskError(friendlyError(error))
+    } finally {
+      setActiveAction(undefined)
+    }
   }
 
   const runOverlayAction = async (action: () => Promise<{ permissionGranted: boolean; running: boolean }>) => {
@@ -276,14 +287,15 @@ function AndroidAgentPage() {
             taskStatus={taskStatus}
             taskError={taskError}
             activeAction={activeAction}
+            actionSuccess={actionSuccess}
             canStart={canStart}
             installedApps={installedApps.length}
             onOpenAccessibility={() => void androidAgentNative.openAccessibilitySettings()}
-            onStart={() => void runTaskAction('start', () => store.start(appId, goal, budget, durationMinutes * 60_000))}
-            onPause={() => void runTaskAction('pause', store.pause)}
-            onResume={() => void runTaskAction('resume', store.resume)}
-            onStop={() => void runTaskAction('stop', store.stop)}
-            onRefresh={() => void runTaskAction('refresh', store.refresh)}
+            onStart={() => void runTaskAction('start', () => store.start(appId, goal, budget, durationMinutes * 60_000), '已开始')}
+            onPause={() => void runTaskAction('pause', store.pause, '已暂停')}
+            onResume={() => void runTaskAction('resume', store.resume, '已继续')}
+            onStop={() => void runTaskAction('stop', store.stop, '已停止')}
+            onRefresh={() => void runTaskAction('refresh', store.refresh, '已刷新')}
           /></Tabs.Panel>
 
           <Tabs.Panel value="settings"><SettingsPanel
@@ -317,8 +329,29 @@ function AndroidAgentPage() {
   )
 }
 
-function PermissionCard({ complete, title, description, action }: { complete: boolean; title: string; description: string; action?: React.ReactNode }) {
-  return <Card withBorder padding="md" radius="md"><Group align="flex-start" wrap="nowrap"><ThemeIcon color={complete ? 'green' : 'blue'} variant="light" radius="xl">{complete ? <IconCheck size={18} /> : <IconShieldCheck size={18} />}</ThemeIcon><Stack gap={4} style={{ flex: 1 }}><Group justify="space-between" align="flex-start"><Box><Text fw={600}>{title}</Text><Text size="sm" c="dimmed">{description}</Text></Box><Badge color={complete ? 'green' : 'yellow'} variant="light">{complete ? '已完成' : '待设置'}</Badge></Group>{action}</Stack></Group></Card>
+function PermissionStep({ index, last, complete, busy, title, description, action }: { index: number; last?: boolean; complete: boolean; busy?: boolean; title: string; description: string; action?: React.ReactNode }) {
+  return (
+    <Box>
+      <Group align="flex-start" wrap="nowrap">
+        <Stack align="center" gap={6} style={{ flexShrink: 0 }}>
+          <ThemeIcon color={complete ? 'green' : busy ? 'blue' : 'gray'} variant={complete ? 'filled' : 'light'} radius="xl" size={30}>
+            {complete ? <IconCheck size={18} /> : busy ? <Loader size={14} /> : <Text size="sm" fw={700}>{index}</Text>}
+          </ThemeIcon>
+          {!last && <Box className={complete ? 'suanbao-step-line suanbao-step-line-complete' : 'suanbao-step-line'} />}
+        </Stack>
+        <Box style={{ flex: 1 }} pt={4}>
+          <Group justify="space-between" align="flex-start">
+            <Box>
+              <Text fw={600}>{title}</Text>
+              <Text size="sm" c="dimmed">{description}</Text>
+            </Box>
+            <Badge color={complete ? 'green' : busy ? 'blue' : 'yellow'} variant="light">{complete ? '已完成' : busy ? '处理中' : '待设置'}</Badge>
+          </Group>
+          {action}
+        </Box>
+      </Group>
+    </Box>
+  )
 }
 
 function PetAppearanceCard(props: any) {
@@ -334,6 +367,8 @@ function PetPanel(props: any) {
           onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); props.petDrag.current = { x: props.petPosition.x, y: props.petPosition.y, pointerX: event.clientX, pointerY: event.clientY } }}
           onPointerMove={(event) => { if (props.petDrag.current) props.setPetPosition({ x: props.petDrag.current.x + event.clientX - props.petDrag.current.pointerX, y: props.petDrag.current.y + event.clientY - props.petDrag.current.pointerY }) }}
           onPointerUp={() => { props.petDrag.current = undefined }} onPointerCancel={() => { props.petDrag.current = undefined }}
+          onTouchStart={(event) => event.stopPropagation()}
+          onTouchMove={(event) => event.stopPropagation()}
         ><SuanbaoMascot state={props.petState.state === 'executing' || props.petState.state === 'thinking' ? 'executing' : props.petState.state === 'error' ? 'error' : props.petState.state === 'success' ? 'success' : 'idle'} animation="full" /></Box>
         <Group gap={6}><Title order={3}>你好，我是蒜宝</Title><Badge color={props.petState.state === 'waitingApproval' ? 'yellow' : props.petState.state === 'error' ? 'red' : props.petState.state === 'executing' ? 'green' : 'gray'}>{props.petStateLabel[props.petState.state]}</Badge></Group>
         {props.petState.message && <Text size="sm" ta="center" c={props.petState.state === 'error' ? 'red' : 'dimmed'}>{props.petState.message}</Text>}
@@ -341,33 +376,74 @@ function PetPanel(props: any) {
       </Stack>
     </Card>
     {props.error && <Alert color="red" title="桌宠操作失败">{props.error}</Alert>}
-    <PermissionCard complete={props.overlayPermission} title="第 1 步 · 允许悬浮显示" description="用于把蒜宝显示在其他应用上方；你可以随时在系统设置中撤销。" action={!props.overlayPermission ? <Button mt="xs" loading={props.overlayBusy} onClick={props.onGrant}>前往系统设置</Button> : undefined} />
-    <PermissionCard complete={props.overlayRunning} title="第 2 步 · 开启系统桌宠" description={props.overlayLifecycle === 'starting' ? '系统正在启动悬浮桌宠…' : props.overlayRunning ? '蒜宝正在其他应用上方显示。' : '授权后由你主动开启，不会在后台偷偷启动。'} action={props.overlayPermission ? <Button mt="xs" color={props.overlayRunning ? 'red' : 'blue'} variant={props.overlayRunning ? 'light' : 'filled'} loading={props.overlayBusy || props.overlayLifecycle === 'starting'} onClick={props.overlayRunning ? props.onStop : props.onStart}>{props.overlayRunning ? '关闭桌宠' : '开启桌宠'}</Button> : undefined} />
+    <Card withBorder radius="lg" padding="md">
+      <Stack gap="lg">
+        <PermissionStep index={1} last={false} complete={props.overlayPermission} title="允许悬浮显示" description="用于把蒜宝显示在其他应用上方；你可以随时在系统设置中撤销。" action={!props.overlayPermission ? <Button mt="xs" variant="light" loading={props.overlayBusy} onClick={props.onGrant}>前往系统设置</Button> : undefined} />
+        <PermissionStep index={2} last={true} complete={props.overlayRunning} busy={props.overlayLifecycle === 'starting'} title="开启系统桌宠" description={props.overlayLifecycle === 'starting' ? '系统正在启动悬浮桌宠…' : props.overlayRunning ? '蒜宝正在其他应用上方显示。' : '授权后由你主动开启，不会在后台偷偷启动。'} action={props.overlayPermission ? <Button mt="xs" color={props.overlayRunning ? 'red' : 'blue'} variant={props.overlayRunning ? 'light' : 'filled'} loading={props.overlayBusy || props.overlayLifecycle === 'starting'} onClick={props.overlayRunning ? props.onStop : props.onStart}>{props.overlayRunning ? '关闭桌宠' : '开启桌宠'}</Button> : undefined} />
+      </Stack>
+    </Card>
     <PetAppearanceCard {...props} />
   </Stack>
 }
 
 function AssistantPanel(props: any) {
   const task = props.store.task
+  const running = task.state === 'running'
+  const paused = task.state === 'paused'
+  const totalSeconds = task.startedAt && task.deadlineAt ? Math.max(1, Math.ceil((task.deadlineAt - task.startedAt) / 1000)) : 1
+  const ringValue = totalSeconds > 0 && props.remainingSeconds !== undefined ? Math.max(0, Math.min(100, Math.round((props.remainingSeconds / totalSeconds) * 100))) : 0
+  const ringColor = task.state === 'failed' ? 'red' : task.state === 'paused' ? 'yellow' : task.state === 'running' ? 'green' : 'gray'
+  const budgetTotal = task.budget ?? 0
+  const budgetValue = budgetTotal > 0 ? Math.max(0, Math.min(100, Math.round(((task.remainingBudget ?? 0) / budgetTotal) * 100))) : 0
+  const success = props.actionSuccess?.action
+  const showStatus = Boolean(task.taskId && task.state !== 'idle')
+
+  const successButton = (action: string, label: string) => {
+    if (success !== action) return null
+    return <Button key={`success-${action}`} color="green" variant="light" leftSection={<IconCheck size={18} />}>{label}</Button>
+  }
+
   return <Stack>
     <Group justify="space-between"><Box><Title order={3}>手机任务控制</Title><Text size="sm" c="dimmed">仅支持微信和 QQ，所有写操作都需要你的单次批准。</Text></Box><Badge color={props.taskStatus.color} size="lg">{props.taskStatus.label}</Badge></Group>
-    {!props.store.accessibilityEnabled && <PermissionCard complete={false} title="开启 KOD 手机控制服务" description="用于读取目标应用界面并执行你批准的操作；支付、密码和验证码始终禁止。" action={<Button mt="xs" onClick={props.onOpenAccessibility}>前往无障碍设置</Button>} />}
-    {props.store.accessibilityEnabled && <PermissionCard complete title="KOD 手机控制服务已开启" description="你可以随时从 Android 无障碍设置中关闭。" />}
-    {props.installedApps === 0 && <Alert color="yellow" title="未找到支持的应用">请先安装微信或 QQ，再返回此页面刷新状态。</Alert>}
-    {props.taskError && <Alert color="red" title="任务操作失败">{props.taskError}</Alert>}
-    <Card withBorder radius="md" padding="md"><Stack>
-      <Select label="目标应用" value={props.appId} onChange={(value) => value && props.setAppId(value)} data={props.store.apps.map((app: any) => ({ value: app.id, label: `${app.id === 'wechat' ? '微信' : 'QQ'}${app.installed ? '' : '（未安装）'}`, disabled: !app.installed }))} />
-      <Textarea label="任务目标" placeholder="例如：打开与张三的聊天并找到最近一条消息" value={props.goal} onChange={(event) => props.setGoal(event.currentTarget.value)} maxLength={500} minRows={3} />
-      {!props.canStart && props.goal.trim() && <Text size="xs" c="dimmed">请先完成无障碍设置，并选择已安装的目标应用。</Text>}
-      {task.taskId && <Card withBorder padding="sm" radius="md"><Stack gap={4}><Text fw={600}>当前任务</Text><Text size="sm">剩余时间：{props.remainingSeconds ?? '-'} 秒</Text><Text size="sm">剩余操作：{task.remainingBudget ?? '-'} / {task.budget ?? '-'}</Text>{task.terminalReason && <Text size="sm" c={task.state === 'failed' ? 'red' : 'dimmed'}>{terminalReasonText[task.terminalReason] || task.terminalReason}</Text>}<Text size="xs" c="dimmed">诊断信息：g{task.generation ?? '-'} · 协议 {task.protocolVersion ?? '-'}</Text></Stack></Card>}
-      <Group>
-        {(['idle', 'stopped', 'failed'].includes(task.state)) && <Button disabled={!props.canStart} loading={props.activeAction === 'start'} onClick={props.onStart}>开始任务</Button>}
-        {task.state === 'running' && <Button variant="light" loading={props.activeAction === 'pause'} onClick={props.onPause}>暂停</Button>}
-        {task.state === 'paused' && <Button loading={props.activeAction === 'resume'} onClick={props.onResume}>继续</Button>}
-        {(['running', 'paused'].includes(task.state)) && <Button color="red" variant="light" loading={props.activeAction === 'stop'} onClick={props.onStop}>停止</Button>}
-        <Button variant="subtle" loading={props.activeAction === 'refresh'} disabled={Boolean(props.activeAction)} onClick={props.onRefresh}>刷新状态</Button>
-      </Group>
-    </Stack></Card>
+
+    {!props.store.accessibilityEnabled && <PermissionStep index={1} last={true} complete={false} title="开启 KOD 手机控制服务" description="用于读取目标应用界面并执行你批准的操作；支付、密码和验证码始终禁止。" action={<Button mt="xs" variant="light" onClick={props.onOpenAccessibility}>前往无障碍设置</Button>} />}
+    {props.store.accessibilityEnabled && <PermissionStep index={1} last={true} complete title="KOD 手机控制服务已开启" description="你可以随时从 Android 无障碍设置中关闭。" />}
+
+    {props.installedApps === 0 ? (
+      <Card withBorder radius="lg" padding="xl"><Stack align="center" gap="sm">
+        <SuanbaoMascot state="idle" animation="full" />
+        <Title order={4}>未找到支持的应用</Title>
+        <Text size="sm" c="dimmed" ta="center">安装微信或 QQ 后即可使用手机助手控制功能。</Text>
+        <Button variant="light" loading={props.activeAction === 'refresh'} onClick={props.onRefresh}>刷新状态</Button>
+      </Stack></Card>
+    ) : (
+      <>
+        {props.taskError && <Alert color="red" title="任务操作失败">{props.taskError}</Alert>}
+        <Card withBorder radius="md" padding="md"><Stack>
+          <Select label="目标应用" value={props.appId} onChange={(value) => value && props.setAppId(value)} data={props.store.apps.map((app: any) => ({ value: app.id, label: `${app.id === 'wechat' ? '微信' : 'QQ'}${app.installed ? '' : '（未安装）'}`, disabled: !app.installed }))} />
+          <Textarea label="任务目标" placeholder="例如：打开与张三的聊天并找到最近一条消息" value={props.goal} onChange={(event) => props.setGoal(event.currentTarget.value)} maxLength={500} minRows={3} />
+          {!props.canStart && props.goal.trim() && <Text size="xs" c="dimmed">请先完成无障碍设置，并选择已安装的目标应用。</Text>}
+
+          {showStatus && <Card withBorder padding="md" radius="md"><Group align="center" wrap="nowrap">
+            <RingProgress size={84} thickness={8} roundCaps sections={[{ value: ringValue, color: ringColor }]} label={<Center><Text size="xs" fw={700}>{props.remainingSeconds ?? '-'}s</Text></Center>} />
+            <Stack gap={4} style={{ flex: 1 }}>
+              <Text fw={600}>当前任务进度</Text>
+              <Group gap={6}><Text size="sm" c="dimmed">剩余预算</Text><Box style={{ flex: 1 }}><Progress value={budgetValue} color={ringColor} size="sm" radius="xl" /></Box><Text size="sm" fw={600}>{task.remainingBudget ?? '-'} / {task.budget ?? '-'}</Text></Group>
+              {task.terminalReason && <Text size="sm" c={task.state === 'failed' ? 'red' : 'dimmed'}>{terminalReasonText[task.terminalReason] || task.terminalReason}</Text>}
+              <Text size="xs" c="dimmed">诊断信息：g{task.generation ?? '-'} · 协议 {task.protocolVersion ?? '-'}</Text>
+            </Stack>
+          </Group></Card>}
+
+          <Group>
+            {(['idle', 'stopped', 'failed'].includes(task.state)) && (success === 'start' ? successButton('start', '已开始') : <Button disabled={!props.canStart} loading={props.activeAction === 'start'} onClick={props.onStart}>开始任务</Button>)}
+            {running && (success === 'pause' ? successButton('pause', '已暂停') : <Button variant="light" loading={props.activeAction === 'pause'} onClick={props.onPause}>暂停</Button>)}
+            {paused && (success === 'resume' ? successButton('resume', '已继续') : <Button loading={props.activeAction === 'resume'} onClick={props.onResume}>继续</Button>)}
+            {(running || paused) && (success === 'stop' ? successButton('stop', '已停止') : <Button color="red" variant="light" loading={props.activeAction === 'stop'} onClick={props.onStop}>停止</Button>)}
+            {!success && <Button variant="subtle" loading={props.activeAction === 'refresh'} disabled={Boolean(props.activeAction)} onClick={props.onRefresh}>刷新状态</Button>}
+          </Group>
+        </Stack></Card>
+      </>
+    )}
   </Stack>
 }
 
