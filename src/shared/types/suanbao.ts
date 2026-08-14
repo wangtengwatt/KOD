@@ -11,6 +11,8 @@ export const suanbaoPetStateSchema = z.enum([
   'focus',
   'rest',
   'sleeping',
+  'peeking',
+  'hiding',
 ])
 export type SuanbaoPetState = z.infer<typeof suanbaoPetStateSchema>
 

@@ -369,7 +369,7 @@ function PetPanel(props: any) {
           onPointerUp={() => { props.petDrag.current = undefined }} onPointerCancel={() => { props.petDrag.current = undefined }}
           onTouchStart={(event) => event.stopPropagation()}
           onTouchMove={(event) => event.stopPropagation()}
-        ><SuanbaoMascot state={props.petState.state === 'executing' || props.petState.state === 'thinking' ? 'executing' : props.petState.state === 'error' ? 'error' : props.petState.state === 'success' ? 'success' : 'idle'} animation="full" /></Box>
+        ><SuanbaoMascot state={props.petState.state === 'thinking' ? 'thinking' : props.petState.state === 'executing' ? 'executing' : props.petState.state === 'error' ? 'error' : props.petState.state === 'success' ? 'success' : 'idle'} animation="full" /></Box>
         <Group gap={6}><Title order={3}>你好，我是蒜宝</Title><Badge color={props.petState.state === 'waitingApproval' ? 'yellow' : props.petState.state === 'error' ? 'red' : props.petState.state === 'executing' ? 'green' : 'gray'}>{props.petStateLabel[props.petState.state]}</Badge></Group>
         {props.petState.message && <Text size="sm" ta="center" c={props.petState.state === 'error' ? 'red' : 'dimmed'}>{props.petState.message}</Text>}
         <Text size="sm" c="dimmed" ta="center">在 KOD 里拖动我，或开启系统悬浮桌宠，让我陪你使用其他应用。</Text>

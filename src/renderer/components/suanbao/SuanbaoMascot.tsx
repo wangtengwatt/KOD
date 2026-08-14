@@ -1,5 +1,6 @@
 import type { SuanbaoPetState } from '@shared/types/suanbao'
 import mascotImage from '@/static/logos/suanbao-mascot.png'
+import mascotThinkingImage from '@/static/logos/suanbao-thinking.png'
 
 interface SuanbaoMascotProps {
   state: SuanbaoPetState
@@ -17,9 +18,11 @@ export function SuanbaoMascot({ state, animation, className }: SuanbaoMascotProp
     .filter(Boolean)
     .join(' ')
 
+  const image = state === 'thinking' ? mascotThinkingImage : mascotImage
+
   return (
     <span className={classes} aria-hidden="true">
-      <img className="suanbao-mascot-image" src={mascotImage} alt="" draggable={false} />
+      <img className="suanbao-mascot-image" src={image} alt="" draggable={false} />
     </span>
   )
 }

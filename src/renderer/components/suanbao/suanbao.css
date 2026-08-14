@@ -61,6 +61,23 @@
   filter: drop-shadow(0 8px 12px rgba(46, 62, 38, 0.2)) drop-shadow(0 0 6px rgba(219, 83, 83, 0.65));
 }
 
+.suanbao-mascot-state-peeking {
+  transform: scale(0.82);
+  filter: drop-shadow(0 8px 12px rgba(46, 62, 38, 0.18)) drop-shadow(0 0 4px rgba(111, 94, 231, 0.4));
+  opacity: 0.9;
+}
+
+.suanbao-mascot-state-hiding {
+  transform: scale(0.55);
+  opacity: 0.55;
+  filter: drop-shadow(0 4px 6px rgba(46, 62, 38, 0.12));
+}
+
+.suanbao-mascot-state-thinking .suanbao-mascot-image,
+.suanbao-mascot-state-thinking.suanbao-mascot-image {
+  content: url('../static/logos/suanbao-mascot.png');
+}
+
 .suanbao-mascot-state-executing.suanbao-mascot-animation-full {
   animation: suanbao-work 0.55s ease-in-out infinite alternate;
 }

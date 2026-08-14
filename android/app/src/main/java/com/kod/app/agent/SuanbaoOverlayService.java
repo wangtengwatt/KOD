@@ -59,8 +59,12 @@ public class SuanbaoOverlayService extends Service {
     private WindowManager.LayoutParams layoutParams;
     private WindowManager.LayoutParams menuLayoutParams;
     private ValueAnimator snapAnimator;
+    private ValueAnimator floatAnimator;
     private SuanbaoOverlayPreferences preferences;
     private SuanbaoOverlayPreferences.Snapshot appearance;
+    private float floatPhase;
+    private long lastFloatMs;
+    private boolean userInteracting;
 
     public static boolean canDraw(android.content.Context context) {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context);
@@ -89,6 +93,37 @@ public class SuanbaoOverlayService extends Service {
         startForeground(NOTIFICATION_ID, buildNotification());
         if (canDraw(this)) showOverlay();
         else stopSelf();
+    }
+
+    private void startFloating() {
+        if (SuanbaoOverlayPreferences.MOTION_OFF.equals(appearance.motion())) return;
+        stopFloating();
+        lastFloatMs = System.currentTimeMillis();
+        floatAnimator = ValueAnimator.ofFloat(0f, 1f);
+        floatAnimator.setDuration(SuanbaoOverlayPreferences.MOTION_REDUCED.equals(appearance.motion()) ? 4000 : 2600);
+        floatAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        floatAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
+        floatAnimator.addUpdateListener(animation -> {
+            if (userInteracting || overlayView == null || mascotView == null) return;
+            long now = System.currentTimeMillis();
+            floatPhase += (now - lastFloatMs) / 1000f * 2f;
+            lastFloatMs = now;
+            float bob = (float) Math.sin(floatPhase) * dp(2);
+            mascotView.setTranslationY(bob);
+            if ("thinking".equals(assistantState)) mascotView.setTranslationX((float) Math.sin(floatPhase * 0.7f) * dp(1));
+        });
+        floatAnimator.start();
+    }
+
+    private void stopFloating() {
+        if (floatAnimator != null) {
+            floatAnimator.cancel();
+            floatAnimator = null;
+        }
+        if (mascotView != null) {
+            mascotView.setTranslationX(0f);
+            mascotView.setTranslationY(0f);
+        }
     }
 
     @Override
@@ -125,7 +160,7 @@ public class SuanbaoOverlayService extends Service {
         root.addView(bubbleView, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL | Gravity.TOP));
 
         mascotView = new ImageView(this);
-        mascotView.setImageResource(R.drawable.suanbao_mascot);
+        updateMascotImage();
         mascotView.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         mascotView.setAlpha(appearance.opacity());
         root.addView(mascotView, new FrameLayout.LayoutParams(visibleWidth, visibleHeight, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM));
@@ -143,6 +178,7 @@ public class SuanbaoOverlayService extends Service {
             lifecycleState = "visible";
             lastError = null;
             setRunning(true);
+            startFloating();
             sendStateChanged();
         } catch (RuntimeException error) {
             overlayView = null;
@@ -187,6 +223,8 @@ public class SuanbaoOverlayService extends Service {
         public boolean onTouch(View view, MotionEvent event) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    userInteracting = true;
+                    stopFloating();
                     if (appearance.positionLocked()) {
                         showMenu(false);
                         return true;
@@ -225,7 +263,9 @@ public class SuanbaoOverlayService extends Service {
                 case MotionEvent.ACTION_UP:
                     view.removeCallbacks(longPress);
                     pointerDown = false;
+                    userInteracting = false;
                     restoreMascotFeedback();
+                    startFloating();
                     if (dragging) {
                         if (appearance.edgeSnap()) snapToNearestEdge();
                         else { persistPosition(); interactionState = "idle"; sendStateChanged(); }
@@ -236,7 +276,9 @@ public class SuanbaoOverlayService extends Service {
                 case MotionEvent.ACTION_CANCEL:
                     view.removeCallbacks(longPress);
                     pointerDown = false;
+                    userInteracting = false;
                     restoreMascotFeedback();
+                    startFloating();
                     if (dragging) {
                         if (appearance.edgeSnap()) snapToNearestEdge();
                         else { persistPosition(); interactionState = "idle"; sendStateChanged(); }
@@ -246,6 +288,15 @@ public class SuanbaoOverlayService extends Service {
                 default:
                     return false;
             }
+        }
+    }
+
+    private void updateMascotImage() {
+        if (mascotView == null) return;
+        if ("thinking".equals(assistantState)) {
+            mascotView.setImageResource(R.drawable.suanbao_thinking);
+        } else {
+            mascotView.setImageResource(R.drawable.suanbao_mascot);
         }
     }
 
@@ -278,7 +329,10 @@ public class SuanbaoOverlayService extends Service {
     }
 
     private void postBubbleUpdate() {
-        if (overlayView != null) overlayView.post(this::updateBubbleInternal);
+        if (overlayView != null) overlayView.post(() -> {
+            updateMascotImage();
+            updateBubbleInternal();
+        });
     }
 
     public static String assistantState() { return assistantState; }
@@ -384,6 +438,7 @@ public class SuanbaoOverlayService extends Service {
         layoutParams.x = point.x();
         layoutParams.y = point.y();
         try { windowManager.updateViewLayout(overlayView, layoutParams); } catch (RuntimeException ignored) {}
+        applyEdgePeekState();
     }
 
     private void snapToNearestEdge() {
@@ -407,11 +462,11 @@ public class SuanbaoOverlayService extends Service {
         snapAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
                 persistPosition();
-                interactionState = "idle";
+                applyEdgePeekState();
                 sendStateChanged();
             }
             @Override public void onAnimationCancel(android.animation.Animator animation) {
-                interactionState = "idle";
+                applyEdgePeekState();
                 sendStateChanged();
             }
         });
@@ -465,11 +520,44 @@ public class SuanbaoOverlayService extends Service {
 
     private void persistPosition() {
         SuanbaoOverlayGeometry.Bounds bounds = safeBounds(layoutParams.width, layoutParams.height);
+        String edge = layoutParams.x <= (bounds.minX() + bounds.maxX()) / 2 ? "left" : "right";
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
             .putInt("position_schema", POSITION_SCHEMA)
             .putFloat("normalized_x", SuanbaoOverlayGeometry.normalize(layoutParams.x, bounds.minX(), bounds.maxX()))
             .putFloat("normalized_y", SuanbaoOverlayGeometry.normalize(layoutParams.y, bounds.minY(), bounds.maxY()))
+            .putString("edge", edge)
             .apply();
+    }
+
+    private void applyEdgePeekState() {
+        if (overlayView == null || mascotView == null || layoutParams == null) return;
+        SuanbaoOverlayGeometry.Bounds bounds = safeBounds(layoutParams.width, layoutParams.height);
+        int centerX = layoutParams.x + layoutParams.width / 2;
+        int centerY = layoutParams.y + layoutParams.height / 2;
+        int minDist = Math.min(
+            Math.min(centerX - bounds.minX(), bounds.maxX() - centerX),
+            Math.min(centerY - bounds.minY(), bounds.maxY() - centerY)
+        );
+        int peek = dp(70);
+        int hide = dp(35);
+        String edgeState = minDist < hide ? "hiding" : minDist < peek ? "peeking" : "idle";
+        if (!edgeState.equals(interactionState) && !"dragging".equals(interactionState) && !"pressed".equals(interactionState) && !"snapping".equals(interactionState)) {
+            interactionState = edgeState;
+            sendStateChanged();
+        }
+        if ("peeking".equals(edgeState)) {
+            mascotView.setScaleX(0.82f);
+            mascotView.setScaleY(0.82f);
+            mascotView.setAlpha(Math.max(0.5f, appearance.opacity() * 0.85f));
+        } else if ("hiding".equals(edgeState)) {
+            mascotView.setScaleX(0.55f);
+            mascotView.setScaleY(0.55f);
+            mascotView.setAlpha(Math.max(0.4f, appearance.opacity() * 0.6f));
+        } else {
+            mascotView.setScaleX(1f);
+            mascotView.setScaleY(1f);
+            mascotView.setAlpha(appearance.opacity());
+        }
     }
 
     private void showMenu(boolean full) {
@@ -616,6 +704,7 @@ public class SuanbaoOverlayService extends Service {
     @Override
     public void onDestroy() {
         instance = null;
+        stopFloating();
         cancelSnap();
         hideMenu();
         if (overlayView != null && windowManager != null) {
