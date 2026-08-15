@@ -1,4 +1,4 @@
-import { enrichModelFromRegistry } from '@shared/model-registry/enrich'
+import { enrichModelFromAnyRegistry } from '@shared/model-registry/enrich'
 import { ModelProviderType, type ProviderBaseInfo, type ProviderModelInfo, type Settings } from '@shared/types'
 
 export const KOD_RELAY_PROVIDER_ID = '__kod_relay_station__'
@@ -146,14 +146,11 @@ export async function fetchKodRelayModels(selection: KodRelaySelection, signal?:
   return (result.data || []).flatMap<ProviderModelInfo>((item) => {
     if (typeof item.id !== 'string') return []
     return [
-      enrichModelFromRegistry(
-        {
-          modelId: item.id,
-          nickname: typeof item.name === 'string' ? item.name : item.id,
-          type: 'chat' as const,
-        },
-        KOD_RELAY_PROVIDER_ID
-      ),
+      enrichModelFromAnyRegistry({
+        modelId: item.id,
+        nickname: typeof item.name === 'string' ? item.name : item.id,
+        type: 'chat' as const,
+      }),
     ]
   })
 }

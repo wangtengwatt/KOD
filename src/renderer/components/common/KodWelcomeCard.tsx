@@ -1,9 +1,13 @@
 import { Button, Flex, Paper, Stack, Text } from '@mantine/core'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { trackJkClickEvent } from '@/analytics/jk'
 import { JK_EVENTS } from '@/analytics/jk-events'
 import { navigateToSettings } from '@/modals/Settings'
+import { openLinkWithAuth } from '@/packages/openLinkWithAuth'
+import * as remote from '@/packages/remote'
 import platform from '@/platform'
+import { useLanguage } from '@/stores/settingsStore'
 import type { HomeWelcomeCardMode } from '@/utils/homeWelcomeCard'
 
 const KOD_SETTINGS_URL = 'https://kod.kai.com/settings'
@@ -11,6 +15,11 @@ const KOD_SETTINGS_URL = 'https://kod.kai.com/settings'
 export function KodWelcomeCard(props: { mode: HomeWelcomeCardMode; pageName: string; className?: string }) {
   const { mode, pageName, className } = props
   const { t } = useTranslation()
+  const language = useLanguage()
+  const [pendingAction, setPendingAction] = useState<'claim-free-plan' | 'purchase-plan' | 'view-more-plans' | null>(
+    null
+  )
+  const pendingActionRef = useRef(false)
 
   if (mode === 'none') {
     return null
@@ -31,12 +40,112 @@ export function KodWelcomeCard(props: { mode: HomeWelcomeCardMode; pageName: str
           </Text>
 
           <Text size="xs" c="kod-tertiary" className="text-center">
-            {mode === 'login' ? t('Sign in to start chatting with AI') : t('KOD AI access is not configured')}
+            {mode === 'login' ? t('Sign in to start chatting with AI') : t('No licenses found')}
           </Text>
         </Stack>
 
         <Flex gap="xs" justify="center" align="center" wrap="wrap">
-          {mode === 'login' ? (
+          {mode === 'expired-license' ? (
+            <>
+              <Button
+                size="xs"
+                variant="filled"
+                h={32}
+                miw={160}
+                fw={600}
+                flex="0 1 auto"
+                onClick={() => {
+                  if (pendingActionRef.current) return
+                  pendingActionRef.current = true
+                  trackJkClickEvent(JK_EVENTS.FREE_LICENSE_CLAIM_CLICK, { pageName, content: 'welcome_card_expired' })
+                  setPendingAction('purchase-plan')
+                  openLinkWithAuth(
+                    remote.buildChatboxUrl(
+                      `/redirect_app/view_more_plans/${language}/?utm_source=app&utm_content=provider_cb_login_purchase`
+                    )
+                  )
+                    .catch((err) => console.error('Failed to open purchase plan link:', err))
+                    .finally(() => {
+                      pendingActionRef.current = false
+                      setPendingAction(null)
+                    })
+                }}
+                loading={pendingAction === 'purchase-plan'}
+                disabled={pendingAction !== null}
+              >
+                {t('Purchase Plan')}
+              </Button>
+              <Button
+                size="xs"
+                variant="subtle"
+                c="kod-tertiary"
+                h={32}
+                fw={400}
+                flex="0 1 auto"
+                onClick={() => navigateToSettings('chatbox-ai')}
+              >
+                {t('View License Details')}
+              </Button>
+            </>
+          ) : mode === 'no-license' ? (
+            <>
+              <Button
+                size="xs"
+                variant="filled"
+                h={32}
+                miw={160}
+                fw={600}
+                flex="0 1 auto"
+                onClick={() => {
+                  if (pendingActionRef.current) return
+                  pendingActionRef.current = true
+                  trackJkClickEvent(JK_EVENTS.FREE_LICENSE_CLAIM_CLICK, { pageName, content: 'welcome_card' })
+                  setPendingAction('claim-free-plan')
+                  openLinkWithAuth(
+                    remote.buildChatboxUrl(
+                      `/redirect_app/claim_free_plan/${language}/?utm_source=app&utm_content=provider_cb_login_claim_free`
+                    )
+                  )
+                    .catch((err) => console.error('Failed to open claim free plan link:', err))
+                    .finally(() => {
+                      pendingActionRef.current = false
+                      setPendingAction(null)
+                    })
+                }}
+                loading={pendingAction === 'claim-free-plan'}
+                disabled={pendingAction !== null}
+              >
+                {t('Claim Free Plan')}
+              </Button>
+              <Button
+                size="xs"
+                variant="subtle"
+                c="kod-tertiary"
+                h={32}
+                fw={400}
+                flex="0 1 auto"
+                onClick={() => {
+                  if (pendingActionRef.current) return
+                  pendingActionRef.current = true
+                  setPendingAction('view-more-plans')
+                  openLinkWithAuth(
+                    remote.buildChatboxUrl(
+                      `/redirect_app/view_more_plans/${language}/?utm_source=app&utm_content=provider_cb_login_more_plans`
+                    )
+                  )
+                    .catch((err) => console.error('Failed to open view more plans link:', err))
+                    .finally(() => {
+                      pendingActionRef.current = false
+                      setPendingAction(null)
+                    })
+                }}
+                loading={pendingAction === 'view-more-plans'}
+                disabled={pendingAction !== null}
+              >
+                {t('View More Plans')}
+              </Button>
+            </>
+          ) : mode === 'login' ? (
             <>
               <Button
                 size="xs"

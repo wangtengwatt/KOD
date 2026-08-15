@@ -29,45 +29,6 @@ function getRegistry(): ModelRegistryData {
 }
 
 /**
- * Resolve metadata when the upstream endpoint only exposes a model id and no
- * provider id. Relay stations have exactly that shape, so provider-scoped
- * enrichment cannot be used for them.
- *
- * Exact/prefix matches from every registry provider are merged. Capabilities
- * are unioned because the same public model is often exposed by more than one
- * compatible gateway under the same id.
- */
-export function findModelAcrossRegistry(modelId: string): ModelMetadata | undefined {
-  const matches = Object.values(getRegistry()).flatMap((providerRegistry) => {
-    const match = findModelInRegistry(modelId, providerRegistry)
-    return match ? [match] : []
-  })
-  if (matches.length === 0) return undefined
-
-  const first = matches[0]
-  return {
-    ...first,
-    capabilities: [...new Set(matches.flatMap((match) => match.capabilities))],
-    contextWindow: Math.max(...matches.map((match) => match.contextWindow)),
-    maxOutput: Math.max(...matches.map((match) => match.maxOutput)),
-  }
-}
-
-export function enrichModelFromAnyRegistry<T extends { modelId: string; [key: string]: unknown }>(model: T): T {
-  const meta = findModelAcrossRegistry(model.modelId)
-  if (!meta) return model
-
-  return {
-    ...model,
-    capabilities: meta.capabilities.length > 0 ? meta.capabilities : model.capabilities,
-    contextWindow: meta.contextWindow > 0 ? meta.contextWindow : model.contextWindow,
-    maxOutput: meta.maxOutput > 0 ? meta.maxOutput : model.maxOutput,
-    nickname: model.nickname || meta.name,
-    type: model.type || meta.type,
-  }
-}
-
-/**
  * Find a model in the registry by exact match or prefix match.
  * Prefix matching handles cases like fine-tuned model IDs (e.g., "gpt-4o:ft-xxx").
  */
@@ -98,6 +59,46 @@ export function findModelInRegistry(modelId: string, registry: ProviderModelRegi
   }
 
   return bestMatch
+}
+
+/**
+ * Find a model across all provider registries.
+ * When multiple providers expose the same model id, merges the union of
+ * capabilities and the max contextWindow / maxOutput.
+ */
+export function findModelAcrossRegistry(modelId: string): ModelMetadata | undefined {
+  const matches = Object.values(getRegistry()).flatMap((providerRegistry) => {
+    const match = findModelInRegistry(modelId, providerRegistry)
+    return match ? [match] : []
+  })
+  if (matches.length === 0) return undefined
+
+  const first = matches[0]
+  return {
+    ...first,
+    capabilities: [...new Set(matches.flatMap((match) => match.capabilities))],
+    contextWindow: Math.max(...matches.map((match) => match.contextWindow)),
+    maxOutput: Math.max(...matches.map((match) => match.maxOutput)),
+  }
+}
+
+/**
+ * Enrich a single ProviderModelInfo with metadata from the registry (any provider).
+ * Used for KOD relay where the provider is a gateway that may not match the
+ * underlying model registry key directly.
+ */
+export function enrichModelFromAnyRegistry<T extends { modelId: string; [key: string]: unknown }>(model: T): T {
+  const meta = findModelAcrossRegistry(model.modelId)
+  if (!meta) return model
+
+  return {
+    ...model,
+    capabilities: meta.capabilities.length > 0 ? meta.capabilities : model.capabilities,
+    contextWindow: meta.contextWindow > 0 ? meta.contextWindow : model.contextWindow,
+    maxOutput: meta.maxOutput > 0 ? meta.maxOutput : model.maxOutput,
+    nickname: model.nickname || meta.name,
+    type: model.type || meta.type,
+  }
 }
 
 /**

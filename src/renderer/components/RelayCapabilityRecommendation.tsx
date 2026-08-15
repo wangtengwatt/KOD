@@ -7,6 +7,7 @@ export function RelayCapabilityRecommendation() {
   const recommendation = useStore(kodRelayStore, (state) => state.recommendation)
   if (!recommendation) return null
   const { requirement, target, models } = recommendation
+
   return (
     <div className="fixed left-1/2 top-5 z-[10000] w-[min(92vw,640px)] -translate-x-1/2">
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-xl">
@@ -30,8 +31,8 @@ export function RelayCapabilityRecommendation() {
                     variant="light"
                     color="yellow"
                     onClick={() =>
-                      void selectKodRelay({ ...target.selection, modelId: model.modelId }).then(
-                        clearKodRelayRecommendation
+                      void selectKodRelay({ ...target.selection, modelId: model.modelId }).then(() =>
+                        clearKodRelayRecommendation()
                       )
                     }
                   >

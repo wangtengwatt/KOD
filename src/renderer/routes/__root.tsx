@@ -50,6 +50,7 @@ import { trackJkViewEvent } from '@/analytics/jk'
 import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
 import { MobileBottomNavigation } from '@/components/mobile/MobileBottomNavigation'
 import { MobileRelayQuickSwitch } from '@/components/mobile/MobileRelayQuickSwitch'
+import { RelayCapabilityRecommendation } from '@/components/RelayCapabilityRecommendation'
 import SettingsModal, { navigateToSettings } from '@/modals/Settings'
 import AndroidAgentApprovalModal from '@/packages/android-agent/ApprovalModal'
 import { prefetchModelRegistry } from '@/packages/model-registry'
@@ -377,6 +378,7 @@ function Root() {
       <Toasts /> {/* mui */}
       <SettingsModal />
       <AndroidAgentApprovalModal />
+      <RelayCapabilityRecommendation />
     </Box>
   )
 }

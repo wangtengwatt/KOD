@@ -137,8 +137,8 @@ export type InputBoxProps = {
     provider: string
     modelId: string
   }
-  fullWidth?: boolean
   modelFilter?: (model: ProviderModelInfo, providerId?: string) => boolean
+  fullWidth?: boolean
   onSelectModel?(provider: string, model: string): void
   onSubmit?(payload: InputBoxPayload): Promise<void>
   onStopGenerating?(): boolean
@@ -224,8 +224,8 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       sessionType = 'chat',
       generating = false,
       model,
-      fullWidth = false,
       modelFilter,
+      fullWidth = false,
       onSelectModel,
       onSubmit,
       onStopGenerating,

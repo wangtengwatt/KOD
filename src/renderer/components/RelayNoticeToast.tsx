@@ -7,6 +7,7 @@ export function RelayNoticeToast({ message, onClose }: { message: string; onClos
     const timer = setTimeout(onClose, 3500)
     return () => clearTimeout(timer)
   }, [onClose])
+
   return (
     <div className="fixed left-1/2 top-5 z-[9999] w-[min(92vw,640px)] -translate-x-1/2">
       <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 shadow-xl">
