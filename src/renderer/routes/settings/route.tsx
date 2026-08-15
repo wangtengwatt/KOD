@@ -16,7 +16,6 @@ import {
   IconWallet,
   IconWand,
   IconWorldWww,
-  IconWallet,
 } from '@tabler/icons-react'
 import { createFileRoute, Link, Outlet, useCanGoBack, useRouter, useRouterState } from '@tanstack/react-router'
 import clsx from 'clsx'

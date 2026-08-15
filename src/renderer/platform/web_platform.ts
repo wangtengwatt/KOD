@@ -60,10 +60,6 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
   public onUpdateDownloaded(callback: () => void): () => void {
     return () => null
   }
-  public async openPaymentUrl(url: string): Promise<void> {
-    throw new Error('安全支付链接仅支持桌面客户端')
-  }
-
   public async openLink(url: string): Promise<void> {
     window.open(url)
   }

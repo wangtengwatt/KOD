@@ -153,9 +153,7 @@ export default function Sidebar() {
         },
       }}
       SlideProps={language === 'ar' ? { direction: 'left' } : undefined}
-      PaperProps={
-        language === 'ar' ? { sx: { direction: 'rtl', overflowY: 'auto' } } : { sx: { overflowY: 'auto' } }
-      }
+      PaperProps={language === 'ar' ? { sx: { direction: 'rtl', overflowY: 'auto' } } : { sx: { overflowY: 'auto' } }}
       disableSwipeToOpen={CHATBOX_BUILD_PLATFORM !== 'ios'} // 只在iOS设备上启用SwipeToOpen
     >
       <Stack
@@ -183,7 +181,12 @@ export default function Sidebar() {
           </Flex>
 
           <Tooltip label={t('Collapse')} openDelay={1000} withArrow>
-            <ActionIcon variant="subtle" color="kod-tertiary" size={isSmallScreen ? 'lg' : 20} onClick={() => setShowSidebar(false)}>
+            <ActionIcon
+              variant="subtle"
+              color="kod-tertiary"
+              size={isSmallScreen ? 'lg' : 20}
+              onClick={() => setShowSidebar(false)}
+            >
               <IconLayoutSidebarLeftCollapse />
             </ActionIcon>
           </Tooltip>
@@ -282,7 +285,7 @@ export default function Sidebar() {
                 c="kod-secondary"
                 className="rounded"
                 label="算力中心"
-                leftSection={<ScalableIcon icon={IconCpu} size={22} />}
+                leftSection={<ScalableIcon icon={IconCpu} size={20} />}
                 onClick={() => {
                   navigate({ to: '/compute-center' })
                   setShowSidebar(false)
@@ -356,7 +359,10 @@ export default function Sidebar() {
                 className="rounded"
                 label="算力中心"
                 leftSection={<ScalableIcon icon={IconCpu} size={20} />}
-                onClick={() => navigate({ to: '/compute-center' })}
+                onClick={() => {
+                  navigate({ to: '/compute-center' })
+                  if (isSmallScreen) setShowSidebar(false)
+                }}
                 variant="light"
                 p="xs"
               />

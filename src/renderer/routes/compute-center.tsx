@@ -2917,10 +2917,12 @@ function AdminIdentityReviews({
   const pending = identities.filter((item) => item.status === 'PENDING')
   const [reasons, setReasons] = useState<Record<number, string>>({})
   const [details, setDetails] = useState<Record<number, ComputeIdentity>>({})
+  const [documentPreviewUrl, setDocumentPreviewUrl] = useState<string | null>(null)
   const openDocument = async (identityId: number, side: 'front' | 'back') => {
     const blob = await getAdminIdentityDocument(identityId, side)
     const url = URL.createObjectURL(blob)
-    window.open(url, '_blank', 'noopener,noreferrer')
+    // 移动端 WebView 无法在浏览器新标签打开 blob URL，改用应用内预览
+    setDocumentPreviewUrl(url)
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
   const review = (item: ComputeIdentity, approved: boolean) => {
@@ -2994,6 +2996,15 @@ function AdminIdentityReviews({
           ))}
         </Stack>
       )}
+      <Modal
+        opened={documentPreviewUrl !== null}
+        onClose={() => setDocumentPreviewUrl(null)}
+        title="身份证件预览"
+        size="lg"
+        centered
+      >
+        {documentPreviewUrl && <img src={documentPreviewUrl} alt="身份证件" style={{ width: '100%' }} />}
+      </Modal>
     </Section>
   )
 }
@@ -3002,10 +3013,12 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
   const pending = nodes.filter((item) => item.status === 'PENDING')
   const [reasons, setReasons] = useState<Record<number, string>>({})
   const [notes, setNotes] = useState<Record<number, string>>({})
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null)
   const openProof = async (nodeId: number) => {
     const blob = await getAdminNodeProof(nodeId)
     const url = URL.createObjectURL(blob)
-    window.open(url, '_blank', 'noopener,noreferrer')
+    // 移动端 WebView 无法在浏览器新标签打开 blob URL，改用应用内预览
+    setProofPreviewUrl(url)
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
   return (
@@ -3074,6 +3087,15 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
           ))}
         </Stack>
       )}
+      <Modal
+        opened={proofPreviewUrl !== null}
+        onClose={() => setProofPreviewUrl(null)}
+        title="资源证明预览"
+        size="lg"
+        centered
+      >
+        {proofPreviewUrl && <img src={proofPreviewUrl} alt="资源证明" style={{ width: '100%' }} />}
+      </Modal>
     </Section>
   )
 }

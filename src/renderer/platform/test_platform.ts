@@ -217,10 +217,6 @@ export default class TestPlatform implements Platform {
     return () => {}
   }
 
-  public async openPaymentUrl(url: string): Promise<void> {
-    throw new Error('安全支付链接仅支持桌面客户端')
-  }
-
   public async openLink(url: string): Promise<void> {
     // no-op in test
   }
