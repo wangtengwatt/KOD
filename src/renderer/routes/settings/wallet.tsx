@@ -16,14 +16,25 @@ import {
   Title,
 } from '@mantine/core'
 import { IconRefresh, IconWallet } from '@tabler/icons-react'
+import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import dayjs from 'dayjs'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { useWallet } from '@/hooks/useWallet'
+import { walletApi } from '@/api/wallet'
+import { GpuExchangeButton } from '@/components/wallet/GpuExchangeButton'
+import { useWallet, walletKeys } from '@/hooks/useWallet'
 import { navigateToSettings } from '@/modals/Settings'
 import platform from '@/platform'
-import { calculateDiscount, formatCny, formatTopupStatus, paymentMethodName } from '@/utils/wallet.utils'
+import {
+  calculateDiscount,
+  formatCardTime,
+  formatCny,
+  formatRmbFromCardTime,
+  formatTopupStatus,
+  paymentMethodName,
+  rmbToCardTime,
+} from '@/utils/wallet.utils'
 
 export const Route = createFileRoute('/settings/wallet')({ component: RouteComponent })
 const pageSize = 10
@@ -41,7 +52,15 @@ const statusColor = (status: string) =>
 
 export function RouteComponent() {
   const [page, setPage] = useState(1)
-  const { identity, apiHost, info, balance, history, amount, pay, refresh } = useWallet(page, pageSize)
+  const { identity, apiHost, info, balance, cardTimeAccount, history, amount, pay, refresh } = useWallet(page, pageSize)
+  const [recordTab, setRecordTab] = useState<'topup' | 'consume'>('topup')
+  const [consumePage, setConsumePage] = useState(1)
+  const consumeHistory = useQuery({
+    queryKey: walletKeys.consumeHistory(identity ?? 'signed-out', consumePage, pageSize),
+    queryFn: () => walletApi.getConsumeHistory(consumePage, pageSize),
+    enabled: identity !== null && recordTab === 'consume',
+    retry: 1,
+  })
   const [selectedAmount, setSelectedAmount] = useState<number | string>('')
   const [methodType, setMethodType] = useState('')
   const [paymentNotice, setPaymentNotice] = useState<'opened' | 'open-failed' | null>(null)
@@ -92,7 +111,7 @@ export function RouteComponent() {
           </Text>
         </Stack>
         <Text c="kod-tertiary">登录 Kod 账户后可查看余额、充值和交易记录。</Text>
-        <Button onClick={() => navigateToSettings('chatbox-ai')}>前往登录</Button>
+        <Button onClick={() => navigateToSettings('kod-ai')}>前往登录</Button>
       </Stack>
     )
   const disabled = !info.data?.enableOnlineTopup || !validAmount || !method || pay.isPending
@@ -136,7 +155,7 @@ export function RouteComponent() {
           刷新余额和记录
         </Button>
       </Group>
-      <SimpleGrid cols={{ base: 1, sm: 2 }}>
+      <SimpleGrid cols={{ base: 1, sm: 3 }}>
         <Card withBorder>
           <Text c="kod-tertiary">余额</Text>
           {balance.isLoading ? (
@@ -145,6 +164,11 @@ export function RouteComponent() {
             <Alert color="red">{message(balance.error)}</Alert>
           ) : (
             <Title order={2}>{formatCny(balance.data?.balance)}</Title>
+          )}
+          {balance.data && (
+            <Text size="sm" c="kod-tertiary">
+              ≈ {formatCardTime(rmbToCardTime(balance.data.balance))}
+            </Text>
           )}
         </Card>
         <Card withBorder>
@@ -157,7 +181,28 @@ export function RouteComponent() {
             <Title order={2}>{formatCny(balance.data?.historicalConsumption)}</Title>
           )}
         </Card>
+        <Card withBorder>
+          <Text c="kod-tertiary">卡时余额</Text>
+          {cardTimeAccount.isLoading ? (
+            <Loader size="sm" />
+          ) : cardTimeAccount.error ? (
+            <Text c="red" size="sm">
+              卡时余额暂不可用
+            </Text>
+          ) : (
+            <Stack gap={0}>
+              <Title order={2}>{formatCardTime(cardTimeAccount.data?.availableCardHours)}</Title>
+              <Text size="sm" c="kod-tertiary">
+                ≈ {formatRmbFromCardTime(cardTimeAccount.data?.availableCardHours ?? 0)}
+              </Text>
+            </Stack>
+          )}
+        </Card>
       </SimpleGrid>
+
+      <Group justify="flex-end">
+        <GpuExchangeButton availableCardHours={cardTimeAccount.data?.availableCardHours ?? 0} />
+      </Group>
       <Card withBorder>
         <Stack>
           <Title order={4}>充值</Title>
@@ -185,13 +230,13 @@ export function RouteComponent() {
                     variant={selectedAmount === value ? 'filled' : 'light'}
                     onClick={() => setSelectedAmount(value)}
                   >
-                    {formatCny(value)}
+                    {formatCardTime(value)}
                   </Button>
                 ))}
               </Group>
               <NumberInput
-                label="充值金额"
-                description={`允许自定义正整数，当前最低 ${formatCny(minimum)}`}
+                label="卡时数量"
+                description={`1 卡时 = 1.002 RMB，当前最低 ${formatCardTime(minimum)}`}
                 min={1}
                 step={1}
                 allowDecimal={false}
@@ -200,7 +245,7 @@ export function RouteComponent() {
               />
               {!validAmount && selectedAmount !== '' && (
                 <Text c="red" size="sm">
-                  请输入不低于 {formatCny(minimum)} 的正整数。
+                  请输入不低于 {formatCardTime(minimum)} 的正整数。
                 </Text>
               )}
               <Radio.Group label="支付方式" value={methodType} onChange={setMethodType}>
@@ -209,7 +254,7 @@ export function RouteComponent() {
                     <Radio
                       key={item.type}
                       value={item.type}
-                      label={`${paymentMethodName(item.type, item.name)}${item.minTopup ? `（最低 ${formatCny(item.minTopup)}）` : ''}`}
+                      label={`${paymentMethodName(item.type, item.name)}${item.minTopup ? `（最低 ${formatCardTime(item.minTopup)}）` : ''}`}
                     />
                   ))}
                 </Stack>
@@ -266,59 +311,132 @@ export function RouteComponent() {
       )}
       <Divider />
       <Stack>
-        <Title order={4}>充值记录{history.data ? `（共 ${history.data.total} 条）` : ''}</Title>
-        {history.isLoading && !history.data && <Loader size="sm" />}
-        {history.error && history.data && (
-          <Alert color="yellow" title="记录刷新失败">
-            已保留上次加载的记录：{message(history.error)}
-            <Button mt="xs" size="xs" onClick={() => void history.refetch()}>
-              重试刷新
-            </Button>
-          </Alert>
-        )}
-        {history.error && !history.data && (
-          <Alert color="red" title="记录加载失败">
-            {message(history.error)}
-            <Button mt="xs" size="xs" onClick={() => void history.refetch()}>
-              重试
-            </Button>
-          </Alert>
-        )}
-        {history.data?.items.map((item) => (
-          <Card key={item.id} withBorder>
-            <Flex justify="space-between" gap="md" wrap="wrap">
-              <Stack gap={3}>
-                <Group>
-                  <Text fw={600}>充值 {formatCny(item.amount)}</Text>
-                  <Badge color={statusColor(item.status ?? '')}>
-                    {item.status ? formatTopupStatus(item.status) : '状态未知'}
-                  </Badge>
-                </Group>
-                <Text size="sm" c="kod-tertiary">
-                  {item.paymentMethod
-                    ? paymentMethodName(item.paymentMethod, item.paymentProvider ?? undefined)
-                    : item.paymentProvider || '未知'}{' '}
-                  · 订单{' '}
-                  {item.tradeNo
-                    ? item.tradeNo.length > 12
-                      ? `${item.tradeNo.slice(0, 6)}…${item.tradeNo.slice(-4)}`
-                      : item.tradeNo
-                    : '—'}
-                </Text>
-                <Text size="xs" c="kod-tertiary">
-                  {dayjs.unix(item.createTime).format('YYYY-MM-DD HH:mm:ss')}
-                  {item.completeTime ? ` · 完成于 ${dayjs.unix(item.completeTime).format('YYYY-MM-DD HH:mm:ss')}` : ''}
-                </Text>
-              </Stack>
-              <Text fw={600}>
-                {item.status === 'pending' ? '应付' : item.status === 'success' ? '实付' : '金额'}{' '}
-                {formatCny(item.money)}
+        <Group justify="space-between">
+          <Title order={4}>交易记录</Title>
+          <Radio.Group value={recordTab} onChange={(v) => setRecordTab(v as 'topup' | 'consume')}>
+            <Group gap="lg">
+              <Radio value="topup" label={`充值记录${history.data ? `（${history.data.total}）` : ''}`} />
+              <Radio
+                value="consume"
+                label={`消费记录${consumeHistory.data ? `（${consumeHistory.data.total}）` : ''}`}
+              />
+            </Group>
+          </Radio.Group>
+        </Group>
+
+        {recordTab === 'consume' ? (
+          <>
+            {consumeHistory.isLoading && !consumeHistory.data && <Loader size="sm" />}
+            {consumeHistory.error && !consumeHistory.data && (
+              <Alert color="red" title="消费记录加载失败">
+                {message(consumeHistory.error)}
+                <Button mt="xs" size="xs" onClick={() => void consumeHistory.refetch()}>
+                  重试
+                </Button>
+              </Alert>
+            )}
+            {consumeHistory.data && consumeHistory.data.items.length === 0 && (
+              <Text size="sm" c="kod-tertiary">
+                暂无消费记录。视频生成等按量计费项目会在这里逐条列出。
               </Text>
-            </Flex>
-          </Card>
-        ))}
-        {history.data && history.data.total > history.data.pageSize && (
-          <Pagination value={page} total={Math.ceil(history.data.total / history.data.pageSize)} onChange={setPage} />
+            )}
+            {consumeHistory.data?.items.map((item) => (
+              <Card key={item.id} withBorder>
+                <Flex justify="space-between" gap="md" wrap="wrap">
+                  <Stack gap={3}>
+                    <Group>
+                      <Text fw={600}>{item.bizType === 'video' ? '视频生成' : (item.bizType ?? '消费')}</Text>
+                      <Badge color="blue" variant="light">
+                        {item.modelName || '未知模型'}
+                      </Badge>
+                    </Group>
+                    <Text size="sm" c="kod-tertiary">
+                      {item.tokens != null ? `${item.tokens.toLocaleString()} tokens` : 'tokens 未知'}
+                      {item.unitPrice != null ? ` · 单价 ¥${item.unitPrice}/百万tokens` : ''}
+                      {item.duration != null ? ` · ${item.duration}s` : ''}
+                      {item.resolution ? ` · ${item.resolution}` : ''}
+                    </Text>
+                    <Text size="xs" c="kod-tertiary">
+                      {dayjs.unix(item.createTime).format('YYYY-MM-DD HH:mm:ss')}
+                      {item.balanceAfter != null ? ` · 扣后余额 ${formatCny(item.balanceAfter)}` : ''}
+                    </Text>
+                  </Stack>
+                  <Text fw={600} c="red">
+                    -{formatCny(item.amount)}
+                  </Text>
+                </Flex>
+              </Card>
+            ))}
+            {consumeHistory.data && consumeHistory.data.total > consumeHistory.data.pageSize && (
+              <Pagination
+                value={consumePage}
+                total={Math.ceil(consumeHistory.data.total / consumeHistory.data.pageSize)}
+                onChange={setConsumePage}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {history.isLoading && !history.data && <Loader size="sm" />}
+            {history.error && history.data && (
+              <Alert color="yellow" title="记录刷新失败">
+                已保留上次加载的记录：{message(history.error)}
+                <Button mt="xs" size="xs" onClick={() => void history.refetch()}>
+                  重试刷新
+                </Button>
+              </Alert>
+            )}
+            {history.error && !history.data && (
+              <Alert color="red" title="记录加载失败">
+                {message(history.error)}
+                <Button mt="xs" size="xs" onClick={() => void history.refetch()}>
+                  重试
+                </Button>
+              </Alert>
+            )}
+            {history.data?.items.map((item) => (
+              <Card key={item.id} withBorder>
+                <Flex justify="space-between" gap="md" wrap="wrap">
+                  <Stack gap={3}>
+                    <Group>
+                      <Text fw={600}>充值 {formatCardTime(item.amount)}</Text>
+                      <Badge color={statusColor(item.status ?? '')}>
+                        {item.status ? formatTopupStatus(item.status) : '状态未知'}
+                      </Badge>
+                    </Group>
+                    <Text size="sm" c="kod-tertiary">
+                      {item.paymentMethod
+                        ? paymentMethodName(item.paymentMethod, item.paymentProvider ?? undefined)
+                        : item.paymentProvider || '未知'}{' '}
+                      · 订单{' '}
+                      {item.tradeNo
+                        ? item.tradeNo.length > 12
+                          ? `${item.tradeNo.slice(0, 6)}…${item.tradeNo.slice(-4)}`
+                          : item.tradeNo
+                        : '—'}
+                    </Text>
+                    <Text size="xs" c="kod-tertiary">
+                      {dayjs.unix(item.createTime).format('YYYY-MM-DD HH:mm:ss')}
+                      {item.completeTime
+                        ? ` · 完成于 ${dayjs.unix(item.completeTime).format('YYYY-MM-DD HH:mm:ss')}`
+                        : ''}
+                    </Text>
+                  </Stack>
+                  <Text fw={600}>
+                    {item.status === 'pending' ? '应付' : item.status === 'success' ? '实付' : '金额'}{' '}
+                    {formatCny(item.money)}
+                  </Text>
+                </Flex>
+              </Card>
+            ))}
+            {history.data && history.data.total > history.data.pageSize && (
+              <Pagination
+                value={page}
+                total={Math.ceil(history.data.total / history.data.pageSize)}
+                onChange={setPage}
+              />
+            )}
+          </>
         )}
       </Stack>
     </Stack>

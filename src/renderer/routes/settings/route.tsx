@@ -13,6 +13,7 @@ import {
   IconMessages,
   IconPlant,
   IconSparkles,
+  IconWallet,
   IconWand,
   IconWorldWww,
   IconWallet,
@@ -38,7 +39,7 @@ const ITEMS = [
   },
   {
     key: 'wallet',
-    label: 'Wallet',
+    label: '钱包',
     icon: <IconWallet className="w-full h-full" />,
   },
   {
@@ -211,12 +212,7 @@ export function SettingsRoot() {
                 <Box component="span" flex="0 0 auto" w={20} h={20} mr="xs">
                   {item.icon}
                 </Box>
-                <Text
-                  flex={1}
-                  lineClamp={1}
-                  span={true}
-                  className={`!text-inherit`}
-                >
+                <Text flex={1} lineClamp={1} span={true} className={`!text-inherit`}>
                   {t(item.label)}
                 </Text>
                 {item.key === 'chatbox-ai' && isChatboxAIActivated && (

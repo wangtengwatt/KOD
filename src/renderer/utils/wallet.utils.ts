@@ -1,4 +1,4 @@
-﻿export const formatCny = (value: number | string | null | undefined) => {
+export const formatCny = (value: number | string | null | undefined) => {
   const number = typeof value === 'number' ? value : Number(value ?? 0)
   return `¥${new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
     Number.isFinite(number) ? number : 0
@@ -22,3 +22,12 @@ export const calculateDiscount = (amount: number, actualValue: number | string):
   const saved = Math.max(0, amount - actual)
   return { actual, rate: Math.max(0, Math.min(1, saved / amount)), saved }
 }
+
+export const CARD_TIME_RATE = 1.002
+export const rmbToCardTime = (rmb: number) => rmb / CARD_TIME_RATE
+export const cardTimeToRmb = (cardTime: number) => cardTime * CARD_TIME_RATE
+export const formatCardTime = (value: number | string | null | undefined) => {
+  const n = typeof value === 'number' ? value : Number(value ?? 0)
+  return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(Number.isFinite(n) ? n : 0) + ' 卡时'
+}
+export const formatRmbFromCardTime = (cardTime: number) => formatCny(cardTimeToRmb(cardTime))

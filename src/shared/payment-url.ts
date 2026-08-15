@@ -1,4 +1,4 @@
-﻿export function parsePaymentHosts(value: string | undefined, apiOrigin: string): Set<string> {
+export function parsePaymentHosts(value: string | undefined, apiOrigin: string): Set<string> {
   const configured = (value ?? '')
     .split(',')
     .map((host) => host.trim().toLowerCase())

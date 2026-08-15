@@ -225,6 +225,10 @@ export default class TestPlatform implements Platform {
     // no-op in test
   }
 
+  public async openPaymentUrl(url: string): Promise<void> {
+    // no-op in test
+  }
+
   public async getDeviceName(): Promise<string> {
     return 'test-device'
   }
