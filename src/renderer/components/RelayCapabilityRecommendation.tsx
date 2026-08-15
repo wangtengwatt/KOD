@@ -1,9 +1,11 @@
 import { Button, Group, Text } from '@mantine/core'
 import { IconAlertTriangle, IconX } from '@tabler/icons-react'
+import { useTranslation } from 'react-i18next'
 import { useStore } from 'zustand'
 import { clearKodRelayRecommendation, kodRelayStore, selectKodRelay } from '@/hooks/useKodRelay'
 
 export function RelayCapabilityRecommendation() {
+  const { t } = useTranslation()
   const recommendation = useStore(kodRelayStore, (state) => state.recommendation)
   if (!recommendation) return null
   const { requirement, target, models } = recommendation
@@ -15,12 +17,24 @@ export function RelayCapabilityRecommendation() {
           <IconAlertTriangle size={20} className="mt-0.5 shrink-0 text-amber-600" />
           <div className="min-w-0 flex-1">
             <Text size="sm" fw={700} c="yellow.9">
-              当前模型不支持{requirement.label}，已自动回退到上一个可用 API
+              {t(
+                'The current model does not support {{requirement}}, and has automatically fallen back to the last available API',
+                {
+                  requirement: requirement.label,
+                }
+              )}
             </Text>
             <Text size="xs" c="yellow.9" mt={4}>
               {models.length > 0
-                ? `零售站 ${target.selection.stationUrl} 中以下模型支持该能力，点击即可切换：`
-                : `零售站 ${target.selection.stationUrl} 中没有可由本地模型注册表确认支持该能力的模型。`}
+                ? t('In relay station {{station}}, the following models support this capability. Click to switch:', {
+                    station: target.selection.stationUrl,
+                  })
+                : t(
+                    'No model in relay station {{station}} can be confirmed by the local model registry to support this capability.',
+                    {
+                      station: target.selection.stationUrl,
+                    }
+                  )}
             </Text>
             {models.length > 0 && (
               <Group gap="xs" mt="sm">
@@ -47,7 +61,7 @@ export function RelayCapabilityRecommendation() {
             variant="subtle"
             color="gray"
             px={4}
-            aria-label="关闭模型推荐"
+            aria-label={t('Close model recommendation')}
             onClick={clearKodRelayRecommendation}
           >
             <IconX size={16} />

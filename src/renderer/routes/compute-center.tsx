@@ -44,6 +44,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { zodValidator } from '@tanstack/zod-adapter'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
@@ -164,23 +165,8 @@ type CardHourPrompt = {
   onCancel: () => void
 }
 
-const roleLabels: Record<string, string> = {
-  BUYER: '购买方',
-  SUPPLIER: '已认证供应方',
-  ADMIN: '算力管理员',
-}
-
-const gpuAssetStatuses = [
-  ['PENDING', '待审核', 'yellow'],
-  ['REJECTED', '审核失败', 'red'],
-  ['RUNNING', '可发布', 'teal'],
-  ['PENDING_DELIVERY', '待交付', 'orange'],
-  ['ACTIVE_RENTAL', '运行中', 'green'],
-  ['PENDING_ACTION', '待处理', 'red'],
-  ['OFFLINE', '已关闭', 'gray'],
-] as const
-
 function ComputeCenterPage() {
+  const { t } = useTranslation()
   const search = Route.useSearch()
   const isSmallScreen = useIsSmallScreen()
   const navigate = useNavigate()
@@ -192,6 +178,11 @@ function ComputeCenterPage() {
   const [cardHourPrompt, setCardHourPrompt] = useState<CardHourPrompt | null>(null)
   const closeMessage = useCallback(() => setMessage(null), [])
 
+  const roleLabels: Record<string, string> = {
+    BUYER: t('Buyer'),
+    SUPPLIER: t('Certified supplier'),
+    ADMIN: t('Compute admin'),
+  }
   const configQuery = useQuery({ queryKey: ['compute', 'config'], queryFn: getComputeConfig })
   const productsQuery = useQuery({ queryKey: ['compute', 'products'], queryFn: () => listComputeProducts() })
   const accountQuery = useQuery({
@@ -233,7 +224,7 @@ function ComputeCenterPage() {
       await queryClient.invalidateQueries({ queryKey: ['compute'] })
       return true
     } catch (error) {
-      setMessage({ color: 'red', text: error instanceof Error ? error.message : '操作失败' })
+      setMessage({ color: 'red', text: error instanceof Error ? error.message : t('Operation failed') })
       return false
     } finally {
       setBusy(null)
@@ -276,7 +267,7 @@ function ComputeCenterPage() {
             })
           })
         }
-        setMessage({ color: 'red', text: error instanceof Error ? error.message : '操作失败' })
+        setMessage({ color: 'red', text: error instanceof Error ? error.message : t('Operation failed') })
         return false
       } finally {
         setBusy(null)
@@ -288,17 +279,17 @@ function ComputeCenterPage() {
 
   const account = accountQuery.data
   const tabs = [
-    { value: 'market', label: '算力市场', icon: <IconBuildingStore size={16} /> },
-    { value: 'account', label: '我的资产', icon: <IconWallet size={16} />, login: true },
-    { value: 'purchases', label: '购买记录', icon: <IconReceipt size={16} />, login: true },
-    { value: 'reservations', label: '我的订单', icon: <IconServer size={16} />, login: true },
-    { value: 'transfers', label: '转让', icon: <IconTransfer size={16} />, login: true },
-    { value: 'supplier', label: '我的设备', icon: <IconCpu size={16} />, login: true },
-    { value: 'notifications', label: '通知', icon: <IconBell size={16} />, login: true },
+    { value: 'market', label: t('Compute Marketplace'), icon: <IconBuildingStore size={16} /> },
+    { value: 'account', label: t('My Assets'), icon: <IconWallet size={16} />, login: true },
+    { value: 'purchases', label: t('Purchase Records'), icon: <IconReceipt size={16} />, login: true },
+    { value: 'reservations', label: t('My Orders'), icon: <IconServer size={16} />, login: true },
+    { value: 'transfers', label: t('Transfers'), icon: <IconTransfer size={16} />, login: true },
+    { value: 'supplier', label: t('My Devices'), icon: <IconCpu size={16} />, login: true },
+    { value: 'notifications', label: t('Notifications'), icon: <IconBell size={16} />, login: true },
   ]
 
   return (
-    <Page title="KOD 算力中心">
+    <Page title={t('KOD Compute Center')}>
       <Container size="xl" py={isSmallScreen ? 'sm' : 'md'} px={isSmallScreen ? 'xs' : 'md'}>
         <Stack gap="md">
           <Hero
@@ -310,11 +301,15 @@ function ComputeCenterPage() {
           />
 
           {!isLoggedIn && (
-            <Alert color="blue" title="公开浏览模式">
+            <Alert color="blue" title={t('Public browsing mode')}>
               <Flex align="center" justify="space-between" gap="md" wrap="wrap">
-                <Text size="sm">你可以浏览商品；购买卡时、购买套餐、转让和资源商操作需要登录。</Text>
+                <Text size="sm">
+                  {t(
+                    'You can browse products; buying card hours, buying packages, transfers and supplier operations require login.'
+                  )}
+                </Text>
                 <Button size="xs" onClick={() => navigate({ to: '/settings/provider/kod-ai' })}>
-                  登录 KOD
+                  {t('Log in to KOD')}
                 </Button>
               </Flex>
             </Alert>
@@ -337,7 +332,7 @@ function ComputeCenterPage() {
                   const config = await platform.getConfig()
                   await bindComputeReferral(search.invite || '', config.uuid)
                 },
-                '邀请关系绑定成功'
+                t('Referral relationship bound successfully')
               ).then((success) => {
                 if (success) navigate({ to: '/compute-center', search: {} })
               })
@@ -423,31 +418,40 @@ function ReferralInviteModal({
   onClose: () => void
   onConfirm: () => void
 }) {
+  const { t } = useTranslation()
   const errorMessage = error instanceof Error ? error.message : ''
   return (
-    <Modal opened={opened} onClose={onClose} title="确认邀请关系" centered closeOnClickOutside={!busy}>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={t('Confirm referral relationship')}
+      centered
+      closeOnClickOutside={!busy}
+    >
       <Stack>
         {loading ? (
-          <Text c="chatbox-tertiary">正在验证邀请链接…</Text>
+          <Text c="chatbox-tertiary">{t('Verifying referral link…')}</Text>
         ) : errorMessage ? (
           <Alert color="red">{errorMessage}</Alert>
         ) : preview ? (
           <>
             <Alert color={preview.canBind ? 'blue' : 'orange'}>
-              邀请人：<b>{preview.inviterEmail}</b>
+              {t('Inviter: ')}
+              <b>{preview.inviterEmail}</b>
               <br />
-              绑定后永久不能更改。你首次充值成功并经过 7 天确认期后，邀请人将获得充值金额 5% 的人民币返佣，单人最高
-              ¥100。
+              {t(
+                'The binding is permanent and cannot be changed. After your first successful top-up and a 7-day confirmation period, your inviter receives 5% RMB commission of the top-up amount, up to ¥100 per person.'
+              )}
             </Alert>
             {!preview.canBind && <Text c="red">{preview.reason}</Text>}
           </>
         ) : null}
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose} disabled={busy}>
-            取消
+            {t('Cancel')}
           </Button>
           <Button onClick={onConfirm} loading={busy} disabled={!preview?.canBind}>
-            确认绑定
+            {t('Confirm binding')}
           </Button>
         </Group>
       </Stack>
@@ -456,6 +460,7 @@ function ReferralInviteModal({
 }
 
 function FeedbackToast({ message, onClose }: { message: FeedbackMessage | null; onClose: () => void }) {
+  const { t } = useTranslation()
   const toastRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -527,6 +532,7 @@ function isCardHourTopUpQuote(value: unknown): value is CardHourTopUpQuote {
 }
 
 function CardHourTopUpModal({ prompt }: { prompt: CardHourPrompt | null }) {
+  const { t } = useTranslation()
   if (!prompt) return null
   const { quote } = prompt
   const roundedExtra = Math.max(0, quote.purchaseCardHours - quote.shortageCardHours)
@@ -536,36 +542,56 @@ function CardHourTopUpModal({ prompt }: { prompt: CardHourPrompt | null }) {
       opened
       onClose={prompt.onCancel}
       centered
-      title={quote.canAutoTopUp ? '卡时不足，是否自动补足？' : '卡时与人民币余额均不足'}
+      title={
+        quote.canAutoTopUp ? t('Insufficient card hours. Auto top up?') : t('Insufficient card hours and RMB balance')
+      }
     >
       <Stack gap="md">
         <Alert color={quote.canAutoTopUp ? 'yellow' : 'red'}>
           {quote.canAutoTopUp
-            ? '确认后将从人民币钱包购买刚好够用的卡时，并继续原操作。两步在同一事务中完成，原操作失败时不会扣款。'
-            : `当前人民币余额无法补足所需卡时，还差 ¥${formatNumber(quote.cnyShortfall, 4)}。`}
+            ? t(
+                'After confirmation, card hours will be purchased from the RMB wallet just enough for the operation. Both steps complete in a single transaction; no charge is made if the original operation fails.'
+              )
+            : t('The current RMB balance cannot cover the required card hours, short by ¥{{shortfall}}.', {
+                shortfall: formatNumber(quote.cnyShortfall, 4),
+              })}
         </Alert>
         <SimpleGrid cols={2} spacing="sm">
-          <Metric label="本次需要" value={`${formatCardHours(quote.requiredCardHours)} 卡时`} />
-          <Metric label="当前可用" value={`${formatCardHours(quote.availableCardHours)} 卡时`} />
-          <Metric label="自动购买" value={`${formatCardHours(quote.purchaseCardHours)} 卡时`} />
-          <Metric label="扣除人民币" value={`¥${formatNumber(quote.cnyCost, 4)}`} />
+          <Metric
+            label={t('Required now')}
+            value={t('{{amount}} card hours', { amount: formatCardHours(quote.requiredCardHours) })}
+          />
+          <Metric
+            label={t('Currently available')}
+            value={t('{{amount}} card hours', { amount: formatCardHours(quote.availableCardHours) })}
+          />
+          <Metric
+            label={t('Auto purchase')}
+            value={t('{{amount}} card hours', { amount: formatCardHours(quote.purchaseCardHours) })}
+          />
+          <Metric label={t('Deducted RMB')} value={`¥${formatNumber(quote.cnyCost, 4)}`} />
         </SimpleGrid>
         {roundedExtra > 0.0001 && quote.canAutoTopUp && (
           <Text size="xs" c="chatbox-tertiary">
-            卡时按 0.1 向上取整，多出的 {formatCardHours(roundedExtra)} 卡时将留在账户中。
+            {t('Card hours are rounded up by 0.1; the extra {{extra}} will remain in your account.', {
+              extra: t('{{amount}} card hours', { amount: formatCardHours(roundedExtra) }),
+            })}
           </Text>
         )}
         {!quote.canAutoTopUp && (
           <Text size="sm">
-            当前人民币余额：¥{formatNumber(quote.cnyBalance, 4)}；补足卡时需要 ¥{formatNumber(quote.cnyCost, 4)}。
+            {t('Current RMB balance: ¥{{balance}}; ¥{{cost}} is needed to cover the card hours.', {
+              balance: formatNumber(quote.cnyBalance, 4),
+              cost: formatNumber(quote.cnyCost, 4),
+            })}
           </Text>
         )}
         <Group justify="flex-end">
           <Button variant="default" onClick={prompt.onCancel}>
-            取消
+            {t('Cancel')}
           </Button>
           <Button color={quote.canAutoTopUp ? 'blue' : 'orange'} onClick={prompt.onConfirm}>
-            {quote.canAutoTopUp ? '兑换卡时并继续' : '去官网充值'}
+            {quote.canAutoTopUp ? t('Exchange card hours and continue') : t('Go to official website to top up')}
           </Button>
         </Group>
       </Stack>
@@ -586,6 +612,12 @@ function Hero({
   refreshing: boolean
   onRefresh: () => void
 }) {
+  const { t } = useTranslation()
+  const roleLabels: Record<string, string> = {
+    BUYER: t('Buyer'),
+    SUPPLIER: t('Certified supplier'),
+    ADMIN: t('Compute admin'),
+  }
   return (
     <Paper
       p="lg"
@@ -598,12 +630,16 @@ function Hero({
             <ThemeIcon size="lg" variant="light" radius="xl">
               <IconGauge size={20} />
             </ThemeIcon>
-            <Title order={2}>让每一份算力都有清晰价格与去向</Title>
+            <Title order={2}>{t('Every unit of compute has a clear price and destination')}</Title>
           </Group>
-          <Text c="chatbox-tertiary">模型与 GPU 均按固定套餐交易，统一使用 KAI 标准卡时。</Text>
+          <Text c="chatbox-tertiary">
+            {t('Models and GPUs are traded as fixed packages, using the unified KAI standard card hour.')}
+          </Text>
           <Text size="sm" c="chatbox-tertiary" mt={4}>
-            1 KAI 标准卡时 = ¥{formatNumber(rate || account?.cardHourCnyRate || 1.002, 3)}
-            ；卡时可按 ¥1.0000 兑换到 KOD 内部人民币钱包，不支持外部打款。
+            {t(
+              '1 KAI standard card hour = ¥{{rate}}; card hours can be exchanged into the KOD internal RMB wallet at ¥1.0000, external transfers are not supported.',
+              { rate: formatNumber(rate || account?.cardHourCnyRate || 1.002, 3) }
+            )}
           </Text>
         </Box>
         {account && (
@@ -627,25 +663,31 @@ function Hero({
                   loading={refreshing}
                   onClick={onRefresh}
                 >
-                  刷新官网余额
+                  {t('Refresh official balance')}
                 </Button>
                 {account.isAdmin && (
                   <Button leftSection={<IconShieldCheck size={18} />} onClick={() => onOpen('admin')}>
-                    进入算力管理后台
+                    {t('Enter compute admin console')}
                   </Button>
                 )}
               </Group>
             </Flex>
             <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="md">
-              <Metric label="人民币余额" value={`¥${formatNumber(account.cnyBalance, 4)}`} />
-              <Metric label="可用卡时" value={`${formatCardHours(account.availableCardHours)} 卡时`} />
-              <Metric label="冻结卡时" value={`${formatCardHours(account.frozenCardHours)} 卡时`} />
-              <Metric label="累计收益" value={`¥${formatNumber(account.totalIncomeCny, 4)}`} />
+              <Metric label={t('RMB balance')} value={`¥${formatNumber(account.cnyBalance, 4)}`} />
               <Metric
-                label="租金收益"
-                value={`${formatCardHours(account.rentalIncome)} 卡时 / ≈¥${formatNumber(account.rentalIncomeCnyEquivalent, 4)}`}
+                label={t('Available card hours')}
+                value={t('{{amount}} card hours', { amount: formatCardHours(account.availableCardHours) })}
               />
-              <Metric label="佣金收益" value={`¥${formatNumber(account.commissionIncome, 4)}`} />
+              <Metric
+                label={t('Frozen card hours')}
+                value={t('{{amount}} card hours', { amount: formatCardHours(account.frozenCardHours) })}
+              />
+              <Metric label={t('Lifetime income')} value={`¥${formatNumber(account.totalIncomeCny, 4)}`} />
+              <Metric
+                label={t('Rental income')}
+                value={`${t('{{amount}} card hours', { amount: formatCardHours(account.rentalIncome) })} / ≈¥${formatNumber(account.rentalIncomeCnyEquivalent, 4)}`}
+              />
+              <Metric label={t('Commission income')} value={`¥${formatNumber(account.commissionIncome, 4)}`} />
             </SimpleGrid>
           </>
         )}
@@ -663,79 +705,100 @@ function AssetDashboard({
   referral?: ComputeReferralProfile
   onOpen: (value: string) => void
 }) {
-  if (!account) return <Text c="chatbox-tertiary">正在加载账户信息…</Text>
+  const { t } = useTranslation()
+  const roleLabels: Record<string, string> = {
+    BUYER: t('Buyer'),
+    SUPPLIER: t('Certified supplier'),
+    ADMIN: t('Compute admin'),
+  }
+  const gpuAssetStatuses: [string, string, string][] = [
+    ['PENDING', t('Pending review'), 'yellow'],
+    ['REJECTED', t('Review failed'), 'red'],
+    ['RUNNING', t('Can publish'), 'teal'],
+    ['PENDING_DELIVERY', t('Pending delivery'), 'orange'],
+    ['ACTIVE_RENTAL', t('Running'), 'green'],
+    ['PENDING_ACTION', t('Pending action'), 'red'],
+    ['OFFLINE', t('Closed'), 'gray'],
+  ]
+  if (!account) return <Text c="chatbox-tertiary">{t('Loading account info…')}</Text>
 
   const supplierEntryLabel =
-    account.identityStatus === 'NONE' ? '实名认证' : account.identityStatus === 'APPROVED' ? '算力入驻' : '认证进度'
+    account.identityStatus === 'NONE'
+      ? t('Identity verification')
+      : account.identityStatus === 'APPROVED'
+        ? t('Compute onboarding')
+        : t('Verification progress')
 
   return (
     <Stack gap="md">
-      <Section title="我的收益">
+      <Section title={t('My Income')}>
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
           <Card withBorder padding="md">
             <Text size="sm" c="chatbox-tertiary">
-              累计收益
+              {t('Lifetime income')}
             </Text>
             <Text size="xl" fw={700}>
               ¥{formatNumber(account.totalIncomeCny, 4)}
             </Text>
             <Text size="xs" c="chatbox-tertiary">
-              租金按当前回购汇率折算后与佣金合计
+              {t('Rental income is converted at the current buyback rate and combined with commissions')}
             </Text>
           </Card>
           <Card withBorder padding="md">
             <Text size="sm" c="chatbox-tertiary">
-              租金收益
+              {t('Rental income')}
             </Text>
             <Text size="xl" fw={700}>
-              {formatCardHours(account.rentalIncome)} 卡时
+              {t('{{amount}} card hours', { amount: formatCardHours(account.rentalIncome) })}
             </Text>
             <Text size="xs" c="chatbox-tertiary">
-              约 ¥{formatNumber(account.rentalIncomeCnyEquivalent, 4)}
+              {t('≈ ¥{{amount}}', { amount: formatNumber(account.rentalIncomeCnyEquivalent, 4) })}
             </Text>
           </Card>
           <Card withBorder padding="md">
             <Text size="sm" c="chatbox-tertiary">
-              佣金收益
+              {t('Commission income')}
             </Text>
             <Text size="xl" fw={700}>
               ¥{formatNumber(account.commissionIncome, 4)}
             </Text>
             <Text size="xs" c="chatbox-tertiary">
-              已进入人民币钱包
+              {t('Credited to the RMB wallet')}
             </Text>
           </Card>
           <Card withBorder padding="md">
             <Text size="sm" c="chatbox-tertiary">
-              待发放佣金
+              {t('Pending commissions')}
             </Text>
             <Text size="xl" fw={700}>
               ¥{formatNumber(account.pendingCommission, 4)}
             </Text>
             <Text size="xs" c="chatbox-tertiary">
-              首次充值成功后等待 7 天
+              {t('Paid 7 days after the first successful top-up')}
             </Text>
           </Card>
         </SimpleGrid>
       </Section>
 
-      <Section title="我的 GPU">
+      <Section title={t('My GPUs')}>
         <SimpleGrid cols={{ base: 2, sm: 4, lg: 7 }} spacing="sm">
           {gpuAssetStatuses.map(([status, label, color]) => (
             <Card key={status} withBorder padding="md" style={{ cursor: 'pointer' }} onClick={() => onOpen('supplier')}>
               <Text size="xl" fw={700} c={color}>
-                {account.gpuAssetCounts?.[status] || 0}
+                {account.gpuAssetCounts?.[status as keyof NonNullable<typeof account.gpuAssetCounts>] || 0}
               </Text>
               <Text size="sm">{label}</Text>
             </Card>
           ))}
         </SimpleGrid>
         <Text size="xs" c="chatbox-tertiary" mt="sm">
-          “可发布”表示资源审核通过；“待交付、运行中、待处理”来自你作为供应方的租赁订单。平台不替商家远程部署 GPU。
+          {t(
+            '"Can publish" means the resource review passed; "pending delivery / running / pending action" come from your rental orders as a supplier. The platform does not deploy GPUs for suppliers remotely.'
+          )}
         </Text>
       </Section>
 
-      <Section title="邀请好友返佣">
+      <Section title={t('Referral rewards')}>
         <Paper withBorder p="md" radius="md">
           <Stack gap="sm">
             <Group gap="sm">
@@ -743,22 +806,24 @@ function AssetDashboard({
                 <IconGift size={18} />
               </ThemeIcon>
               <Box>
-                <Text fw={700}>首次充值返佣 5%</Text>
+                <Text fw={700}>{t('5% commission on first top-up')}</Text>
                 <Text size="xs" c="chatbox-tertiary">
-                  被邀请人确认绑定且首次充值后，等待 7 天发放；每名好友最高奖励 ¥100。
+                  {t(
+                    'After the invitee confirms binding and makes a first top-up, rewards are paid after 7 days; each friend earns at most ¥100.'
+                  )}
                 </Text>
               </Box>
             </Group>
             {referral ? (
               <>
                 <TextInput
-                  label="我的专属邀请链接"
+                  label={t('My referral link')}
                   readOnly
                   value={referral.inviteLink}
                   rightSection={
                     <ActionIcon
                       variant="subtle"
-                      aria-label="复制邀请链接"
+                      aria-label={t('Copy referral link')}
                       onClick={() => copyToClipboard(referral.inviteLink)}
                     >
                       <IconCopy size={17} />
@@ -766,34 +831,37 @@ function AssetDashboard({
                   }
                 />
                 <Group gap="xl">
-                  <Metric label="已邀请" value={`${referral.invitedCount} 人`} />
-                  <Metric label="待发放" value={`¥${formatNumber(referral.pendingCommission, 4)}`} />
-                  <Metric label="已到账" value={`¥${formatNumber(referral.paidCommission, 4)}`} />
+                  <Metric label={t('Invited')} value={t('{{count}} people', { count: referral.invitedCount })} />
+                  <Metric label={t('Pending payout')} value={`¥${formatNumber(referral.pendingCommission, 4)}`} />
+                  <Metric label={t('Received')} value={`¥${formatNumber(referral.paidCommission, 4)}`} />
                 </Group>
                 {referral.bound && (
                   <Text size="sm" c="chatbox-tertiary">
-                    我的邀请人：{referral.inviterEmail} · 绑定时间 {formatDate(referral.boundAt)}
+                    {t('My inviter: {{email}} · bound at {{time}}', {
+                      email: referral.inviterEmail,
+                      time: formatDate(referral.boundAt),
+                    })}
                   </Text>
                 )}
               </>
             ) : (
               <Text size="sm" c="chatbox-tertiary">
-                正在生成专属邀请链接…
+                {t('Generating your referral link…')}
               </Text>
             )}
           </Stack>
         </Paper>
       </Section>
 
-      <Section title="常用功能">
+      <Section title={t('Common Actions')}>
         <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="sm">
           {[
             ['supplier', supplierEntryLabel],
-            ['market', '购买算力'],
-            ['reservations', '我的订单'],
-            ['purchases', '购买记录'],
-            ['transfers', '卡时转让'],
-            ['notifications', '通知中心'],
+            ['market', t('Buy compute')],
+            ['reservations', t('My Orders')],
+            ['purchases', t('Purchase Records')],
+            ['transfers', t('Transfer card hours')],
+            ['notifications', t('Notification Center')],
           ].map(([value, label]) => (
             <Button key={value} variant="light" h={52} onClick={() => onOpen(value)}>
               {label}
@@ -831,6 +899,7 @@ function MarketPanel({
   busy: string | null
   runCardHourAction: RunCardHourAction
 }) {
+  const { t } = useTranslation()
   const [type, setType] = useState<ProductType | 'ALL'>('ALL')
   const [keyword, setKeyword] = useState('')
   const [reservationProduct, setReservationProduct] = useState<ComputeProduct | null>(null)
@@ -854,14 +923,16 @@ function MarketPanel({
     <Stack gap="md">
       <Flex justify="space-between" align="center" wrap="wrap" gap="sm">
         <Box>
-          <Title order={4}>算力市场</Title>
+          <Title order={4}>{t('Compute Marketplace')}</Title>
           <Text size="sm" c="chatbox-tertiary">
-            模型 API 和 GPU 均按固定套餐交易；GPU 由已审核商家自主交付，平台只提供卡时担保与争议处理。
+            {t(
+              'Model APIs and GPUs are traded as fixed packages; GPUs are delivered by approved suppliers and the platform only provides card hour escrow and dispute handling.'
+            )}
           </Text>
         </Box>
         <Group gap="sm">
           <TextInput
-            placeholder="搜索商品、模型或供应方"
+            placeholder={t('Search products, models or suppliers') || undefined}
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             w={240}
@@ -870,9 +941,9 @@ function MarketPanel({
             value={type}
             onChange={(value) => setType((value || 'ALL') as ProductType | 'ALL')}
             data={[
-              { value: 'ALL', label: '全部商品' },
-              { value: 'API', label: '模型 API' },
-              { value: 'GPU', label: 'GPU 资源' },
+              { value: 'ALL', label: t('All products') },
+              { value: 'API', label: t('Model APIs') },
+              { value: 'GPU', label: t('GPU Resources') },
             ]}
             w={150}
           />
@@ -880,9 +951,12 @@ function MarketPanel({
       </Flex>
 
       {loading ? (
-        <Text c="chatbox-tertiary">正在加载市场商品…</Text>
+        <Text c="chatbox-tertiary">{t('Loading marketplace products…')}</Text>
       ) : visible.length === 0 ? (
-        <EmptyState title="暂无已上架商品" description="管理员或已审核供应方发布并审核通过后，商品会显示在这里。" />
+        <EmptyState
+          title={t('No published products yet')}
+          description={t('Products appear here after an admin or approved supplier publishes and passes review.')}
+        />
       ) : (
         <SimpleGrid type="container" cols={{ base: 1, '560px': 2, '960px': 3 }} spacing="md">
           {visible.map((product) => (
@@ -921,6 +995,7 @@ function ProductCard({
   runCardHourAction: RunCardHourAction
   onReserve: () => void
 }) {
+  const { t } = useTranslation()
   const actionKey = `product-${product.id}`
   return (
     <Card withBorder radius="md" padding="lg">
@@ -936,45 +1011,62 @@ function ProductCard({
         ) : null}
         <Flex justify="space-between" align="flex-start" gap="sm">
           <Badge color={product.productType === 'API' ? 'blue' : 'teal'} variant="light">
-            {product.productType === 'API' ? '模型 API' : 'GPU 资源'}
+            {product.productType === 'API' ? t('Model APIs') : t('GPU Resources')}
           </Badge>
           <Text size="xs" c="chatbox-tertiary">
-            {product.region || '区域待定'}
+            {product.region || t('Region TBD')}
           </Text>
         </Flex>
         <Box>
           <Title order={4}>{product.name}</Title>
           <Text size="sm" c="chatbox-tertiary" lineClamp={3} mt={4}>
-            {product.description || '暂无商品说明'}
+            {product.description || t('No product description')}
           </Text>
         </Box>
         <Divider />
         {product.productType === 'API' ? (
           <Stack gap={4}>
-            <DataRow label="模型" value={product.modelId || '-'} />
-            <DataRow label="输入额度" value={`${formatTokens(product.packagePromptTokens)} Token`} />
-            <DataRow label="输出额度" value={`${formatTokens(product.packageCompletionTokens)} Token`} />
-            <DataRow label="套餐价" value={`${formatCardHours(product.packagePriceCardHours)} 卡时`} />
+            <DataRow label={t('Model')} value={product.modelId || '-'} />
+            <DataRow label={t('Input quota')} value={`${formatTokens(product.packagePromptTokens)} Token`} />
+            <DataRow label={t('Output quota')} value={`${formatTokens(product.packageCompletionTokens)} Token`} />
+            <DataRow
+              label={t('Package price')}
+              value={t('{{amount}} card hours', { amount: formatCardHours(product.packagePriceCardHours) })}
+            />
           </Stack>
         ) : (
           <Stack gap={4}>
-            <DataRow label="规格" value={`${product.gpuModel || '-'} ${product.gpuMemoryGb || '-'}GB`} />
-            <DataRow label="套餐资源" value={`${product.gpuCount || 0} 张 GPU`} />
-            <DataRow label="使用时长" value={`${product.packageDurationHours || 0} 小时`} />
-            <DataRow label="套餐价格" value={`${formatCardHours(product.packagePriceCardHours)} 卡时`} />
-            <DataRow label="承诺交付" value={`付款后 ${product.deliveryDeadlineHours || 0} 小时内`} />
+            <DataRow label={t('Specification')} value={`${product.gpuModel || '-'} ${product.gpuMemoryGb || '-'}GB`} />
+            <DataRow label={t('Package resources')} value={t('{{count}} GPUs', { count: product.gpuCount || 0 })} />
+            <DataRow
+              label={t('Usage duration')}
+              value={t('{{hours}} hours', { hours: product.packageDurationHours || 0 })}
+            />
+            <DataRow
+              label={t('Package price')}
+              value={t('{{amount}} card hours', { amount: formatCardHours(product.packagePriceCardHours) })}
+            />
+            <DataRow
+              label={t('Delivery commitment')}
+              value={t('within {{value}} after payment', {
+                value: t('{{hours}} hours', { hours: product.deliveryDeadlineHours || 0 }),
+              })}
+            />
           </Stack>
         )}
         <Text size="xs" c="chatbox-tertiary">
-          供应方：{product.supplierName || 'KOD 官方'} · {product.slaDescription || 'SLA 待确认'}
+          {t('Supplier: {{name}}', { name: product.supplierName || t('KOD Official') })} ·{' '}
+          {product.slaDescription || t('SLA TBD')}
         </Text>
         {Boolean(product.isTest) && (
           <Badge color="orange" variant="light">
-            仅内测，不代表真实资源
+            {t('Internal test only, not real resources')}
           </Badge>
         )}
         {product.productType === 'API' && !product.upstreamKeyId && (
-          <Alert color="orange">管理员尚未配置零售站上游，当前不可购买。</Alert>
+          <Alert color="orange">
+            {t('The admin has not configured the relay station upstream yet. Currently not purchasable.')}
+          </Alert>
         )}
         <Button
           mt="auto"
@@ -985,12 +1077,16 @@ function ProductCard({
               ? runCardHourAction(
                   actionKey,
                   (autoTopUp) => activateComputeApi(product.id, autoTopUp),
-                  `${product.name} 套餐购买成功`
+                  t('{{name}} package purchased successfully', { name: product.name })
                 )
               : onReserve()
           }
         >
-          {!isLoggedIn ? '登录后操作' : product.productType === 'API' ? '用卡时购买套餐' : '购买 GPU 套餐'}
+          {!isLoggedIn
+            ? t('Log in to operate')
+            : product.productType === 'API'
+              ? t('Buy package with card hours')
+              : t('Buy GPU package')}
         </Button>
       </Stack>
     </Card>
@@ -1008,20 +1104,29 @@ function ReservationModal({
   busy: string | null
   runCardHourAction: RunCardHourAction
 }) {
+  const { t } = useTranslation()
   const [buyerPublicKey, setBuyerPublicKey] = useState('')
   if (!product) return null
   const key = `reserve-${product.id}`
   return (
-    <Modal opened onClose={onClose} title={`购买 ${product.name}`} centered size="lg">
+    <Modal opened onClose={onClose} title={t('Buy {{name}}', { name: product.name })} centered size="lg">
       <Stack>
-        <Alert color="blue" title="中介担保交易">
-          本订单冻结 {formatCardHours(product.packagePriceCardHours)} 卡时。商家将在付款后{' '}
-          {product.deliveryDeadlineHours || 0} 小时内自行交付 {product.gpuCount || 0} 张 GPU、
-          {product.packageDurationHours || 0} 小时的固定套餐；平台不登录或控制商家服务器。
+        <Alert color="blue" title={t('Escrow transaction')}>
+          {t(
+            'This order freezes {{amount}}. The supplier will deliver {{gpuCount}} GPUs for {{hours}} within {{deadline}} after payment; the platform never logs into or controls supplier servers.',
+            {
+              amount: t('{{amount}} card hours', { amount: formatCardHours(product.packagePriceCardHours) }),
+              gpuCount: product.gpuCount || 0,
+              hours: t('{{hours}} hours', { hours: product.packageDurationHours || 0 }),
+              deadline: t('{{hours}} hours', { hours: product.deliveryDeadlineHours || 0 }),
+            }
+          )}
         </Alert>
         <Textarea
-          label="你的 SSH 公钥"
-          description="请粘贴 .pub 文件的一整行内容，例如 ssh-ed25519 AAAA…；私钥必须留在你的电脑，禁止上传。"
+          label={t('Your SSH public key')}
+          description={t(
+            'Paste the full single line of your .pub file, e.g. ssh-ed25519 AAAA…; the private key must stay on your computer and must never be uploaded.'
+          )}
           placeholder="ssh-ed25519 AAAA... your-name"
           value={buyerPublicKey}
           onChange={(event) => setBuyerPublicKey(event.target.value)}
@@ -1035,11 +1140,11 @@ function ReservationModal({
             runCardHourAction(
               key,
               (autoTopUp) => createComputeReservation({ productId: product.id, buyerPublicKey }, autoTopUp),
-              'GPU 套餐购买成功，卡时已冻结并等待商家交付'
+              t('GPU package purchased. Card hours are frozen and awaiting supplier delivery')
             ).then((succeeded) => succeeded && onClose())
           }
         >
-          确认购买并冻结卡时
+          {t('Confirm purchase and freeze card hours')}
         </Button>
       </Stack>
     </Modal>
@@ -1057,6 +1162,7 @@ function AccountPanel({
   run: RunAction
   onOpen: (value: string) => void
 }) {
+  const { t } = useTranslation()
   const ledgerQuery = useQuery({ queryKey: ['compute', 'ledger'], queryFn: listComputeLedger })
   const packagesQuery = useQuery({ queryKey: ['compute', 'package-purchases'], queryFn: listComputePackagePurchases })
   const usageQuery = useQuery({ queryKey: ['compute', 'api-usage'], queryFn: listComputeApiUsage })
@@ -1083,42 +1189,48 @@ function AccountPanel({
     <Stack gap="md">
       <AssetDashboard account={account} referral={referralQuery.data} onOpen={onOpen} />
 
-      <Alert color="blue" title="官网充值与客户端共用同一人民币钱包">
+      <Alert color="blue" title={t('Official website top-up and this client share the same RMB wallet')}>
         <Flex justify="space-between" align="center" gap="md" wrap="wrap">
-          <Text size="sm">官网充值成功后返回客户端，窗口重新获得焦点时会自动刷新；也可以点击顶部“刷新官网余额”。</Text>
+          <Text size="sm">
+            {t(
+              'After topping up on the official website, return to the client and it refreshes automatically when the window regains focus; you can also tap "Refresh official balance" at the top.'
+            )}
+          </Text>
           <Button
             size="xs"
             variant="light"
             onClick={() => void platform.openLink('https://kod.kai.com/console/wallet')}
           >
-            去官网充值
+            {t('Go to official website to top up')}
           </Button>
         </Flex>
       </Alert>
 
-      <Alert color="orange" title="“卡时回购”仅指内部钱包兑换">
-        卡时按 1 卡时 = ¥{formatNumber(account?.cardHourRedeemRate || 1, 4)} 直接转入 KOD
-        人民币钱包，不会打款到银行卡、支付宝或其他第三方账户。冻结卡时不能兑换。
+      <Alert color="orange" title={t('"Card hour buyback" refers only to internal wallet exchange')}>
+        {t(
+          'Card hours are transferred into the KOD RMB wallet directly at 1 card hour = ¥{{rate}}; no bank card, Alipay or other third-party payout is made. Frozen card hours cannot be exchanged.',
+          { rate: formatNumber(account?.cardHourRedeemRate || 1, 4) }
+        )}
       </Alert>
 
       <Tabs defaultValue="exchange" keepMounted={false}>
         <Tabs.List>
-          <Tabs.Tab value="exchange">资产兑换</Tabs.Tab>
-          <Tabs.Tab value="rentals">租赁订单</Tabs.Tab>
-          <Tabs.Tab value="buybacks">回购记录</Tabs.Tab>
-          <Tabs.Tab value="rewards">邀请佣金明细</Tabs.Tab>
-          <Tabs.Tab value="packages">Token 套餐</Tabs.Tab>
-          <Tabs.Tab value="ledger">资产流水</Tabs.Tab>
+          <Tabs.Tab value="exchange">{t('Asset exchange')}</Tabs.Tab>
+          <Tabs.Tab value="rentals">{t('Rental orders')}</Tabs.Tab>
+          <Tabs.Tab value="buybacks">{t('Buyback records')}</Tabs.Tab>
+          <Tabs.Tab value="rewards">{t('Referral commission details')}</Tabs.Tab>
+          <Tabs.Tab value="packages">{t('Token package')}</Tabs.Tab>
+          <Tabs.Tab value="ledger">{t('Asset ledger')}</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="exchange" pt="md">
           <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
             <Paper withBorder p="md" radius="md">
               <Stack>
-                <Title order={5}>人民币钱包购买卡时</Title>
+                <Title order={5}>{t('Buy card hours with RMB wallet')}</Title>
                 <NumberInput
-                  label="购买卡时"
-                  description="至少 0.1，按 0.1 的倍数"
+                  label={t('Buy card hours')}
+                  description={t('At least 0.1, in multiples of 0.1')}
                   min={0.1}
                   step={0.1}
                   decimalScale={1}
@@ -1126,22 +1238,31 @@ function AccountPanel({
                   onChange={(value) => setAmount(Number(value) || 0)}
                 />
                 <Text size="sm">
-                  预计扣除：<b>¥{formatNumber(estimated, 4)}</b>
+                  {t('Estimated deduction: ')}
+                  <b>¥{formatNumber(estimated, 4)}</b>
                 </Text>
                 <Button
                   loading={busy === 'purchase'}
-                  onClick={() => run('purchase', () => purchaseCardHours(amount), `已购买 ${amount.toFixed(1)} 卡时`)}
+                  onClick={() =>
+                    run(
+                      'purchase',
+                      () => purchaseCardHours(amount),
+                      t('Purchased {{amount}}', { amount: t('{{amount}} card hours', { amount: amount.toFixed(1) }) })
+                    )
+                  }
                 >
-                  用人民币余额购买
+                  {t('Buy with RMB balance')}
                 </Button>
               </Stack>
             </Paper>
             <Paper withBorder p="md" radius="md">
               <Stack>
-                <Title order={5}>平台回购卡时</Title>
+                <Title order={5}>{t('Platform card hour buyback')}</Title>
                 <NumberInput
-                  label="兑换卡时"
-                  description={`当前可兑换 ${formatCardHours(account?.withdrawableCardHours)} 卡时`}
+                  label={t('Exchange card hours')}
+                  description={t('Currently exchangeable: {{amount}}', {
+                    amount: t('{{amount}} card hours', { amount: formatCardHours(account?.withdrawableCardHours) }),
+                  })}
                   min={0.1}
                   step={0.1}
                   decimalScale={1}
@@ -1149,7 +1270,8 @@ function AccountPanel({
                   onChange={(value) => setWithdrawalAmount(Number(value) || 0)}
                 />
                 <Text size="sm">
-                  预计到账 KOD 钱包：<b>¥{formatNumber(withdrawalCny, 4)}</b>
+                  {t('Estimated credit to KOD wallet: ')}
+                  <b>¥{formatNumber(withdrawalCny, 4)}</b>
                 </Text>
                 <Button
                   color="teal"
@@ -1159,11 +1281,13 @@ function AccountPanel({
                     run(
                       'withdrawal',
                       () => withdrawComputeCardHours(withdrawalAmount),
-                      `${withdrawalAmount.toFixed(1)} 卡时已回购并转入 KOD 人民币钱包`
+                      t('{{amount}} bought back and transferred to the KOD RMB wallet', {
+                        amount: t('{{amount}} card hours', { amount: withdrawalAmount.toFixed(1) }),
+                      })
                     )
                   }
                 >
-                  确认回购并直接到账
+                  {t('Confirm buyback and credit directly')}
                 </Button>
               </Stack>
             </Paper>
@@ -1188,7 +1312,7 @@ function AccountPanel({
         <Tabs.Panel value="packages" pt="md">
           <Stack>
             <TokenPackageAssets purchases={packagesQuery.data || []} busy={busy} run={run} />
-            <Section title="模型 API Token 记账">
+            <Section title={t('Model API token billing')}>
               <ApiUsageTable entries={usageQuery.data || []} />
             </Section>
           </Stack>
@@ -1203,14 +1327,27 @@ function AccountPanel({
 }
 
 function PurchasesPanel() {
+  const { t } = useTranslation()
   const ordersQuery = useQuery({ queryKey: ['compute', 'orders'], queryFn: listComputeOrders })
   const packagesQuery = useQuery({ queryKey: ['compute', 'package-purchases'], queryFn: listComputePackagePurchases })
   return (
     <Stack>
-      <Alert color="blue">购买记录保存订单与扣费；API 地址和套餐 Key 请到“我的资产 → Token 套餐”查看。</Alert>
-      <Section title="Token 套餐购买记录">
+      <Alert color="blue">
+        {t(
+          'Purchase records keep orders and charges; find API addresses and package keys under "My Assets → Token Packages".'
+        )}
+      </Alert>
+      <Section title={t('Token package purchase records')}>
         <SimpleTable
-          columns={['订单号', '套餐', '指定模型', '输入剩余 / 总额', '输出剩余 / 总额', '支付卡时', '时间']}
+          columns={[
+            t('Order number'),
+            t('Package'),
+            t('Target model'),
+            t('Input remaining / total'),
+            t('Output remaining / total'),
+            t('Paid card hours'),
+            t('Time'),
+          ]}
           rows={(packagesQuery.data || []).map((item) => [
             item.orderNo,
             item.productName,
@@ -1220,10 +1357,10 @@ function PurchasesPanel() {
             formatCardHours(item.priceCardHours),
             formatDate(item.createTime),
           ])}
-          empty="暂无 Token 套餐购买记录"
+          empty={t('No token package purchase records')}
         />
       </Section>
-      <Section title="全部购买流水">
+      <Section title={t('All purchase history')}>
         <OrdersTable orders={ordersQuery.data || []} />
       </Section>
     </Stack>
@@ -1239,6 +1376,7 @@ function TokenPackageAssets({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   const [credentials, setCredentials] = useState<Record<number, ComputePackageCredential>>({})
   const [revealing, setRevealing] = useState<number | null>(null)
 
@@ -1253,12 +1391,14 @@ function TokenPackageAssets({
   }
 
   return (
-    <Section title="Token 套餐交付与余额（永久有效）">
+    <Section title={t('Token package delivery and balance (valid forever)')}>
       <Alert color="blue" mb="md">
-        套餐 Key 仅供外部工具调用 KOD 平台代理；客户端内置对话和生图仍走你手动选择的零售站/节点及官网人民币余额。
+        {t(
+          'Package keys are only for external tools to call the KOD platform proxy; the built-in chat and image generation still use your manually selected relay station/node and official RMB balance.'
+        )}
       </Alert>
       {purchases.length === 0 ? (
-        <Text c="chatbox-tertiary">尚未购买模型 Token 套餐</Text>
+        <Text c="chatbox-tertiary">{t('No model token package purchased yet')}</Text>
       ) : (
         <Stack>
           {purchases.map((item) => {
@@ -1273,24 +1413,26 @@ function TokenPackageAssets({
                         <Title order={5}>{item.productName}</Title>
                         <StatusBadge status={item.keyStatus} />
                       </Group>
-                      <Text size="sm">指定模型：{item.modelId}</Text>
+                      <Text size="sm">{t('Target model: {{model}}', { model: item.modelId })}</Text>
                       <Text size="xs" c="chatbox-tertiary">
-                        订单 {item.orderNo} · {formatDate(item.createTime)}
+                        {t('Order {{no}}', { no: item.orderNo })} · {formatDate(item.createTime)}
                       </Text>
                     </Box>
-                    <Text fw={700}>{formatCardHours(item.priceCardHours)} 卡时</Text>
+                    <Text fw={700}>{t('{{amount}} card hours', { amount: formatCardHours(item.priceCardHours) })}</Text>
                   </Flex>
                   <SimpleGrid cols={{ base: 1, sm: 2 }}>
                     <Metric
-                      label="输入 Token 剩余 / 总额"
+                      label={t('Input tokens remaining / total')}
                       value={`${formatTokens(item.promptTokensRemaining)} / ${formatTokens(item.promptTokensTotal)}`}
                     />
                     <Metric
-                      label="输出 Token 剩余 / 总额"
+                      label={t('Output tokens remaining / total')}
                       value={`${formatTokens(item.completionTokensRemaining)} / ${formatTokens(item.completionTokensTotal)}`}
                     />
                   </SimpleGrid>
-                  {item.suspendedReason && <Alert color="red">暂停原因：{item.suspendedReason}</Alert>}
+                  {item.suspendedReason && (
+                    <Alert color="red">{t('Suspension reason: {{reason}}', { reason: item.suspendedReason })}</Alert>
+                  )}
                   <TextInput
                     label="Base URL"
                     readOnly
@@ -1298,7 +1440,7 @@ function TokenPackageAssets({
                     rightSection={
                       <ActionIcon
                         variant="subtle"
-                        aria-label="复制 Base URL"
+                        aria-label={t('Copy Base URL')}
                         onClick={() => copyToClipboard(item.baseUrl)}
                       >
                         <IconCopy size={17} />
@@ -1312,7 +1454,7 @@ function TokenPackageAssets({
                     rightSection={
                       <ActionIcon
                         variant="subtle"
-                        aria-label="复制 API Key"
+                        aria-label={t('Copy API Key')}
                         disabled={!credential}
                         onClick={() => credential && copyToClipboard(credential.apiKey)}
                       >
@@ -1321,9 +1463,10 @@ function TokenPackageAssets({
                     }
                   />
                   <Text size="sm">
-                    API 格式：{item.apiFormat}；认证字段：<code>{item.authenticationHeader}</code>
+                    {t('API format: {{format}}; auth field:', { format: item.apiFormat })}{' '}
+                    <code>{item.authenticationHeader}</code>
                   </Text>
-                  <Text size="sm">可用接口：{item.endpoints.join('、')}</Text>
+                  <Text size="sm">{t('Available endpoints: {{list}}', { list: item.endpoints.join(', ') })}</Text>
                   <Group>
                     <Button
                       size="xs"
@@ -1338,7 +1481,7 @@ function TokenPackageAssets({
                         })
                       }}
                     >
-                      {credential ? '隐藏 API Key' : '显示 API Key'}
+                      {credential ? t('Hide API Key') : t('Show API Key')}
                     </Button>
                     <Button
                       size="xs"
@@ -1346,18 +1489,27 @@ function TokenPackageAssets({
                       color="orange"
                       loading={busy === `regenerate-package-${item.id}`}
                       onClick={() => {
-                        if (!window.confirm('重新生成后旧 Key 将立即失效，Token 剩余额度保持不变。是否继续？')) return
+                        if (
+                          !window.confirm(
+                            String(
+                              t(
+                                'After regeneration the old key becomes invalid immediately; the remaining token quota stays unchanged. Continue?'
+                              )
+                            )
+                          )
+                        )
+                          return
                         void run(
                           `regenerate-package-${item.id}`,
                           async () => {
                             const next = await regenerateComputePackageKey(item.id)
                             setCredentials((current) => ({ ...current, [item.id]: next }))
                           },
-                          '套餐 API Key 已重新生成'
+                          t('Package API key regenerated')
                         )
                       }}
                     >
-                      重新生成 Key
+                      {t('Regenerate key')}
                     </Button>
                   </Group>
                 </Stack>
@@ -1377,35 +1529,53 @@ function RentalAssetsTable({
   buyerEntries: ComputeReservation[]
   supplierEntries: ComputeReservation[]
 }) {
+  const { t } = useTranslation()
   const rows = [
-    ...supplierEntries.map((item) => ({ ...item, directionLabel: '我出租' })),
-    ...buyerEntries.map((item) => ({ ...item, directionLabel: '我购买' })),
+    ...supplierEntries.map((item) => ({ ...item, directionLabel: t('I rent out') })),
+    ...buyerEntries.map((item) => ({ ...item, directionLabel: t('I buy') })),
   ].sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime())
   return (
     <SimpleTable
-      columns={['方向', 'GPU 商品', '规格', '交易状态', '卡时', '使用时间']}
+      columns={[
+        t('Direction'),
+        t('GPU product'),
+        t('Specification'),
+        t('Transaction status'),
+        t('Card hours'),
+        t('Usage time'),
+      ]}
       rows={rows.map((item) => [
         item.directionLabel,
         item.productName,
         `${item.gpuModel} × ${item.gpuCount}`,
-        statusLabel(item.status),
+        statusLabel(t, item.status),
         formatCardHours(item.frozenCardHours),
-        item.deliveredAt ? `${formatDate(item.startTime)} 至 ${formatDate(item.endTime)}` : '等待商家交付',
+        item.deliveredAt
+          ? t('{{start}} to {{end}}', { start: formatDate(item.startTime), end: formatDate(item.endTime) })
+          : t('Awaiting supplier delivery'),
       ])}
-      empty="暂无 GPU 租赁订单"
+      empty={t('No GPU rental orders')}
     />
   )
 }
 
 function ReferralRewardsTable({ entries }: { entries: ComputeReferralReward[] }) {
+  const { t } = useTranslation()
   const rewardStatus: Record<ComputeReferralReward['status'], string> = {
-    WAITING: '7 天确认期',
-    PAID: '已到账',
-    CANCELLED: '已取消',
+    WAITING: t('7-day confirmation period'),
+    PAID: t('Received'),
+    CANCELLED: t('Cancelled'),
   }
   return (
     <SimpleTable
-      columns={['被邀请人', '首次充值', '返佣比例', '返佣金额', '状态', '预计/实际到账时间']}
+      columns={[
+        t('Invitee'),
+        t('First top-up'),
+        t('Commission rate'),
+        t('Commission amount'),
+        t('Status'),
+        t('Estimated / actual arrival time'),
+      ]}
       rows={entries.map((item) => [
         item.inviteeEmail,
         `¥${formatNumber(item.rechargeAmount, 4)}`,
@@ -1414,29 +1584,38 @@ function ReferralRewardsTable({ entries }: { entries: ComputeReferralReward[] })
         item.cancelReason ? `${rewardStatus[item.status]}：${item.cancelReason}` : rewardStatus[item.status],
         formatDate(item.paidAt || item.releaseAt),
       ])}
-      empty="暂无邀请佣金记录"
+      empty={t('No referral commission records')}
     />
   )
 }
 
 function WithdrawalTable({ entries }: { entries: ComputeWithdrawal[] }) {
+  const { t } = useTranslation()
   return (
     <SimpleTable
-      columns={['回购单号', '回购卡时', '到账人民币', '去向', '状态', '时间']}
+      columns={[
+        t('Buyback number'),
+        t('Buyback card hours'),
+        t('RMB received'),
+        t('Destination'),
+        t('Status'),
+        t('Time'),
+      ]}
       rows={entries.map((item) => [
         item.withdrawalNo,
         formatCardHours(item.cardHours),
         `¥${formatNumber(item.cnyAmount, 4)}`,
-        'KOD 内部人民币钱包',
-        statusLabel(item.status),
+        t('KOD internal RMB wallet'),
+        statusLabel(t, item.status),
         formatDate(item.completedAt || item.createTime),
       ])}
-      empty="暂无卡时回购记录"
+      empty={t('No card hour buyback records')}
     />
   )
 }
 
 function ReservationsPanel({ busy, run }: { busy: string | null; run: RunAction }) {
+  const { t } = useTranslation()
   const reservationsQuery = useQuery({
     queryKey: ['compute', 'reservations', 'buyer'],
     queryFn: () => listComputeReservations('buyer'),
@@ -1444,12 +1623,16 @@ function ReservationsPanel({ busy, run }: { busy: string | null; run: RunAction 
   const reservations = reservationsQuery.data || []
   return (
     <Stack>
-      <Alert color="blue" title="卡时担保规则">
-        购买时冻结全部卡时；商家标记交付后，买家可确认收货或在 24
-        小时内发起争议。无争议将自动确认，并把全部卡时一次性结算给商家。
+      <Alert color="blue" title={t('Card hour escrow rules')}>
+        {t(
+          'All card hours are frozen on purchase; after the supplier marks delivery, the buyer can confirm receipt or raise a dispute within 24 hours. Without a dispute, it auto-confirms and settles all card hours to the supplier at once.'
+        )}
       </Alert>
       {reservations.length === 0 ? (
-        <EmptyState title="暂无 GPU 订单" description="请从算力市场选择商家发布的固定 GPU 套餐。" />
+        <EmptyState
+          title={t('No GPU orders')}
+          description={t('Please choose a fixed GPU package published by a supplier from the Compute Marketplace.')}
+        />
       ) : (
         reservations.map((reservation) => (
           <ReservationCard key={reservation.id} reservation={reservation} busy={busy} run={run} view="buyer" />
@@ -1472,6 +1655,7 @@ function ReservationCard({
   view: 'buyer' | 'supplier'
   productPackageDurationHours?: number | null
 }) {
+  const { t } = useTranslation()
   const [sshDelivery, setSshDelivery] = useState({
     host: '',
     port: 22,
@@ -1497,47 +1681,65 @@ function ReservationCard({
             <Text size="sm" c="chatbox-tertiary">
               {reservation.gpuModel} × {reservation.gpuCount}
               {marketplace && reservation.deliveredAt
-                ? ` · 商定使用时间 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`
+                ? ` · ${t('Agreed usage time {{start}} to {{end}}', { start: formatDate(reservation.startTime), end: formatDate(reservation.endTime) })}`
                 : marketplace
-                  ? ` · 交付截止 ${formatDate(reservation.deliveryDeadlineAt)}`
-                  : ` · 历史预订 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`}
+                  ? ` · ${t('Delivery deadline {{time}}', { time: formatDate(reservation.deliveryDeadlineAt) })}`
+                  : ` · ${t('Historical reservation {{start}} to {{end}}', { start: formatDate(reservation.startTime), end: formatDate(reservation.endTime) })}`}
             </Text>
           </Box>
-          <Text fw={700}>{formatCardHours(reservation.frozenCardHours)} 卡时</Text>
+          <Text fw={700}>{t('{{amount}} card hours', { amount: formatCardHours(reservation.frozenCardHours) })}</Text>
         </Flex>
-        {view === 'supplier' && reservation.buyerEmail && <Text size="sm">买方：{reservation.buyerEmail}</Text>}
-        {reservation.incidentReason && (
-          <Alert color="red">异常原因：{reservation.incidentReason}，等待管理员处理。</Alert>
+        {view === 'supplier' && reservation.buyerEmail && (
+          <Text size="sm">{t('Buyer: {{email}}', { email: reservation.buyerEmail })}</Text>
         )}
-        {!marketplace && <Alert color="gray">这是旧版预订记录，仅保留查看，不再使用旧版凭证交付功能。</Alert>}
+        {reservation.incidentReason && (
+          <Alert color="red">
+            {t('Exception reason: {{reason}}. Awaiting admin handling.', { reason: reservation.incidentReason })}
+          </Alert>
+        )}
+        {!marketplace && (
+          <Alert color="gray">
+            {t(
+              'These are legacy reservation records kept for viewing only; the legacy credential delivery feature is no longer used.'
+            )}
+          </Alert>
+        )}
         {reservation.deliveryInfo && (
-          <Alert color="teal" title="交付信息">
+          <Alert color="teal" title={t('Delivery info')}>
             <Text style={{ whiteSpace: 'pre-wrap' }}>{reservation.deliveryInfo}</Text>
             <Text size="xs" mt="xs">
-              交付时间：{formatDate(reservation.deliveredAt)}
+              {t('Delivery time: {{time}}', { time: formatDate(reservation.deliveredAt) })}
               {marketplace && reservation.autoConfirmAt
-                ? `；无争议自动确认时间：${formatDate(reservation.autoConfirmAt)}`
+                ? `；${t('auto-confirm time without dispute: {{time}}', { time: formatDate(reservation.autoConfirmAt) })}`
                 : ''}
             </Text>
           </Alert>
         )}
         {view === 'buyer' && marketplace && reservation.status === 'PENDING_DELIVERY' && !reservation.deliveryInfo && (
-          <Alert color="yellow">卡时已冻结，正在等待商家按承诺时限配置你的公钥并提交 SSH 地址。</Alert>
+          <Alert color="yellow">
+            {t(
+              'Card hours are frozen and waiting for the supplier to configure your public key and submit the SSH address within the promised timeframe.'
+            )}
+          </Alert>
         )}
         {view === 'buyer' && cancellable && (
           <Button
             variant="light"
             color="red"
             loading={busy === key}
-            onClick={() => run(key, () => cancelComputeReservation(reservation.id), '订单已取消，卡时已全额解冻')}
+            onClick={() =>
+              run(key, () => cancelComputeReservation(reservation.id), t('Order cancelled, card hours fully unfrozen'))
+            }
           >
-            商家交付前取消订单
+            {t('Cancel order before supplier delivery')}
           </Button>
         )}
         {view === 'buyer' && marketplace && reservation.status === 'DELIVERED' && (
           <Stack gap="xs">
             <Alert color="yellow">
-              请先实际验证资源。确认后立即结算；如无法连接、规格不符或交付有误，请在 24 小时内提交争议证据。
+              {t(
+                'Verify the resources first. Settlement happens immediately after confirmation; if it cannot connect, the specification mismatches, or the delivery is wrong, submit dispute evidence within 24 hours.'
+              )}
             </Alert>
             <Group grow>
               <Button
@@ -1546,23 +1748,25 @@ function ReservationCard({
                   run(
                     `${key}-confirm`,
                     () => confirmComputeReservation(reservation.id),
-                    '已确认收到资源，卡时已结算给商家'
+                    t('Resources confirmed, card hours settled to the supplier')
                   )
                 }
               >
-                确认收到资源
+                {t('Confirm receipt of resources')}
               </Button>
             </Group>
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
               <TextInput
-                label="争议原因"
-                placeholder="例如无法连接、规格与商品不符"
+                label={t('Dispute reason')}
+                placeholder={t('e.g. cannot connect, specification mismatch') || undefined}
                 value={dispute.reason}
                 onChange={(event) => setDispute({ ...dispute, reason: event.target.value })}
               />
               <Textarea
-                label="文字证据"
-                placeholder="填写错误信息、测试过程、约定内容等可核验事实"
+                label={t('Text evidence')}
+                placeholder={String(
+                  t('Provide verifiable facts such as error messages, test process and agreed content')
+                )}
                 value={dispute.evidence}
                 onChange={(event) => setDispute({ ...dispute, evidence: event.target.value })}
                 autosize
@@ -1578,22 +1782,23 @@ function ReservationCard({
                 run(
                   `${key}-dispute`,
                   () => disputeComputeReservation(reservation.id, dispute.reason, dispute.evidence),
-                  '争议已提交，卡时将继续冻结并等待管理员裁决'
+                  t('Dispute submitted. Card hours stay frozen and await admin arbitration')
                 )
               }
             >
-              发起争议
+              {t('Raise dispute')}
             </Button>
           </Stack>
         )}
         {view === 'supplier' && marketplace && reservation.status === 'PENDING_DELIVERY' && (
           <Stack gap="xs">
             <Alert color="blue">
-              平台不需要你的服务器密码或私钥。请把买家的公钥配置到订单专属临时账号，再填写连接地址和双方商定的使用时间。
-              只有资源已经可连接时才能标记交付；约定开通时间最多可晚于当前时间 15 分钟。
+              {t(
+                'The platform never needs your server password or private key. Configure the buyer public key on the order-specific temporary account, then fill in the connection address and the agreed usage time. Delivery can only be marked when the resource is already connectable; the agreed start time can be at most 15 minutes later than now.'
+              )}
             </Alert>
             <Textarea
-              label="买家 SSH 公钥（只读）"
+              label={t('Buyer SSH public key (read-only)')}
               value={reservation.buyerPublicKey || ''}
               readOnly
               autosize
@@ -1605,46 +1810,48 @@ function ReservationCard({
               w="fit-content"
               onClick={() => copyToClipboard(reservation.buyerPublicKey || '')}
             >
-              复制买家公钥
+              {t('Copy buyer public key')}
             </Button>
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
               <TextInput
-                label="SSH 地址"
+                label={t('SSH address')}
                 value={sshDelivery.host}
                 onChange={(event) => setSshDelivery({ ...sshDelivery, host: event.target.value })}
               />
               <NumberInput
-                label="SSH 端口"
+                label={t('SSH port')}
                 min={1}
                 max={65535}
                 value={sshDelivery.port}
                 onChange={(value) => setSshDelivery({ ...sshDelivery, port: Number(value) || 22 })}
               />
               <TextInput
-                label="订单专属临时用户名"
+                label={t('Order-specific temporary username')}
                 value={sshDelivery.username}
                 onChange={(event) => setSshDelivery({ ...sshDelivery, username: event.target.value })}
               />
               <TextInput
-                label="商定开通时间"
+                label={t('Agreed start time')}
                 type="datetime-local"
                 value={sshDelivery.actualStart}
                 onChange={(event) => setSshDelivery({ ...sshDelivery, actualStart: event.target.value })}
               />
               <TextInput
-                label="商定到期时间"
+                label={t('Agreed end time')}
                 type="datetime-local"
                 description={
                   packageDurationHours
-                    ? `按该订单 ${packageDurationHours} 小时套餐自动计算，无需手工填写`
-                    : '未能读取套餐时长，请刷新订单后重试'
+                    ? t('Calculated automatically from the {{hours}} package of this order; no manual entry needed', {
+                        hours: t('{{hours}} hours', { hours: packageDurationHours }),
+                      })
+                    : t('Could not read the package duration. Refresh the order and try again')
                 }
                 value={actualEnd}
                 readOnly
               />
             </SimpleGrid>
             <Textarea
-              label="交付说明（禁止填写密码或私钥）"
+              label={t('Delivery notes (passwords or private keys are not allowed)')}
               value={sshDelivery.deliveryNote}
               onChange={(event) => setSshDelivery({ ...sshDelivery, deliveryNote: event.target.value })}
               autosize
@@ -1667,11 +1874,11 @@ function ReservationCard({
                       actualEnd,
                       deliveryNote: sshDelivery.deliveryNote,
                     }),
-                  'GPU 资源已交付，24 小时无争议将自动确认结算'
+                  t('GPU resources delivered. If no dispute within 24 hours, settlement auto-confirms')
                 )
               }
             >
-              标记已交付
+              {t('Mark as delivered')}
             </Button>
           </Stack>
         )}
@@ -1691,6 +1898,7 @@ function TransfersPanel({
   run: RunAction
   runCardHourAction: RunCardHourAction
 }) {
+  const { t } = useTranslation()
   const transfersQuery = useQuery({ queryKey: ['compute', 'transfers'], queryFn: listComputeTransfers })
   const [recipientEmail, setRecipientEmail] = useState('')
   const [amount, setAmount] = useState(1)
@@ -1700,27 +1908,33 @@ function TransfersPanel({
     <Stack gap="md">
       <Paper withBorder p="md" radius="md">
         <Title order={5} mb="sm">
-          无偿转让卡时
+          {t('Transfer card hours free of charge')}
         </Title>
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
           <TextInput
-            label="接收方 KOD 邮箱"
+            label={t('Recipient KOD email')}
             value={recipientEmail}
             onChange={(e) => setRecipientEmail(e.target.value)}
           />
           <NumberInput
-            label="转让卡时"
+            label={t('Transfer card hours')}
             min={0.001}
             step={0.001}
             decimalScale={3}
             value={amount}
             onChange={(value) => setAmount(Number(value) || 0)}
           />
-          <TextInput label="留言" value={transferMessage} onChange={(e) => setTransferMessage(e.target.value)} />
+          <TextInput
+            label={t('Message')}
+            value={transferMessage}
+            onChange={(e) => setTransferMessage(e.target.value)}
+          />
         </SimpleGrid>
         <Flex justify="space-between" align="center" mt="md" gap="md" wrap="wrap">
           <Text size="sm" c="chatbox-tertiary">
-            可用 {formatCardHours(account?.availableCardHours)} 卡时；达到 1,000 卡时需管理员审核。
+            {t('{{amount}} available; reaching 1,000 card hours requires admin review.', {
+              amount: t('{{amount}} card hours', { amount: formatCardHours(account?.availableCardHours) }),
+            })}
           </Text>
           <Button
             loading={busy === 'create-transfer'}
@@ -1730,17 +1944,22 @@ function TransfersPanel({
                 'create-transfer',
                 (autoTopUp) =>
                   createComputeTransfer({ recipientEmail, cardHours: amount, message: transferMessage }, autoTopUp),
-                '转让已创建，卡时已冻结'
+                t('Transfer created, card hours frozen')
               )
             }
           >
-            创建转让
+            {t('Create transfer')}
           </Button>
         </Flex>
       </Paper>
 
       {transfers.length === 0 ? (
-        <EmptyState title="暂无转让记录" description="转让仅限 KOD 已注册用户；转入卡时可兑换到 KOD 内部人民币钱包。" />
+        <EmptyState
+          title={t('No transfer records')}
+          description={t(
+            'Transfers are limited to registered KOD users; received card hours can be exchanged to the KOD internal RMB wallet.'
+          )}
+        />
       ) : (
         transfers.map((transfer) => (
           <TransferCard key={transfer.id} transfer={transfer} currentUserId={account?.userId} busy={busy} run={run} />
@@ -1761,6 +1980,7 @@ function TransferCard({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   const isSender = transfer.senderUserId === currentUserId
   const isRecipient = transfer.recipientUserId === currentUserId
   const key = `transfer-${transfer.id}`
@@ -1769,7 +1989,7 @@ function TransferCard({
       <Flex justify="space-between" align="center" gap="md" wrap="wrap">
         <Box>
           <Group gap="xs">
-            <Text fw={600}>{formatCardHours(transfer.amount)} 卡时</Text>
+            <Text fw={600}>{t('{{amount}} card hours', { amount: formatCardHours(transfer.amount) })}</Text>
             <StatusBadge status={transfer.status} />
           </Group>
           <Text size="sm" c="chatbox-tertiary">
@@ -1778,7 +1998,7 @@ function TransferCard({
           {transfer.message && <Text size="sm">{transfer.message}</Text>}
           {transfer.reviewReason && (
             <Text size="sm" c="red">
-              审核说明：{transfer.reviewReason}
+              {t('Review notes: {{notes}}', { notes: transfer.reviewReason })}
             </Text>
           )}
         </Box>
@@ -1786,9 +2006,9 @@ function TransferCard({
           {isRecipient && transfer.status === 'PENDING_RECIPIENT' && (
             <Button
               loading={busy === key}
-              onClick={() => run(key, () => acceptComputeTransfer(transfer.id), '卡时已接收')}
+              onClick={() => run(key, () => acceptComputeTransfer(transfer.id), t('Card hours received'))}
             >
-              接收
+              {t('Accept')}
             </Button>
           )}
           {isSender && ['PENDING_REVIEW', 'PENDING_RECIPIENT'].includes(transfer.status) && (
@@ -1796,9 +2016,11 @@ function TransferCard({
               variant="light"
               color="red"
               loading={busy === key}
-              onClick={() => run(key, () => cancelComputeTransfer(transfer.id), '转让已撤回，卡时已解冻')}
+              onClick={() =>
+                run(key, () => cancelComputeTransfer(transfer.id), t('Transfer withdrawn, card hours unfrozen'))
+              }
             >
-              撤回
+              {t('Withdraw')}
             </Button>
           )}
         </Group>
@@ -1808,6 +2030,7 @@ function TransferCard({
 }
 
 function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
+  const { t } = useTranslation()
   const identityQuery = useQuery({ queryKey: ['compute', 'identity'], queryFn: getComputeIdentity })
   const supplierQuery = useQuery({ queryKey: ['compute', 'supplier'], queryFn: getComputeSupplier })
   const accountQuery = useQuery({ queryKey: ['compute', 'account'], queryFn: getComputeAccount })
@@ -1828,59 +2051,61 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
   const [identityFront, setIdentityFront] = useState<File | null>(null)
   const [identityBack, setIdentityBack] = useState<File | null>(null)
   const [node, setNode] = useState<ComputeNodeInput>({
-    nodeName: '内部 H100 流程测试节点',
-    region: '待确认',
+    nodeName: t('Internal H100 flow-test node'),
+    region: t('Pending confirmation'),
     gpuModel: 'H100',
     gpuMemoryGb: 80,
     gpuCount: 1,
-    cpuDescription: '仅内测占位数据',
+    cpuDescription: t('Internal test placeholder data only'),
     ramGb: 0,
     storageGb: 0,
-    networkDescription: '仅内测占位数据',
+    networkDescription: t('Internal test placeholder data only'),
     resourceProof: null,
   })
   const [productImages, setProductImages] = useState<File[]>([])
   const [gpu, setGpu] = useState({
     nodeId: 0,
-    name: 'H100 GPU 资源',
-    description: '公司内部 H100 固定套餐，由商家自主交付。',
-    region: '待确认',
+    name: t('H100 GPU resource'),
+    description: t('Internal H100 fixed package, delivered by the supplier.'),
+    region: t('Pending confirmation'),
     gpuModel: 'H100',
     gpuMemoryGb: 80,
     gpuCount: 1,
     packagePriceCardHours: 24,
     packageDurationHours: 24,
     deliveryDeadlineHours: 12,
-    deliveryMode: '买家公钥＋商家站内 SSH 地址交付',
-    slaDescription: '内部测试，SLA 待验证',
+    deliveryMode: t('Delivered via buyer public key + supplier in-app SSH address'),
+    slaDescription: t('Internal test, SLA to be verified'),
   })
 
   if (!identity || !approvedIdentity) {
     const canSubmit = !identity || ['NONE', 'REJECTED', 'REVOKED'].includes(identity.status)
     return (
       <Stack gap="md">
-        <Alert color="orange" title="先完成实名认证">
-          供应方入驻前必须由管理员人工审核身份材料。同一身份证最多认证五个账号；拒绝或注销后，敏感材料 30 天后自动删除。
+        <Alert color="orange" title={t('Complete identity verification first')}>
+          {t(
+            'Supplier onboarding requires manual identity review by an admin. One ID can verify up to five accounts; after rejection or deactivation, sensitive materials are deleted after 30 days.'
+          )}
         </Alert>
         {identity && identity.status !== 'NONE' && (
           <Alert color={identity.status === 'PENDING' ? 'yellow' : 'red'}>
-            当前状态：{statusLabel(identity.status)}
+            {t('Current status: {{status}}', { status: statusLabel(t, identity.status) })}
             {identity.rejectionReason ? `；${identity.rejectionReason}` : ''}
           </Alert>
         )}
         {canSubmit && (
-          <Section title="提交真实身份材料">
+          <Section title={t('Submit real identity materials')}>
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-              <TextInput label="真实姓名" value={realName} onChange={(e) => setRealName(e.target.value)} />
-              <TextInput label="身份证号" value={identityNo} onChange={(e) => setIdentityNo(e.target.value)} />
+              <TextInput label={t('Real name')} value={realName} onChange={(e) => setRealName(e.target.value)} />
+              <TextInput label={t('ID number')} value={identityNo} onChange={(e) => setIdentityNo(e.target.value)} />
               <FileInput
-                label="身份证正面"
+                label={t('ID card front')}
                 accept="image/jpeg,image/png"
                 value={identityFront}
                 onChange={setIdentityFront}
               />
               <FileInput
-                label="身份证反面"
+                label={t('ID card back')}
                 accept="image/jpeg,image/png"
                 value={identityBack}
                 onChange={setIdentityBack}
@@ -1895,19 +2120,25 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                   return run(
                     'identity-submit',
                     () => submitComputeIdentity({ realName, identityNo, front: identityFront, back: identityBack }),
-                    '实名认证已提交审核'
+                    t('Identity verification submitted for review')
                   )
                 }}
               >
-                提交真实材料
+                {t('Submit real materials')}
               </Button>
               <Button
                 color="orange"
                 variant="light"
                 loading={busy === 'identity-test'}
-                onClick={() => run('identity-test', createTestComputeIdentity, '仅内测模拟认证已提交审核')}
+                onClick={() =>
+                  run(
+                    'identity-test',
+                    createTestComputeIdentity,
+                    t('Internal test mock verification submitted for review')
+                  )
+                }
               >
-                创建“仅内测、非真实认证”材料
+                {t('Create "internal test, non-real verification" materials')}
               </Button>
             </Group>
           </Section>
@@ -1920,13 +2151,20 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
     return (
       <Paper withBorder p="lg" radius="md">
         <Stack>
-          <Title order={4}>申请成为算力供应方</Title>
+          <Title order={4}>{t('Apply to become a compute supplier')}</Title>
           <Text c="chatbox-tertiary">
-            身份状态：{statusLabel(identity.status)}。入驻通过后提交 GPU 硬件信息和资源证明，审核通过即可发布固定套餐。
+            {t(
+              'Identity status: {{status}}. After onboarding is approved, submit GPU hardware info and resource proof; once approved, fixed packages can be published.',
+              { status: statusLabel(t, identity.status) }
+            )}
           </Text>
-          <TextInput label="供应方名称" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-          <TextInput label="联系方式" value={contact} onChange={(e) => setContact(e.target.value)} />
-          <Textarea label="资源与团队说明" value={description} onChange={(e) => setDescription(e.target.value)} />
+          <TextInput label={t('Supplier name')} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+          <TextInput label={t('Contact info')} value={contact} onChange={(e) => setContact(e.target.value)} />
+          <Textarea
+            label={t('Resources and team description')}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
           <Button
             loading={busy === 'supplier-apply'}
             disabled={!displayName.trim()}
@@ -1934,11 +2172,11 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
               run(
                 'supplier-apply',
                 () => applyComputeSupplier({ displayName, contact, description }),
-                '供应方申请已提交'
+                t('Supplier application submitted')
               )
             }
           >
-            提交申请
+            {t('Submit application')}
           </Button>
         </Stack>
       </Paper>
@@ -1948,29 +2186,29 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
   return (
     <Stack gap="md">
       <Alert color={supplier.status === 'APPROVED' ? 'green' : supplier.status === 'REJECTED' ? 'red' : 'yellow'}>
-        供应方状态：{statusLabel(supplier.status)}
-        {supplier.rejectionReason ? `；原因：${supplier.rejectionReason}` : ''}
+        {t('Supplier status: {{status}}', { status: statusLabel(t, supplier.status) })}
+        {supplier.rejectionReason ? `；${t('Reason: {{reason}}', { reason: supplier.rejectionReason })}` : ''}
       </Alert>
 
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
         <SummaryCard
           icon={<IconDatabaseDollar />}
-          label="累计卡时收益"
+          label={t('Lifetime card hour income')}
           value={formatCardHours(accountQuery.data?.lifetimeIncome)}
         />
-        <SummaryCard icon={<IconServer />} label="托管节点" value={String((nodesQuery.data || []).length)} />
+        <SummaryCard icon={<IconServer />} label={t('Hosted nodes')} value={String((nodesQuery.data || []).length)} />
         <SummaryCard
           icon={<IconBuildingStore />}
-          label="已发布商品"
+          label={t('Published products')}
           value={String((productsQuery.data || []).length)}
         />
       </SimpleGrid>
 
       <Tabs defaultValue="devices" keepMounted={false}>
         <Tabs.List>
-          <Tabs.Tab value="devices">资源资质</Tabs.Tab>
-          <Tabs.Tab value="products">产品发布</Tabs.Tab>
-          <Tabs.Tab value="orders">出租订单</Tabs.Tab>
+          <Tabs.Tab value="devices">{t('Resource qualification')}</Tabs.Tab>
+          <Tabs.Tab value="products">{t('Product publishing')}</Tabs.Tab>
+          <Tabs.Tab value="orders">{t('Rental orders')}</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="devices" pt="md">
@@ -1987,74 +2225,78 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                         contact: supplier.contact || '',
                         description: supplier.description || '',
                       }),
-                    '已重新提交供应方申请'
+                    t('Supplier application resubmitted')
                   )
                 }
               >
-                修改资料后重新提交
+                {t('Modify info and resubmit')}
               </Button>
             )}
 
             {supplier.status === 'APPROVED' && (
-              <Section title="提交 GPU 资源资质">
+              <Section title={t('Submit GPU resource qualification')}>
                 {identity.status === 'TEST_APPROVED' && (
                   <Alert color="orange" mb="sm">
-                    模拟认证只能创建、上架明确标记为“仅内测”的节点和商品。
+                    {t(
+                      'Mock verification can only create and list nodes and products explicitly marked as "internal test only".'
+                    )}
                   </Alert>
                 )}
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                   <TextInput
-                    label="节点名称"
+                    label={t('Node name')}
                     value={node.nodeName}
                     onChange={(e) => setNode({ ...node, nodeName: e.target.value })}
                   />
                   <TextInput
-                    label="区域"
+                    label={t('Region')}
                     value={node.region}
                     onChange={(e) => setNode({ ...node, region: e.target.value })}
                   />
                   <TextInput
-                    label="GPU 型号"
+                    label={t('GPU model')}
                     value={node.gpuModel}
                     onChange={(e) => setNode({ ...node, gpuModel: e.target.value })}
                   />
                   <NumberInput
-                    label="显存 GB"
+                    label={t('VRAM GB')}
                     min={1}
                     value={node.gpuMemoryGb}
                     onChange={(value) => setNode({ ...node, gpuMemoryGb: Number(value) || 0 })}
                   />
                   <NumberInput
-                    label="GPU 数量"
+                    label={t('GPU count')}
                     min={1}
                     value={node.gpuCount}
                     onChange={(value) => setNode({ ...node, gpuCount: Number(value) || 0 })}
                   />
                   <TextInput
-                    label="CPU 信息"
+                    label={t('CPU info')}
                     value={node.cpuDescription}
                     onChange={(e) => setNode({ ...node, cpuDescription: e.target.value })}
                   />
                   <NumberInput
-                    label="内存 GB"
+                    label={t('RAM GB')}
                     min={0}
                     value={node.ramGb}
                     onChange={(value) => setNode({ ...node, ramGb: Number(value) || 0 })}
                   />
                   <NumberInput
-                    label="存储 GB"
+                    label={t('Storage GB')}
                     min={0}
                     value={node.storageGb}
                     onChange={(value) => setNode({ ...node, storageGb: Number(value) || 0 })}
                   />
                   <TextInput
-                    label="网络说明"
+                    label={t('Network notes')}
                     value={node.networkDescription}
                     onChange={(e) => setNode({ ...node, networkDescription: e.target.value })}
                   />
                   <FileInput
-                    label="GPU 资源证明"
-                    description="上传设备后台、nvidia-smi 或资源授权证明截图；支持 JPG/PNG，超过 800 KB 会自动压缩。"
+                    label={t('GPU resource proof')}
+                    description={t(
+                      'Upload screenshots of the device console, nvidia-smi or resource authorization proof; JPG/PNG supported, over 800 KB will be compressed automatically.'
+                    )}
                     accept="image/jpeg,image/png"
                     value={node.resourceProof}
                     onChange={(resourceProof) => setNode({ ...node, resourceProof })}
@@ -2064,25 +2306,31 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                   mt="md"
                   loading={busy === 'supplier-node'}
                   disabled={!node.nodeName.trim() || !node.resourceProof}
-                  onClick={() => run('supplier-node', () => createSupplierNode(node), 'GPU 资源资质已提交审核')}
+                  onClick={() =>
+                    run(
+                      'supplier-node',
+                      () => createSupplierNode(node),
+                      t('GPU resource qualification submitted for review')
+                    )
+                  }
                 >
-                  提交资源审核
+                  {t('Submit resource for review')}
                 </Button>
               </Section>
             )}
 
-            <Section title="我的托管节点">
+            <Section title={t('My hosted nodes')}>
               <SimpleTable
-                columns={['资源', '规格', '区域', '类型', '状态', '审核说明']}
+                columns={[t('Resource'), t('Specification'), t('Region'), t('Type'), t('Status'), t('Review notes')]}
                 rows={(nodesQuery.data || []).map((item) => [
                   item.nodeName,
                   `${item.gpuModel} ${item.gpuMemoryGb}GB × ${item.gpuCount}`,
                   item.region,
-                  item.isTest ? '仅内测' : '正式',
-                  statusLabel(item.status),
+                  item.isTest ? t('Internal test only') : t('Official'),
+                  statusLabel(t, item.status),
                   item.verificationNote || item.reviewReason || '-',
                 ])}
-                empty="尚未提交 GPU 节点"
+                empty={t('No GPU node submitted yet')}
               />
             </Section>
           </Stack>
@@ -2091,11 +2339,11 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
         <Tabs.Panel value="products" pt="md">
           <Stack>
             {supplier.status === 'APPROVED' && (
-              <Section title="基于已审核资源发布固定 GPU 套餐">
+              <Section title={t('Publish a fixed GPU package based on approved resources')}>
                 <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                   <Select
-                    label="已审核 GPU 资源"
-                    placeholder="选择节点"
+                    label={t('Approved GPU resources')}
+                    placeholder={String(t('Select node'))}
                     value={gpu.nodeId ? String(gpu.nodeId) : null}
                     data={(nodesQuery.data || [])
                       .filter((item) => item.status === 'RUNNING')
@@ -2120,34 +2368,34 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     }}
                   />
                   <TextInput
-                    label="商品名称"
+                    label={t('Product name')}
                     value={gpu.name}
                     onChange={(e) => setGpu({ ...gpu, name: e.target.value })}
                   />
                   <TextInput
-                    label="区域"
+                    label={t('Region')}
                     value={gpu.region}
                     onChange={(e) => setGpu({ ...gpu, region: e.target.value })}
                   />
                   <TextInput
-                    label="GPU 型号"
+                    label={t('GPU model')}
                     value={gpu.gpuModel}
                     onChange={(e) => setGpu({ ...gpu, gpuModel: e.target.value })}
                   />
                   <NumberInput
-                    label="显存 GB"
+                    label={t('VRAM GB')}
                     min={1}
                     value={gpu.gpuMemoryGb}
                     onChange={(value) => setGpu({ ...gpu, gpuMemoryGb: Number(value) || 0 })}
                   />
                   <NumberInput
-                    label="GPU 数量"
+                    label={t('GPU count')}
                     min={1}
                     value={gpu.gpuCount}
                     onChange={(value) => setGpu({ ...gpu, gpuCount: Number(value) || 0 })}
                   />
                   <NumberInput
-                    label="固定套餐价格（卡时）"
+                    label={t('Fixed package price (card hours)')}
                     min={0.001}
                     step={0.001}
                     decimalScale={3}
@@ -2155,13 +2403,13 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     onChange={(value) => setGpu({ ...gpu, packagePriceCardHours: Number(value) || 0 })}
                   />
                   <NumberInput
-                    label="套餐使用时长（小时）"
+                    label={t('Package duration (hours)')}
                     min={1}
                     value={gpu.packageDurationHours}
                     onChange={(value) => setGpu({ ...gpu, packageDurationHours: Number(value) || 0 })}
                   />
                   <NumberInput
-                    label="承诺交付时限（付款后小时）"
+                    label={t('Delivery commitment (hours after payment)')}
                     min={1}
                     value={gpu.deliveryDeadlineHours}
                     onChange={(value) => setGpu({ ...gpu, deliveryDeadlineHours: Number(value) || 0 })}
@@ -2169,24 +2417,24 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                 </SimpleGrid>
                 <Textarea
                   mt="sm"
-                  label="商品说明"
+                  label={t('Product description')}
                   value={gpu.description}
                   onChange={(e) => setGpu({ ...gpu, description: e.target.value })}
                 />
                 <SimpleGrid cols={{ base: 1, sm: 2 }} mt="sm">
                   <TextInput
-                    label="交付方式"
+                    label={t('Delivery method')}
                     value={gpu.deliveryMode}
                     onChange={(e) => setGpu({ ...gpu, deliveryMode: e.target.value })}
                   />
                   <TextInput
-                    label="SLA 说明"
+                    label={t('SLA notes')}
                     value={gpu.slaDescription}
                     onChange={(e) => setGpu({ ...gpu, slaDescription: e.target.value })}
                   />
                   <FileInput
-                    label="商品图片（最多 6 张）"
-                    description="第一张作为市场封面，其余作为详情图。"
+                    label={t('Product images (up to 6)')}
+                    description={t('The first image is the marketplace cover; the rest are detail images.')}
                     accept="image/jpeg,image/png"
                     multiple
                     value={productImages}
@@ -2201,18 +2449,25 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     run(
                       'supplier-product',
                       () => createSupplierGpuProduct(gpu, productImages),
-                      'GPU 固定套餐已提交审核'
+                      t('GPU fixed package submitted for review')
                     )
                   }
                 >
-                  提交商品审核
+                  {t('Submit product for review')}
                 </Button>
               </Section>
             )}
 
-            <Section title="我的商品">
+            <Section title={t('My products')}>
               <SimpleTable
-                columns={['商品', '类型', '规格/模型', '价格', '状态', '审核说明']}
+                columns={[
+                  t('Product'),
+                  t('Type'),
+                  t('Specification / model'),
+                  t('Price'),
+                  t('Status'),
+                  t('Review notes'),
+                ]}
                 rows={(productsQuery.data || []).map((product) => [
                   product.name,
                   product.productType,
@@ -2221,23 +2476,23 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     : product.modelId,
                   product.productType === 'GPU'
                     ? product.tradeMode === 'MARKETPLACE_FIXED'
-                      ? `${formatCardHours(product.packagePriceCardHours)} 卡时 / ${product.packageDurationHours || 0} 小时`
-                      : '旧版时段商品（仅保留记录）'
-                    : `${formatCardHours(product.promptRatePerMillion)} / 百万 Token`,
-                  statusLabel(product.status),
+                      ? `${t('{{amount}} card hours', { amount: formatCardHours(product.packagePriceCardHours) })} / ${t('{{hours}} hours', { hours: product.packageDurationHours || 0 })}`
+                      : t('Legacy time-slot products (records only)')
+                    : t('{{amount}} / million tokens', { amount: formatCardHours(product.promptRatePerMillion) }),
+                  statusLabel(t, product.status),
                   product.rejectionReason || '-',
                 ])}
-                empty="尚未发布商品"
+                empty={t('No products published yet')}
               />
             </Section>
           </Stack>
         </Tabs.Panel>
 
         <Tabs.Panel value="orders" pt="md">
-          <Section title="待交付与历史订单">
+          <Section title={t('Pending delivery and historical orders')}>
             <Stack>
               {(reservationsQuery.data || []).length === 0 ? (
-                <Text c="chatbox-tertiary">暂无买方订单</Text>
+                <Text c="chatbox-tertiary">{t('No buyer orders')}</Text>
               ) : (
                 (reservationsQuery.data || []).map((reservation) => (
                   <ReservationCard
@@ -2262,12 +2517,16 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
 }
 
 function NotificationsPanel({ busy, run }: { busy: string | null; run: RunAction }) {
+  const { t } = useTranslation()
   const query = useQuery({ queryKey: ['compute', 'notifications'], queryFn: listComputeNotifications })
   const notifications = query.data || []
   return (
     <Stack>
       {notifications.length === 0 ? (
-        <EmptyState title="暂无通知" description="订单、转让和审核状态变化会显示在这里。" />
+        <EmptyState
+          title={t('No notifications')}
+          description={t('Order, transfer and review status changes will appear here.')}
+        />
       ) : (
         notifications.map((notification) => (
           <NotificationCard key={notification.id} notification={notification} busy={busy} run={run} />
@@ -2286,6 +2545,7 @@ function NotificationCard({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   const unread = notification.isRead === 0
   const key = `notification-${notification.id}`
   return (
@@ -2294,7 +2554,7 @@ function NotificationCard({
         <Box>
           <Group gap="xs">
             <Text fw={unread ? 700 : 500}>{notification.title}</Text>
-            {unread && <Badge size="xs">未读</Badge>}
+            {unread && <Badge size="xs">{t('Unread')}</Badge>}
           </Group>
           <Text size="sm">{notification.content}</Text>
           <Text size="xs" c="chatbox-tertiary">
@@ -2306,9 +2566,9 @@ function NotificationCard({
             size="xs"
             variant="light"
             loading={busy === key}
-            onClick={() => run(key, () => markComputeNotificationRead(notification.id), '已标记为已读')}
+            onClick={() => run(key, () => markComputeNotificationRead(notification.id), t('Marked as read'))}
           >
-            标为已读
+            {t('Mark as read')}
           </Button>
         )}
       </Flex>
@@ -2317,6 +2577,7 @@ function NotificationCard({
 }
 
 function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
+  const { t } = useTranslation()
   const overviewQuery = useQuery({ queryKey: ['compute', 'admin-overview'], queryFn: getComputeAdminOverview })
   const identitiesQuery = useQuery({ queryKey: ['compute', 'admin-identities'], queryFn: listAdminIdentities })
   const nodesQuery = useQuery({ queryKey: ['compute', 'admin-nodes'], queryFn: listAdminNodes })
@@ -2330,18 +2591,23 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
     queryFn: listAdminSuspendedProxyKeys,
   })
   const [api, setApi] = useState({
-    name: 'KOD 测试模型 API',
-    description: '内部测试模型，购买固定 Token 套餐后使用。',
-    region: 'KAI 公司中转站',
+    name: t('KOD test model API'),
+    description: t('Internal test model, use after purchasing a fixed token package.'),
+    region: t('KAI company relay station'),
     modelId: '',
     packagePromptTokens: 1000000,
     packageCompletionTokens: 500000,
     packagePriceCardHours: 1,
-    slaDescription: '内部测试价与 SLA，正式使用前需重新确认',
+    slaDescription: t('Internal test pricing and SLA; reconfirm before official use'),
     upstreamStationId: 0,
     upstreamKeyId: 0,
   })
-  const [grant, setGrant] = useState({ recipientEmail: '', cardHours: 100, expiresAt: '', reason: '内部 MVP 测试' })
+  const [grant, setGrant] = useState({
+    recipientEmail: '',
+    cardHours: 100,
+    expiresAt: '',
+    reason: t('Internal MVP test'),
+  })
 
   useEffect(() => {
     const first = upstreamsQuery.data?.[0]
@@ -2352,43 +2618,44 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
   return (
     <Stack gap="md">
       <AdminOverview overview={overviewQuery.data} />
-      <Alert color="violet" title="管理员可以处理什么">
-        审核实名认证、资源商、GPU 资源证明和商品；维护商品可售状态；处理买家在交付后 24
-        小时内提交的交易争议。平台不登录或控制商家服务器。本人提交的资料和商品必须由另一名管理员审核。
+      <Alert color="violet" title={t('What can the admin handle')}>
+        {t(
+          'Review identity verifications, suppliers, GPU resource proofs and products; maintain product availability; handle buyer disputes submitted within 24 hours after delivery. The platform never logs into or controls supplier servers. Materials and products you submit yourself must be reviewed by another admin.'
+        )}
       </Alert>
       <Tabs defaultValue="reviews" keepMounted={false}>
         <Tabs.List>
-          <Tabs.Tab value="reviews">审核中心</Tabs.Tab>
-          <Tabs.Tab value="operations">资源与争议</Tabs.Tab>
-          <Tabs.Tab value="settings">运营设置</Tabs.Tab>
+          <Tabs.Tab value="reviews">{t('Review Center')}</Tabs.Tab>
+          <Tabs.Tab value="operations">{t('Resources & disputes')}</Tabs.Tab>
+          <Tabs.Tab value="settings">{t('Operations settings')}</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="settings" pt="md">
           <Stack>
             <AdminSettings overview={overviewQuery.data} busy={busy} run={run} />
 
-            <Section title="发放测试卡时">
+            <Section title={t('Grant test card hours')}>
               <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="sm">
                 <TextInput
-                  label="接收方邮箱"
+                  label={t('Recipient email')}
                   value={grant.recipientEmail}
                   onChange={(e) => setGrant({ ...grant, recipientEmail: e.target.value })}
                 />
                 <NumberInput
-                  label="卡时"
+                  label={t('Card hours')}
                   min={0.001}
                   decimalScale={3}
                   value={grant.cardHours}
                   onChange={(value) => setGrant({ ...grant, cardHours: Number(value) || 0 })}
                 />
                 <TextInput
-                  label="到期时间（可选）"
+                  label={t('Expiry time (optional)')}
                   type="datetime-local"
                   value={grant.expiresAt}
                   onChange={(e) => setGrant({ ...grant, expiresAt: e.target.value })}
                 />
                 <TextInput
-                  label="发放原因"
+                  label={t('Reason for granting')}
                   value={grant.reason}
                   onChange={(e) => setGrant({ ...grant, reason: e.target.value })}
                 />
@@ -2401,43 +2668,45 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                   run(
                     'admin-grant',
                     () => grantAdminCardHours({ ...grant, expiresAt: grant.expiresAt || null }),
-                    '测试卡时已发放'
+                    t('Test card hours granted')
                   )
                 }
               >
-                确认发放
+                {t('Confirm grant')}
               </Button>
             </Section>
 
-            <Section title="创建公司模型 API 商品">
+            <Section title={t('Create company model API product')}>
               <Alert color="yellow" mb="sm">
-                模型 ID 必须与公司中转站用量日志中的 model_name 完全一致，否则无法路由到卡时账本。
+                {t(
+                  'The model ID must exactly match model_name in the company relay station usage logs, otherwise it cannot be routed to the card hour ledger.'
+                )}
               </Alert>
               <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
                 <TextInput
-                  label="商品名称"
+                  label={t('Product name')}
                   value={api.name}
                   onChange={(e) => setApi({ ...api, name: e.target.value })}
                 />
                 <TextInput
-                  label="中转站模型 ID"
+                  label={t('Relay station model ID')}
                   value={api.modelId}
                   onChange={(e) => setApi({ ...api, modelId: e.target.value })}
                 />
                 <NumberInput
-                  label="套餐输入 Token"
+                  label={t('Package input tokens')}
                   min={1}
                   value={api.packagePromptTokens}
                   onChange={(value) => setApi({ ...api, packagePromptTokens: Number(value) || 0 })}
                 />
                 <NumberInput
-                  label="套餐输出 Token"
+                  label={t('Package output tokens')}
                   min={1}
                   value={api.packageCompletionTokens}
                   onChange={(value) => setApi({ ...api, packageCompletionTokens: Number(value) || 0 })}
                 />
                 <NumberInput
-                  label="套餐价格（卡时）"
+                  label={t('Package price (card hours)')}
                   min={0.001}
                   step={0.001}
                   decimalScale={3}
@@ -2445,8 +2714,8 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                   onChange={(value) => setApi({ ...api, packagePriceCardHours: Number(value) || 0 })}
                 />
                 <Select
-                  label="上游零售站与 API Key"
-                  description="买家只会看到 KOD 平台代理 Key"
+                  label={t('Upstream relay station and API key')}
+                  description={t('Buyers only see the KOD platform proxy key')}
                   value={api.upstreamKeyId ? `${api.upstreamStationId}:${api.upstreamKeyId}` : null}
                   data={(upstreamsQuery.data || []).map((item) => ({
                     value: `${item.stationId}:${item.keyId}`,
@@ -2460,13 +2729,13 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
               </SimpleGrid>
               <Textarea
                 mt="sm"
-                label="商品说明"
+                label={t('Product description')}
                 value={api.description}
                 onChange={(e) => setApi({ ...api, description: e.target.value })}
               />
               <TextInput
                 mt="sm"
-                label="SLA 说明"
+                label={t('SLA notes')}
                 value={api.slaDescription}
                 onChange={(e) => setApi({ ...api, slaDescription: e.target.value })}
               />
@@ -2474,9 +2743,11 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                 mt="md"
                 loading={busy === 'admin-api-product'}
                 disabled={!api.modelId.trim() || !api.name.trim() || !api.upstreamKeyId}
-                onClick={() => run('admin-api-product', () => createAdminApiProduct(api), '模型 API 商品已上架')}
+                onClick={() =>
+                  run('admin-api-product', () => createAdminApiProduct(api), t('Model API product listed'))
+                }
               >
-                创建并上架
+                {t('Create and list')}
               </Button>
             </Section>
             <AdminApiUpstreamAssignments
@@ -2521,15 +2792,18 @@ function AdminApiUpstreamAssignments({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   const apiProducts = products.filter((item) => item.productType === 'API')
   const [selections, setSelections] = useState<Record<number, string>>({})
   return (
-    <Section title="已上架 API 套餐的上游配置">
+    <Section title={t('Upstream configuration for listed API packages')}>
       <Alert color="blue" mb="md">
-        可为旧套餐补配或切换上游。切换后用户已复制的 KOD 套餐 Key 不变，零售站真实 Key 不会暴露。
+        {t(
+          'You can add or switch upstream for existing packages. After switching, the KOD package key users already copied stays the same and the real relay station key is never exposed.'
+        )}
       </Alert>
       {apiProducts.length === 0 ? (
-        <Text c="chatbox-tertiary">暂无 API 套餐</Text>
+        <Text c="chatbox-tertiary">{t('No API packages')}</Text>
       ) : (
         <Stack>
           {apiProducts.map((product) => {
@@ -2540,11 +2814,12 @@ function AdminApiUpstreamAssignments({
                 <Box style={{ flex: 1, minWidth: 220 }}>
                   <Text fw={600}>{product.name}</Text>
                   <Text size="sm" c="chatbox-tertiary">
-                    固定模型：{product.modelId}；{current ? '已配置上游' : '尚未配置，用户无法购买或取得 Key'}
+                    {t('Fixed model: {{model}}; ', { model: product.modelId })}
+                    {current ? t('Upstream configured') : t('Not configured; users cannot buy or obtain a key')}
                   </Text>
                 </Box>
                 <Select
-                  label="零售站与 Key"
+                  label={t('Relay station and key')}
                   w={360}
                   value={selected}
                   data={upstreams.map((item) => ({
@@ -2561,11 +2836,11 @@ function AdminApiUpstreamAssignments({
                     return run(
                       `upstream-${product.id}`,
                       () => configureAdminProductUpstream(product.id, stationId, keyId),
-                      'API 套餐上游已更新'
+                      t('API package upstream updated')
                     )
                   }}
                 >
-                  保存上游
+                  {t('Save upstream')}
                 </Button>
               </Flex>
             )
@@ -2585,10 +2860,11 @@ function AdminSuspendedProxyKeys({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   return (
-    <Section title={`异常套餐 Key（${keys.length}）`}>
+    <Section title={t('Abnormal package keys ({{count}})', { count: keys.length })}>
       {keys.length === 0 ? (
-        <Text c="chatbox-tertiary">暂无因 usage 异常而暂停的套餐 Key</Text>
+        <Text c="chatbox-tertiary">{t('No package keys suspended due to usage exceptions')}</Text>
       ) : (
         <Stack>
           {keys.map((item) => (
@@ -2601,7 +2877,11 @@ function AdminSuspendedProxyKeys({
                   <StatusBadge status={item.keyStatus} />
                 </Group>
                 <Text size="sm">
-                  模型：{item.modelId}；Key 尾号：{item.accessKeyLast4}；上游：{item.stationUrl || '-'}
+                  {t('Model: {{model}}; Key suffix: {{suffix}}; Upstream: {{station}}', {
+                    model: item.modelId,
+                    suffix: item.accessKeyLast4,
+                    station: item.stationUrl || '-',
+                  })}
                 </Text>
                 <Alert color="red">{item.suspendedReason}</Alert>
                 <Group justify="flex-end">
@@ -2609,10 +2889,14 @@ function AdminSuspendedProxyKeys({
                     variant="light"
                     loading={busy === `restore-key-${item.id}`}
                     onClick={() =>
-                      run(`restore-key-${item.id}`, () => repairAdminProxyKey(item.id, false), '套餐 Key 已恢复')
+                      run(
+                        `restore-key-${item.id}`,
+                        () => repairAdminProxyKey(item.id, false),
+                        t('Package key restored')
+                      )
                     }
                   >
-                    原 Key 恢复
+                    {t('Restore original key')}
                   </Button>
                   <Button
                     color="orange"
@@ -2621,11 +2905,11 @@ function AdminSuspendedProxyKeys({
                       run(
                         `regenerate-key-${item.id}`,
                         () => repairAdminProxyKey(item.id, true),
-                        '已重新生成套餐 Key，用户可在我的资产查看'
+                        t('Package key regenerated; users can view it in My Assets')
                       )
                     }
                   >
-                    重新生成并恢复
+                    {t('Regenerate and restore')}
                   </Button>
                 </Group>
               </Stack>
@@ -2638,17 +2922,20 @@ function AdminSuspendedProxyKeys({
 }
 
 function AdminNodeOperations({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy: string | null; run: RunAction }) {
+  const { t } = useTranslation()
   const manageable = nodes.filter((item) => !['PENDING', 'REJECTED'].includes(item.status))
   const [targets, setTargets] = useState<Record<number, string>>({})
   const [reasons, setReasons] = useState<Record<number, string>>({})
   return (
-    <Section title={`资源可售状态（${manageable.length}）`}>
+    <Section title={t('Resource availability ({{count}})', { count: manageable.length })}>
       <Alert color="blue" mb="md">
-        “运行中”表示资质有效且允许发布新商品；切为“待处理”或“已离线”只会暂停新商品接单，不会让平台接管或中断商家已经交付的资源。
+        {t(
+          '"Running" means the qualification is valid and new products may be listed; switching to "pending action" or "offline" only pauses new orders and never lets the platform take over or interrupt delivered resources.'
+        )}
       </Alert>
       <Stack>
         {manageable.length === 0 ? (
-          <Text c="chatbox-tertiary">暂无已审核资源</Text>
+          <Text c="chatbox-tertiary">{t('No approved resources')}</Text>
         ) : (
           manageable.map((item) => {
             const target = targets[item.id] || item.status
@@ -2665,20 +2952,20 @@ function AdminNodeOperations({ nodes, busy, run }: { nodes: ComputeGpuNode[]; bu
                     </Text>
                   </Box>
                   <Select
-                    label="切换状态"
+                    label={t('Switch status')}
                     w={190}
                     value={target}
                     data={[
-                      { value: 'DEPLOYING', label: '部署中' },
-                      { value: 'RUNNING', label: '运行中' },
-                      { value: 'PENDING_ACTION', label: '待处理' },
-                      { value: 'OFFLINE', label: '已离线' },
+                      { value: 'DEPLOYING', label: t('Deploying') },
+                      { value: 'RUNNING', label: t('Running') },
+                      { value: 'PENDING_ACTION', label: t('Pending action') },
+                      { value: 'OFFLINE', label: t('Offline') },
                     ]}
                     onChange={(value) => setTargets({ ...targets, [item.id]: value || item.status })}
                   />
                   <TextInput
-                    label="原因/说明"
-                    placeholder="待处理、离线时必填"
+                    label={t('Reason / notes')}
+                    placeholder={String(t('Required when pending action or offline'))}
                     value={reasons[item.id] || ''}
                     onChange={(e) => setReasons({ ...reasons, [item.id]: e.target.value })}
                     style={{ flex: 1, minWidth: 220 }}
@@ -2693,11 +2980,11 @@ function AdminNodeOperations({ nodes, busy, run }: { nodes: ComputeGpuNode[]; bu
                       run(
                         `node-status-${item.id}`,
                         () => updateAdminNodeStatus(item.id, target, reasons[item.id] || ''),
-                        '设备状态已更新'
+                        t('Device status updated')
                       )
                     }
                   >
-                    保存状态
+                    {t('Save status')}
                   </Button>
                 </Flex>
               </Paper>
@@ -2718,6 +3005,7 @@ function AdminReservationOperations({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   const actionable = reservations.filter(
     (item) =>
       ['EXCEPTION_PENDING', 'DISPUTED'].includes(item.status) ||
@@ -2727,9 +3015,11 @@ function AdminReservationOperations({
   const [actuals, setActuals] = useState<Record<number, number>>({})
   const [reasons, setReasons] = useState<Record<number, string>>({})
   return (
-    <Section title={`交易争议与历史补偿结算（${actionable.length}）`}>
+    <Section
+      title={t('Trade disputes and historical compensation settlement ({{count}})', { count: actionable.length })}
+    >
       {actionable.length === 0 ? (
-        <Text c="chatbox-tertiary">暂无需要人工处理的订单</Text>
+        <Text c="chatbox-tertiary">{t('No orders requiring manual handling')}</Text>
       ) : (
         <Stack>
           {actionable.map((item) => {
@@ -2745,24 +3035,38 @@ function AdminReservationOperations({
                         <StatusBadge status={item.status} />
                       </Group>
                       <Text size="sm" c="chatbox-tertiary">
-                        买方 {item.buyerEmail} · 商家 {item.supplierEmail || '-'} · {formatDate(item.startTime)} 至{' '}
+                        {t('Buyer {{buyer}} · Supplier {{supplier}} · {{start}} to', {
+                          buyer: item.buyerEmail,
+                          supplier: item.supplierEmail || '-',
+                          start: formatDate(item.startTime),
+                        })}{' '}
                         {formatDate(item.endTime)}
                       </Text>
                     </Box>
-                    <Text fw={700}>冻结 {formatCardHours(item.frozenCardHours)} 卡时</Text>
+                    <Text fw={700}>
+                      {t('Frozen: {{amount}}', {
+                        amount: t('{{amount}} card hours', { amount: formatCardHours(item.frozenCardHours) }),
+                      })}
+                    </Text>
                   </Flex>
-                  {item.incidentReason && <Alert color="red">异常原因：{item.incidentReason}</Alert>}
-                  {item.disputeEvidence && <Alert color="orange">买家证据：{item.disputeEvidence}</Alert>}
+                  {item.incidentReason && (
+                    <Alert color="red">{t('Exception reason: {{reason}}', { reason: item.incidentReason })}</Alert>
+                  )}
+                  {item.disputeEvidence && (
+                    <Alert color="orange">
+                      {t('Buyer evidence: {{evidence}}', { evidence: item.disputeEvidence })}
+                    </Alert>
+                  )}
                   {exception ? (
                     <>
                       <SimpleGrid cols={{ base: 1, sm: 3 }}>
                         <Select
-                          label="处理方式"
+                          label={t('Resolution method')}
                           value={resolution}
                           data={[
-                            { value: 'FULL_REFUND', label: '全额退还买方' },
-                            { value: 'ACTUAL_USAGE', label: '部分结算、剩余退款' },
-                            { value: 'FULL_SETTLEMENT', label: '按原订单正常结算' },
+                            { value: 'FULL_REFUND', label: t('Full refund to buyer') },
+                            { value: 'ACTUAL_USAGE', label: t('Partial settlement, rest refunded') },
+                            { value: 'FULL_SETTLEMENT', label: t('Normal settlement per original order') },
                           ]}
                           onChange={(value) =>
                             setResolutions({
@@ -2772,7 +3076,7 @@ function AdminReservationOperations({
                           }
                         />
                         <NumberInput
-                          label="结算给商家的卡时"
+                          label={t('Card hours settled to supplier')}
                           disabled={resolution !== 'ACTUAL_USAGE'}
                           min={0.001}
                           max={item.frozenCardHours}
@@ -2781,7 +3085,7 @@ function AdminReservationOperations({
                           onChange={(value) => setActuals({ ...actuals, [item.id]: Number(value) || 0 })}
                         />
                         <TextInput
-                          label="处理原因"
+                          label={t('Handling reason')}
                           value={reasons[item.id] || ''}
                           onChange={(e) => setReasons({ ...reasons, [item.id]: e.target.value })}
                         />
@@ -2800,19 +3104,21 @@ function AdminReservationOperations({
                                 actualCardHours: actuals[item.id],
                                 reason: reasons[item.id] || '',
                               }),
-                            '异常订单已处理并完成账务结算'
+                            t('Abnormal order handled and settled')
                           )
                         }
                       >
-                        确认处理
+                        {t('Confirm and handle')}
                       </Button>
                     </>
                   ) : (
                     <Button
                       loading={busy === `settle-${item.id}`}
-                      onClick={() => run(`settle-${item.id}`, () => settleAdminReservation(item.id), '订单已立即结算')}
+                      onClick={() =>
+                        run(`settle-${item.id}`, () => settleAdminReservation(item.id), t('Order settled immediately'))
+                      }
                     >
-                      立即结算（定时任务补偿）
+                      {t('Settle immediately (scheduled task compensation)')}
                     </Button>
                   )}
                 </Stack>
@@ -2826,12 +3132,13 @@ function AdminReservationOperations({
 }
 
 function AdminOverview({ overview }: { overview?: ComputeAdminOverview }) {
+  const { t } = useTranslation()
   const items = [
-    ['待审实名认证', overview?.identitiesPending || 0],
-    ['待审供应方', overview?.suppliersPending || 0],
-    ['待审 GPU 资源', overview?.nodesPending || 0],
-    ['待审产品', overview?.productsPending || 0],
-    ['待处理资源', overview?.nodesPendingAction || 0],
+    [t('Pending identity reviews'), overview?.identitiesPending || 0],
+    [t('Pending supplier reviews'), overview?.suppliersPending || 0],
+    [t('Pending GPU resource reviews'), overview?.nodesPending || 0],
+    [t('Pending product reviews'), overview?.productsPending || 0],
+    [t('Pending action resources'), overview?.nodesPendingAction || 0],
   ]
   return (
     <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">
@@ -2858,6 +3165,7 @@ function AdminSettings({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   const [transferReviewThreshold, setTransferReviewThreshold] = useState(1000)
 
   useEffect(() => {
@@ -2866,10 +3174,10 @@ function AdminSettings({
   }, [overview])
 
   return (
-    <Section title="结算规则">
+    <Section title={t('Settlement rules')}>
       <Flex align="end" gap="md" wrap="wrap">
         <NumberInput
-          label="大额转让审核阈值（卡时）"
+          label={t('Large transfer review threshold (card hours)')}
           min={0.001}
           decimalScale={3}
           value={transferReviewThreshold}
@@ -2877,8 +3185,8 @@ function AdminSettings({
           w={240}
         />
         <NumberInput
-          label="平台佣金（第一版固定）"
-          description="商家订单确认后获得全部卡时"
+          label={t('Platform commission (fixed in v1)')}
+          description={t('Supplier receives all card hours after order confirmation')}
           value={0}
           disabled
           w={220}
@@ -2894,11 +3202,11 @@ function AdminSettings({
                   transferReviewThreshold,
                   platformFeeRate: 0,
                 }),
-              '结算规则已更新'
+              t('Settlement rules updated')
             )
           }
         >
-          保存规则
+          {t('Save rules')}
         </Button>
       </Flex>
     </Section>
@@ -2914,6 +3222,7 @@ function AdminIdentityReviews({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   const pending = identities.filter((item) => item.status === 'PENDING')
   const [reasons, setReasons] = useState<Record<number, string>>({})
   const [details, setDetails] = useState<Record<number, ComputeIdentity>>({})
@@ -2931,13 +3240,17 @@ function AdminIdentityReviews({
     return run(
       `identity-${identityId}`,
       () => reviewAdminIdentity(identityId, approved, approved ? '' : reasons[identityId] || ''),
-      approved ? (item.verificationType === 'TEST' ? '仅内测认证已通过' : '实名认证已通过') : '实名认证已拒绝'
+      approved
+        ? item.verificationType === 'TEST'
+          ? t('Internal test verification passed')
+          : t('Identity verification passed')
+        : t('Identity verification rejected')
     )
   }
   return (
-    <Section title={`实名认证审核（${pending.length}）`}>
+    <Section title={t('Identity verification reviews ({{count}})', { count: pending.length })}>
       {pending.length === 0 ? (
-        <Text c="chatbox-tertiary">暂无待审核实名认证</Text>
+        <Text c="chatbox-tertiary">{t('No identity verifications pending review')}</Text>
       ) : (
         <Stack>
           {pending.map((item) => (
@@ -2946,13 +3259,16 @@ function AdminIdentityReviews({
                 <Group>
                   <Text fw={600}>{item.email}</Text>
                   <Badge color={item.verificationType === 'TEST' ? 'orange' : 'blue'}>
-                    {item.verificationType === 'TEST' ? '仅内测模拟认证' : '真实认证'}
+                    {item.verificationType === 'TEST' ? t('Internal test mock verification') : t('Real verification')}
                   </Badge>
                 </Group>
-                <Text size="sm">证件号：{item.identityNoMasked || '-'}</Text>
+                <Text size="sm">{t('ID number: {{no}}', { no: item.identityNoMasked || '-' })}</Text>
                 {item.id && details[item.id] && (
                   <Alert color="yellow">
-                    姓名：{details[item.id].realName}；完整证件号：{details[item.id].identityNo}（仅限本次审核查看）
+                    {t('Name: {{name}}; Full ID number: {{no}} (viewable only for this review)', {
+                      name: details[item.id].realName,
+                      no: details[item.id].identityNo,
+                    })}
                   </Alert>
                 )}
                 <Group>
@@ -2963,17 +3279,17 @@ function AdminIdentityReviews({
                       item.id && setDetails({ ...details, [item.id]: await getAdminIdentity(item.id) })
                     }
                   >
-                    查看解密详情
+                    {t('View decrypted details')}
                   </Button>
                   <Button size="xs" variant="light" onClick={() => item.id && openDocument(item.id, 'front')}>
-                    查看正面
+                    {t('View front')}
                   </Button>
                   <Button size="xs" variant="light" onClick={() => item.id && openDocument(item.id, 'back')}>
-                    查看反面
+                    {t('View back')}
                   </Button>
                 </Group>
                 <TextInput
-                  placeholder="拒绝时必须填写原因"
+                  placeholder={String(t('A reason is required when rejecting'))}
                   value={reasons[item.id || 0] || ''}
                   onChange={(e) => setReasons({ ...reasons, [item.id || 0]: e.target.value })}
                 />
@@ -2985,10 +3301,10 @@ function AdminIdentityReviews({
                     loading={busy === `identity-${item.id}`}
                     onClick={() => review(item, false)}
                   >
-                    拒绝
+                    {t('Reject')}
                   </Button>
                   <Button loading={busy === `identity-${item.id}`} onClick={() => review(item, true)}>
-                    通过
+                    {t('Approve')}
                   </Button>
                 </Group>
               </Stack>
@@ -2999,17 +3315,20 @@ function AdminIdentityReviews({
       <Modal
         opened={documentPreviewUrl !== null}
         onClose={() => setDocumentPreviewUrl(null)}
-        title="身份证件预览"
+        title={t('ID document preview')}
         size="lg"
         centered
       >
-        {documentPreviewUrl && <img src={documentPreviewUrl} alt="身份证件" style={{ width: '100%' }} />}
+        {documentPreviewUrl && (
+          <img src={documentPreviewUrl} alt={String(t('ID document'))} style={{ width: '100%' }} />
+        )}
       </Modal>
     </Section>
   )
 }
 
 function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy: string | null; run: RunAction }) {
+  const { t } = useTranslation()
   const pending = nodes.filter((item) => item.status === 'PENDING')
   const [reasons, setReasons] = useState<Record<number, string>>({})
   const [notes, setNotes] = useState<Record<number, string>>({})
@@ -3022,9 +3341,9 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
   return (
-    <Section title={`GPU 资源证明审核（${pending.length}）`}>
+    <Section title={t('GPU resource proof reviews ({{count}})', { count: pending.length })}>
       {pending.length === 0 ? (
-        <Text c="chatbox-tertiary">暂无待审核 GPU 资源</Text>
+        <Text c="chatbox-tertiary">{t('No GPU resources pending review')}</Text>
       ) : (
         <Stack>
           {pending.map((item) => (
@@ -3034,22 +3353,22 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
                   <Text fw={600}>
                     {item.nodeName} · {item.email}
                   </Text>
-                  {Boolean(item.isTest) && <Badge color="orange">仅内测</Badge>}
+                  {Boolean(item.isTest) && <Badge color="orange">{t('Internal test only')}</Badge>}
                 </Group>
                 <Text size="sm">
-                  {item.gpuModel} {item.gpuMemoryGb}GB × {item.gpuCount}；CPU {item.cpuDescription || '-'}；内存{' '}
-                  {item.ramGb}GB；存储 {item.storageGb}GB
+                  {item.gpuModel} {item.gpuMemoryGb}GB × {item.gpuCount}；{t('CPU')} {item.cpuDescription || '-'}；
+                  {t('RAM')} {item.ramGb}GB；{t('Storage')} {item.storageGb}GB
                 </Text>
                 <Button size="xs" variant="light" w="fit-content" onClick={() => openProof(item.id)}>
-                  查看资源证明
+                  {t('View resource proof')}
                 </Button>
                 <TextInput
-                  label="资质审核说明"
+                  label={t('Qualification review notes')}
                   value={notes[item.id] || ''}
                   onChange={(e) => setNotes({ ...notes, [item.id]: e.target.value })}
                 />
                 <TextInput
-                  placeholder="拒绝时必须填写原因"
+                  placeholder={String(t('A reason is required when rejecting'))}
                   value={reasons[item.id] || ''}
                   onChange={(e) => setReasons({ ...reasons, [item.id]: e.target.value })}
                 />
@@ -3063,11 +3382,11 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
                       run(
                         `node-${item.id}`,
                         () => reviewAdminNode(item.id, false, reasons[item.id] || '', notes[item.id] || ''),
-                        'GPU 资源资质已拒绝'
+                        t('GPU resource qualification rejected')
                       )
                     }
                   >
-                    拒绝
+                    {t('Reject')}
                   </Button>
                   <Button
                     loading={busy === `node-${item.id}`}
@@ -3075,11 +3394,11 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
                       run(
                         `node-${item.id}`,
                         () => reviewAdminNode(item.id, true, '', notes[item.id] || ''),
-                        'GPU 资源资质已通过，可以发布商品'
+                        t('GPU resource qualification approved, products can be published')
                       )
                     }
                   >
-                    通过
+                    {t('Approve')}
                   </Button>
                 </Group>
               </Stack>
@@ -3090,11 +3409,11 @@ function AdminNodeReviews({ nodes, busy, run }: { nodes: ComputeGpuNode[]; busy:
       <Modal
         opened={proofPreviewUrl !== null}
         onClose={() => setProofPreviewUrl(null)}
-        title="资源证明预览"
+        title={t('Resource proof preview')}
         size="lg"
         centered
       >
-        {proofPreviewUrl && <img src={proofPreviewUrl} alt="资源证明" style={{ width: '100%' }} />}
+        {proofPreviewUrl && <img src={proofPreviewUrl} alt={String(t('Resource proof'))} style={{ width: '100%' }} />}
       </Modal>
     </Section>
   )
@@ -3109,20 +3428,21 @@ function AdminSupplierReviews({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   const pending = suppliers.filter((supplier) => supplier.status === 'PENDING')
   return (
-    <Section title={`供应方审核（${pending.length}）`}>
+    <Section title={t('Supplier reviews ({{count}})', { count: pending.length })}>
       <ReviewList
-        empty="暂无待审核供应方"
+        empty={t('No suppliers pending review')}
         items={pending.map((supplier) => ({
           key: `supplier-${supplier.id}`,
           title: `${supplier.displayName} · ${supplier.email}`,
-          description: `${supplier.contact || '未留联系方式'}；${supplier.description || '无说明'}`,
+          description: `${supplier.contact || t('No contact info provided')}；${supplier.description || t('No notes')}`,
           onReview: (approved, reason) =>
             run(
               `admin-supplier-${supplier.id}`,
               () => reviewAdminSupplier(supplier.id || 0, approved, reason),
-              approved ? '供应方已通过' : '供应方已拒绝'
+              approved ? t('Supplier approved') : t('Supplier rejected')
             ),
           loading: busy === `admin-supplier-${supplier.id}`,
         }))}
@@ -3140,25 +3460,34 @@ function AdminProductReviews({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   const pending = products.filter((product) => product.status === 'PENDING')
   return (
-    <Section title={`商品审核（${pending.length}）`}>
+    <Section title={t('Product reviews ({{count}})', { count: pending.length })}>
       <ReviewList
-        empty="暂无待审核商品"
+        empty={t('No products pending review')}
         items={pending.map((product) => ({
           key: `product-${product.id}`,
           title: `${product.name} · ${product.productType}`,
           description:
             product.productType === 'GPU'
               ? product.tradeMode === 'MARKETPLACE_FIXED'
-                ? `${product.gpuModel} ${product.gpuMemoryGb}GB × ${product.gpuCount}，${product.packageDurationHours || 0} 小时，${formatCardHours(product.packagePriceCardHours)} 卡时`
-                : `${product.gpuModel} ${product.gpuMemoryGb}GB × ${product.gpuCount}，旧版商品只保留记录`
+                ? String(
+                    `${product.gpuModel} ${product.gpuMemoryGb}GB × ${product.gpuCount}，${t('{{hours}} hours', { hours: product.packageDurationHours || 0 })}，${t('{{amount}} card hours', { amount: formatCardHours(product.packagePriceCardHours) })}`
+                  )
+                : String(
+                    t('{{model}} {{vram}}GB × {{count}}, legacy product kept as record only', {
+                      model: product.gpuModel,
+                      vram: product.gpuMemoryGb ?? 0,
+                      count: product.gpuCount ?? 0,
+                    })
+                  )
               : `${product.modelId}`,
           onReview: (approved, reason) =>
             run(
               `admin-product-${product.id}`,
               () => reviewAdminProduct(product.id, approved, reason),
-              approved ? '商品已上架' : '商品已拒绝'
+              approved ? t('Product listed') : t('Product rejected')
             ),
           loading: busy === `admin-product-${product.id}`,
         }))}
@@ -3176,19 +3505,20 @@ function AdminTransferReviews({
   busy: string | null
   run: RunAction
 }) {
+  const { t } = useTranslation()
   return (
-    <Section title={`大额转让审核（${transfers.length}）`}>
+    <Section title={t('Large transfer reviews ({{count}})', { count: transfers.length })}>
       <ReviewList
-        empty="暂无待审核大额转让"
+        empty={t('No large transfers pending review')}
         items={transfers.map((transfer) => ({
           key: `transfer-${transfer.id}`,
-          title: `${formatCardHours(transfer.amount)} 卡时 · ${transfer.senderEmail} → ${transfer.recipientEmail}`,
-          description: transfer.message || '无留言',
+          title: `${t('{{amount}} card hours', { amount: formatCardHours(transfer.amount) })} · ${transfer.senderEmail} → ${transfer.recipientEmail}`,
+          description: transfer.message || t('No message'),
           onReview: (approved, reason) =>
             run(
               `admin-transfer-${transfer.id}`,
               () => reviewAdminTransfer(transfer.id, approved, reason),
-              approved ? '大额转让已通过' : '大额转让已拒绝'
+              approved ? t('Large transfer approved') : t('Large transfer rejected')
             ),
           loading: busy === `admin-transfer-${transfer.id}`,
         }))}
@@ -3210,6 +3540,7 @@ function ReviewList({
   }>
   empty: string
 }) {
+  const { t } = useTranslation()
   const [reasons, setReasons] = useState<Record<string, string>>({})
   if (items.length === 0) return <Text c="chatbox-tertiary">{empty}</Text>
   return (
@@ -3222,7 +3553,7 @@ function ReviewList({
               {item.description}
             </Text>
             <TextInput
-              placeholder="拒绝时必须填写原因"
+              placeholder={String(t('A reason is required when rejecting'))}
               value={reasons[item.key] || ''}
               onChange={(e) => setReasons({ ...reasons, [item.key]: e.target.value })}
             />
@@ -3234,10 +3565,10 @@ function ReviewList({
                 disabled={!reasons[item.key]?.trim()}
                 onClick={() => item.onReview(false, reasons[item.key] || '')}
               >
-                拒绝
+                {t('Reject')}
               </Button>
               <Button loading={item.loading} onClick={() => item.onReview(true, '')}>
-                通过
+                {t('Approve')}
               </Button>
             </Group>
           </Stack>
@@ -3340,12 +3671,13 @@ function SimpleTable({
 }
 
 function LedgerTable({ entries }: { entries: ComputeLedgerEntry[] }) {
+  const { t } = useTranslation()
   return (
     <SimpleTable
-      columns={['时间', '类型', '变动', '可用余额', '冻结余额', '说明']}
+      columns={[t('Time'), t('Type'), t('Change'), t('Available balance'), t('Frozen balance'), t('Notes')]}
       rows={entries.map((entry) => [
         formatDate(entry.createTime),
-        statusLabel(entry.entryType),
+        statusLabel(t, entry.entryType),
         <Text key="amount" c={entry.direction === 'CREDIT' ? 'green' : 'red'}>
           {entry.direction === 'CREDIT' ? '+' : '-'}
           {formatCardHours(entry.amount)}
@@ -3354,46 +3686,55 @@ function LedgerTable({ entries }: { entries: ComputeLedgerEntry[] }) {
         formatCardHours(entry.frozenAfter),
         entry.description,
       ])}
-      empty="暂无卡时流水"
+      empty={t('No card hour ledger entries')}
     />
   )
 }
 
 function ApiUsageTable({ entries }: { entries: ComputeApiUsage[] }) {
+  const { t } = useTranslation()
   return (
     <SimpleTable
-      columns={['时间', '模型', '输入（扣除/赠送）', '输出（扣除/赠送）', '状态/异常']}
+      columns={[
+        t('Time'),
+        t('Model'),
+        t('Input (deducted / granted)'),
+        t('Output (deducted / granted)'),
+        t('Status / exception'),
+      ]}
       rows={entries.map((entry) => [
         formatDate(entry.createTime),
         entry.modelId,
         `${formatTokens(entry.deductedPromptTokens)} / ${formatTokens(entry.giftedPromptTokens)}`,
         `${formatTokens(entry.deductedCompletionTokens)} / ${formatTokens(entry.giftedCompletionTokens)}`,
-        entry.errorMessage ? `${statusLabel(entry.status)}：${entry.errorMessage}` : statusLabel(entry.status),
+        entry.errorMessage ? `${statusLabel(t, entry.status)}：${entry.errorMessage}` : statusLabel(t, entry.status),
       ])}
-      empty="尚无模型 API Token 用量"
+      empty={t('No model API token usage yet')}
     />
   )
 }
 
 function OrdersTable({ orders }: { orders: ComputeOrder[] }) {
+  const { t } = useTranslation()
   return (
     <SimpleTable
-      columns={['时间', '订单号', '类型', '商品', '卡时', '人民币', '状态']}
+      columns={[t('Time'), t('Order number'), t('Type'), t('Product'), t('Card hours'), t('RMB'), t('Status')]}
       rows={orders.map((order) => [
         formatDate(order.createTime),
         order.orderNo,
-        statusLabel(order.orderType),
+        statusLabel(t, order.orderType),
         order.productName || '-',
         formatCardHours(order.cardHours),
         `¥${formatNumber(order.cnyAmount, 4)}`,
-        statusLabel(order.status),
+        statusLabel(t, order.status),
       ])}
-      empty="暂无订单"
+      empty={t('No orders')}
     />
   )
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation()
   const color =
     status.includes('COMPLETED') || status === 'PUBLISHED' || status === 'APPROVED'
       ? 'green'
@@ -3404,79 +3745,81 @@ function StatusBadge({ status }: { status: string }) {
           : 'blue'
   return (
     <Badge color={color} variant="light">
-      {statusLabel(status)}
+      {statusLabel(t, status)}
     </Badge>
   )
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  NONE: '未申请',
-  PENDING: '待审核',
-  APPROVED: '已通过',
-  TEST_APPROVED: '仅内测认证已通过',
-  REVOKED: '已注销',
-  SUSPENDED: '已暂停',
-  CONFIG_REQUIRED: '待配置上游',
-  OFFLINE: '已离线/下架',
-  DEPLOYING: '部署中',
-  RUNNING: '运行中',
-  PENDING_ACTION: '待处理',
-  PAUSED: '已暂停接单',
-  PUBLISHED: '已上架',
-  REJECTED: '已拒绝',
-  ACTIVE: '使用中',
-  COMPLETED: '已完成',
-  CANCELLED: '已取消',
-  EXPIRED: '已过期',
-  PENDING_REVIEW: '待管理员审核',
-  PENDING_RECIPIENT: '待接收方确认',
-  PENDING_DELIVERY: '待供应方交付',
-  DELIVERED: '已交付，待买家确认',
-  DISPUTED: '争议处理中',
-  CONFIRMED: '已确认',
-  IN_USE: '使用中',
-  EXCEPTION_PENDING: '异常待处理',
-  REFUNDED: '已退款',
-  FROZEN: '已冻结',
-  CARD_HOUR_PURCHASE: '购买卡时',
-  API_ACTIVATION: '开通 API',
-  API_PACKAGE: 'Token 套餐',
-  API_PACKAGE_PURCHASE: '购买 Token 套餐',
-  GPU_RESERVATION: 'GPU 预订',
-  GPU_MARKETPLACE: 'GPU 固定套餐',
-  PURCHASE: '购买',
-  ADMIN_GRANT: '管理员发放',
-  API_USAGE: 'API 消耗',
-  PAID: '已从套餐扣除',
-  GIFTED_OVERAGE: '额度耗尽，超额已赠送',
-  NO_PACKAGE: '无套餐，未扣人民币',
-  PARTIAL: '部分额度已耗尽',
-  EXHAUSTED: '已耗尽',
-  USAGE_MISSING: 'usage 异常',
-  UPSTREAM_ERROR: '上游错误',
-  SUPPLIER_INCOME: '供应方收入',
-  GPU_RENTAL_INCOME: 'GPU 租金收益',
-  API_SALES_INCOME: 'Token 套餐销售收益',
-  WITHDRAWAL: '提现到内部钱包',
-  GPU_SETTLEMENT: 'GPU 订单结算',
-  GPU_REFUND: 'GPU 订单退款',
-  AUTO_SETTLEMENT: '自动结算',
-  AUTO_CONFIRM_24H: '24 小时无争议自动确认',
-  BUYER_CONFIRMED: '买家确认收货',
-  FULL_REFUND: '全额退款',
-  ACTUAL_USAGE: '按实际使用结算',
-  FULL_SETTLEMENT: '按原订单结算',
-  TRANSFER_IN: '转入',
-  TRANSFER_OUT: '转出',
-  FREEZE: '冻结',
-  UNFREEZE: '解冻',
-  CONSUME_FROZEN: '冻结结算',
-  EXPIRE: '到期',
+function statusLabels(t: (key: string) => string): Record<string, string> {
+  return {
+    NONE: t('Not applied'),
+    PENDING: t('Pending review'),
+    APPROVED: t('Approved'),
+    TEST_APPROVED: t('Internal test verification passed'),
+    REVOKED: t('Deactivated'),
+    SUSPENDED: t('Suspended'),
+    CONFIG_REQUIRED: t('Upstream pending configuration'),
+    OFFLINE: t('Offline / unlisted'),
+    DEPLOYING: t('Deploying'),
+    RUNNING: t('Running'),
+    PENDING_ACTION: t('Pending action'),
+    PAUSED: t('Acceptance suspended'),
+    PUBLISHED: t('Listed'),
+    REJECTED: t('Rejected'),
+    ACTIVE: t('In use'),
+    COMPLETED: t('Completed'),
+    CANCELLED: t('Cancelled'),
+    EXPIRED: t('Expired'),
+    PENDING_REVIEW: t('Awaiting admin review'),
+    PENDING_RECIPIENT: t('Awaiting recipient confirmation'),
+    PENDING_DELIVERY: t('Awaiting supplier delivery'),
+    DELIVERED: t('Delivered, awaiting buyer confirmation'),
+    DISPUTED: t('Dispute in progress'),
+    CONFIRMED: t('Confirmed'),
+    IN_USE: t('In use'),
+    EXCEPTION_PENDING: t('Exception pending action'),
+    REFUNDED: t('Refunded'),
+    FROZEN: t('Frozen'),
+    CARD_HOUR_PURCHASE: t('Buy card hours'),
+    API_ACTIVATION: t('Enable API'),
+    API_PACKAGE: t('Token package'),
+    API_PACKAGE_PURCHASE: t('Buy token package'),
+    GPU_RESERVATION: t('GPU reservation'),
+    GPU_MARKETPLACE: t('GPU fixed package'),
+    PURCHASE: t('Buy'),
+    ADMIN_GRANT: t('Admin grant'),
+    API_USAGE: t('API consumption'),
+    PAID: t('Deducted from package'),
+    GIFTED_OVERAGE: t('Quota exhausted, excess granted'),
+    NO_PACKAGE: t('No package, RMB not charged'),
+    PARTIAL: t('Partial quota exhausted'),
+    EXHAUSTED: t('Exhausted'),
+    USAGE_MISSING: t('Usage exception'),
+    UPSTREAM_ERROR: t('Upstream error'),
+    SUPPLIER_INCOME: t('Supplier income'),
+    GPU_RENTAL_INCOME: t('GPU rental income'),
+    API_SALES_INCOME: t('Token package sales income'),
+    WITHDRAWAL: t('Withdraw to internal wallet'),
+    GPU_SETTLEMENT: t('GPU order settlement'),
+    GPU_REFUND: t('GPU order refund'),
+    AUTO_SETTLEMENT: t('Auto settlement'),
+    AUTO_CONFIRM_24H: t('Auto-confirm after 24 hours without dispute'),
+    BUYER_CONFIRMED: t('Buyer confirms receipt'),
+    FULL_REFUND: t('Full refund'),
+    ACTUAL_USAGE: t('Settled by actual usage'),
+    FULL_SETTLEMENT: t('Settled per original order'),
+    TRANSFER_IN: t('Incoming transfer'),
+    TRANSFER_OUT: t('Outgoing transfer'),
+    FREEZE: t('Frozen'),
+    UNFREEZE: t('Unfrozen'),
+    CONSUME_FROZEN: t('Frozen settlement'),
+    EXPIRE: t('Expired'),
+  }
 }
 
-function statusLabel(status?: string | null) {
+function statusLabel(t: (key: string) => string, status?: string | null) {
   if (!status) return '-'
-  return STATUS_LABELS[status] || status
+  return statusLabels(t)[status] || status
 }
 
 function formatNumber(value: number | string | null | undefined, digits = 3) {

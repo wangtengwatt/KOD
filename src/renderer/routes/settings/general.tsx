@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AdaptiveSelect } from '@/components/AdaptiveSelect'
 import LazySlider from '@/components/common/LazySlider'
-import { languageNameMap, languages } from '@/i18n/locales'
+import { availableLanguages, languageNameMap } from '@/i18n/locales'
 import platform from '@/platform'
 import storage, { StorageKey } from '@/storage'
 import { getMetaStorage, recoverSessionList } from '@/stores/chatStore'
@@ -51,10 +51,9 @@ export function RouteComponent() {
           maw={320}
           comboboxProps={{ withinPortal: true }}
           value={settings.language}
-          data={languages.map((language) => ({
+          data={availableLanguages.map((language) => ({
             value: language,
             label: languageNameMap[language],
-            // style: language === 'ar' ? { fontFamily: 'Cairo, Arial, sans-serif' } : {},
           }))}
           label={t('Language')}
           styles={{

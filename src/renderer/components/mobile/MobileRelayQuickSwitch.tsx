@@ -1,5 +1,6 @@
 import { Paper, Text } from '@mantine/core'
 import { useLocation } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
 import { BalanceInsufficientToast } from '@/components/BalanceInsufficientToast'
 import { RelayCapabilityRecommendation } from '@/components/RelayCapabilityRecommendation'
 import { RelayNoticeToast } from '@/components/RelayNoticeToast'
@@ -11,6 +12,7 @@ import { useAuthInfoStore } from '@/stores/authInfoStore'
 export function MobileRelayQuickSwitch() {
   const location = useLocation()
   const relay = useKodRelay()
+  const { t } = useTranslation()
   const loggedIn = useAuthInfoStore((state) => Boolean(state.accessToken && state.refreshToken))
   const isChat = location.pathname === '/' || location.pathname.startsWith('/session/')
 
@@ -26,7 +28,7 @@ export function MobileRelayQuickSwitch() {
           style={{ top: 'calc(var(--mobile-safe-area-inset-top, 0px) + 0.5rem)' }}
         >
           <Text size="xxs" fw={700} mb={4}>
-            零售站 / 节点
+            {t('Relay Station / Node')}
           </Text>
           <RelayStationSelector
             apiBaseUrl={relay.apiOrigin}
@@ -44,10 +46,16 @@ export function MobileRelayQuickSwitch() {
       {relay.notice === 'balance' && <BalanceInsufficientToast onClose={() => relay.setNotice(null)} />}
       {relay.notice === 'package' && <BalanceInsufficientToast kind="package" onClose={() => relay.setNotice(null)} />}
       {relay.notice === 'conflict' && (
-        <RelayNoticeToast message="所选节点已被占用，请重新选择" onClose={() => relay.setNotice(null)} />
+        <RelayNoticeToast
+          message={t('The selected node is already occupied, please select another node')}
+          onClose={() => relay.setNotice(null)}
+        />
       )}
       {relay.notice === 'unavailable' && (
-        <RelayNoticeToast message="零售站节点尚未就绪，请重新选择节点" onClose={() => relay.setNotice(null)} />
+        <RelayNoticeToast
+          message={t('The relay station node is not ready, please select another node')}
+          onClose={() => relay.setNotice(null)}
+        />
       )}
       <RelayCapabilityRecommendation />
     </>

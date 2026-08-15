@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Group,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Text,
@@ -11,11 +12,13 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core'
+import type { Language } from '@shared/types'
 import {
   IconBell,
   IconBook2,
   IconBrain,
   IconCpu,
+  IconLanguage,
   IconRefresh,
   IconRobot,
   IconSettings,
@@ -26,33 +29,74 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import Page from '@/components/layout/Page'
+import { availableLanguages, languageNameMap } from '@/i18n/locales'
 import { isAndroidAgentAvailable } from '@/packages/android-agent/native'
 import { checkAndroidUpdate, openAndroidUpdate } from '@/packages/androidUpdate'
 import { getComputeAccount } from '@/packages/computeCenter'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
+import { useLanguage, useSettingsStore } from '@/stores/settingsStore'
 
 export const Route = createFileRoute('/mobile-my')({ component: MobileMyPage })
 
 const entries = [
-  { label: '账户与模型', description: '登录、零售站、节点与模型', path: '/settings/kod-ai', icon: IconUserCircle },
-  { label: '人民币钱包', description: '余额、充值和交易记录', path: '/settings/wallet', icon: IconWallet },
-  { label: '算力中心', description: '资产、收益、GPU 与订单', path: '/compute-center', icon: IconCpu },
-  { label: '知识库', description: '导入手机文件并管理知识', path: '/settings/knowledge-base', icon: IconBook2 },
-  { label: 'MCP 服务', description: '连接远程 HTTP/SSE MCP', path: '/settings/mcp', icon: IconBrain },
-  { label: '蒜宝设置', description: '悬浮窗、权限与主动能力', path: '/settings/suanbao', icon: IconSparkles },
-  { label: '通知中心', description: '审核、订单、额度与返佣通知', path: '/compute-center', icon: IconBell },
-  { label: '全部设置', description: '外观、默认模型和隐私设置', path: '/settings', icon: IconSettings },
+  {
+    labelKey: 'Account & Models',
+    descriptionKey: 'Login, relay station, node and models',
+    path: '/settings/kod-ai',
+    icon: IconUserCircle,
+  },
+  {
+    labelKey: 'RMB Wallet',
+    descriptionKey: 'Balance, top-up and transactions',
+    path: '/settings/wallet',
+    icon: IconWallet,
+  },
+  {
+    labelKey: 'Compute Center',
+    descriptionKey: 'Assets, income, GPU and orders',
+    path: '/compute-center',
+    icon: IconCpu,
+  },
+  {
+    labelKey: 'Knowledge Base',
+    descriptionKey: 'Import phone files and manage knowledge',
+    path: '/settings/knowledge-base',
+    icon: IconBook2,
+  },
+  { labelKey: 'MCP Services', descriptionKey: 'Connect remote HTTP/SSE MCP', path: '/settings/mcp', icon: IconBrain },
+  {
+    labelKey: 'Suanbao Settings',
+    descriptionKey: 'Overlay window, permissions and proactive abilities',
+    path: '/settings/suanbao',
+    icon: IconSparkles,
+  },
+  {
+    labelKey: 'Notifications',
+    descriptionKey: 'Reviews, orders, quota and referral notifications',
+    path: '/compute-center',
+    icon: IconBell,
+  },
+  {
+    labelKey: 'All Settings',
+    descriptionKey: 'Appearance, default models and privacy settings',
+    path: '/settings',
+    icon: IconSettings,
+  },
 ] as const
 
-function formatAmount(value: number | undefined, digits = 3) {
-  return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+function formatAmount(locale: string, value: number | undefined, digits = 3) {
+  return Number(value || 0).toLocaleString(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits })
 }
 
 function MobileMyPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const email = useAuthInfoStore((state) => state.loginEmail)
   const accessToken = useAuthInfoStore((state) => state.accessToken)
+  const language = useLanguage()
+  const setSettings = useSettingsStore((state) => state.setSettings)
   const account = useQuery({
     queryKey: ['compute', 'mobile-account', email],
     queryFn: getComputeAccount,
@@ -67,20 +111,22 @@ function MobileMyPage() {
     try {
       const result = await checkAndroidUpdate()
       if (!result.updateAvailable) {
-        setUpdateMessage(`当前已是最新版（${result.currentVersion}）`)
+        setUpdateMessage(String(t('You are on the latest version ({{version}})', { version: result.currentVersion })))
         return
       }
-      setUpdateMessage(`发现新版本 ${result.release.version}，正在打开下载页。`)
+      setUpdateMessage(
+        String(t('Found a new version {{version}}. Opening the download page.', { version: result.release.version }))
+      )
       await openAndroidUpdate(result.release)
     } catch (error) {
-      setUpdateMessage(error instanceof Error ? error.message : '检查更新失败')
+      setUpdateMessage(error instanceof Error ? error.message : String(t('Failed to check for updates')))
     } finally {
       setCheckingUpdate(false)
     }
   }
 
   return (
-    <Page title="我的">
+    <Page title={t('Mine')}>
       <Stack p="md" pb="calc(5.5rem + var(--mobile-safe-area-inset-bottom, 0px))" gap="md">
         <Card withBorder radius="lg" padding="lg">
           <Group justify="space-between" align="flex-start">
@@ -89,54 +135,82 @@ function MobileMyPage() {
                 <IconUserCircle size={26} />
               </ThemeIcon>
               <div>
-                <Title order={4}>{email || '尚未登录 KOD'}</Title>
+                <Title order={4}>{email || t('Not logged in to KOD')}</Title>
                 <Text size="sm" c="kod-tertiary">
-                  官网、安卓端和算力中心共用同一账户与人民币钱包
+                  {t('The official website, Android app and Compute Center share the same account and RMB wallet.')}
                 </Text>
               </div>
             </Group>
-            <Badge color={email ? 'green' : 'gray'}>{email ? '已登录' : '未登录'}</Badge>
+            <Badge color={email ? 'green' : 'gray'}>{email ? t('Logged in') : t('Not logged in')}</Badge>
           </Group>
         </Card>
 
         {account.data && (
           <Card withBorder radius="lg" padding="md">
             <Group justify="space-between" mb="sm">
-              <Text fw={700}>我的资产与收益</Text>
+              <Text fw={700}>{t('My assets and income')}</Text>
               <Button size="compact-xs" variant="subtle" onClick={() => void account.refetch()}>
-                刷新
+                {t('Refresh')}
               </Button>
             </Group>
             <SimpleGrid cols={3} spacing="xs">
-              <AssetItem label="可用卡时" value={formatAmount(account.data.availableCardHours)} />
-              <AssetItem label="冻结卡时" value={formatAmount(account.data.frozenCardHours)} />
-              <AssetItem label="人民币余额" value={`¥${formatAmount(account.data.cnyBalance, 2)}`} />
-              <AssetItem label="累计收益" value={formatAmount(account.data.lifetimeIncome)} />
-              <AssetItem label="租金收益" value={formatAmount(account.data.rentalIncome)} />
-              <AssetItem label="运行中 GPU" value={String(account.data.gpuAssetCounts.RUNNING || 0)} />
-              <AssetItem label="待审核 GPU" value={String(account.data.gpuAssetCounts.PENDING || 0)} />
-              <AssetItem label="待交付" value={String(account.data.gpuAssetCounts.PENDING_DELIVERY || 0)} />
-              <AssetItem label="待处理" value={String(account.data.gpuAssetCounts.PENDING_ACTION || 0)} />
+              <AssetItem
+                label={t('Available card hours')}
+                value={formatAmount(language, account.data.availableCardHours)}
+              />
+              <AssetItem label={t('Frozen card hours')} value={formatAmount(language, account.data.frozenCardHours)} />
+              <AssetItem label={t('RMB balance')} value={`¥${formatAmount(language, account.data.cnyBalance, 2)}`} />
+              <AssetItem label={t('Lifetime income')} value={formatAmount(language, account.data.lifetimeIncome)} />
+              <AssetItem label={t('Rental income')} value={formatAmount(language, account.data.rentalIncome)} />
+              <AssetItem label={t('Running GPUs')} value={String(account.data.gpuAssetCounts.RUNNING || 0)} />
+              <AssetItem label={t('Pending review GPUs')} value={String(account.data.gpuAssetCounts.PENDING || 0)} />
+              <AssetItem
+                label={t('Pending delivery')}
+                value={String(account.data.gpuAssetCounts.PENDING_DELIVERY || 0)}
+              />
+              <AssetItem label={t('Pending action')} value={String(account.data.gpuAssetCounts.PENDING_ACTION || 0)} />
             </SimpleGrid>
           </Card>
         )}
 
-        <Alert color="blue" title="移动端权限说明">
-          蒜宝悬浮窗、无障碍和文件访问默认关闭，只在你主动使用对应功能时申请；拒绝授权不会影响对话、生图、视频和算力中心。
+        <Alert color="blue" title={t('Mobile permissions')}>
+          {t(
+            'Suanbao overlay, accessibility and file access are off by default and only requested when you actively use the corresponding feature. Declining a permission does not affect chat, image generation, video or the Compute Center.'
+          )}
         </Alert>
+
+        <Card withBorder radius="md" padding="md">
+          <Group justify="space-between" mb="xs">
+            <Group gap="xs">
+              <ThemeIcon variant="light" size={28} radius="md">
+                <IconLanguage size={16} />
+              </ThemeIcon>
+              <Text fw={700}>{t('Language')}</Text>
+            </Group>
+            <Text size="xs" c="kod-tertiary">
+              {t('Simplified Chinese / English / Traditional Chinese')}
+            </Text>
+          </Group>
+          <SegmentedControl
+            fullWidth
+            value={language}
+            onChange={(val) => setSettings({ language: val as Language })}
+            data={availableLanguages.map((item) => ({ value: item, label: languageNameMap[item] }))}
+          />
+        </Card>
 
         <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="sm">
           {entries.map((entry) => {
             const Icon = entry.icon
             return (
-              <UnstyledButton key={entry.label} onClick={() => navigate({ to: entry.path })}>
+              <UnstyledButton key={entry.path} onClick={() => navigate({ to: entry.path })}>
                 <Card withBorder radius="md" padding="md" h="100%">
                   <ThemeIcon variant="light" mb="sm">
                     <Icon size={19} />
                   </ThemeIcon>
-                  <Text fw={700}>{entry.label}</Text>
+                  <Text fw={700}>{t(entry.labelKey)}</Text>
                   <Text size="xs" c="kod-tertiary" mt={4}>
-                    {entry.description}
+                    {t(entry.descriptionKey)}
                   </Text>
                 </Card>
               </UnstyledButton>
@@ -149,9 +223,9 @@ function MobileMyPage() {
                 <ThemeIcon variant="light" color="violet" mb="sm">
                   <IconRobot size={19} />
                 </ThemeIcon>
-                <Text fw={700}>蒜宝助手</Text>
+                <Text fw={700}>{t('Suanbao Assistant')}</Text>
                 <Text size="xs" c="kod-tertiary" mt={4}>
-                  手机任务、悬浮窗和授权管理
+                  {t('Phone tasks, overlay window and permission management')}
                 </Text>
               </Card>
             </UnstyledButton>
@@ -161,9 +235,9 @@ function MobileMyPage() {
         <Card withBorder radius="md" padding="md">
           <Group justify="space-between">
             <div>
-              <Text fw={700}>应用更新</Text>
+              <Text fw={700}>{t('App Update')}</Text>
               <Text size="xs" c="kod-tertiary">
-                仅从 KOD 官网获取正式签名安装包
+                {t('Only official signed packages from the KOD website are used.')}
               </Text>
             </div>
             <Button
@@ -173,7 +247,7 @@ function MobileMyPage() {
               loading={checkingUpdate}
               onClick={() => void checkUpdate()}
             >
-              检查更新
+              {t('Check for updates')}
             </Button>
           </Group>
           {updateMessage && (

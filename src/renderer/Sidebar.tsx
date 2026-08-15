@@ -270,8 +270,8 @@ export default function Sidebar() {
                 <NavLink
                   c="kod-secondary"
                   className="rounded"
-                  label="蒜宝助手"
-                  description="桌宠与手机任务控制"
+                  label={t('Suanbao Assistant')}
+                  description={t('Desktop pet and phone task control')}
                   leftSection={<ScalableIcon icon={IconDeviceMobile} size={22} />}
                   onClick={() => {
                     navigate({ to: '/android-agent' })
@@ -284,7 +284,7 @@ export default function Sidebar() {
               <NavLink
                 c="kod-secondary"
                 className="rounded"
-                label="算力中心"
+                label={t('Compute Center')}
                 leftSection={<ScalableIcon icon={IconCpu} size={20} />}
                 onClick={() => {
                   navigate({ to: '/compute-center' })
@@ -344,7 +344,7 @@ export default function Sidebar() {
                 <NavLink
                   c="kod-secondary"
                   className="rounded"
-                  label="蒜宝助手"
+                  label={t('Suanbao Assistant')}
                   leftSection={<ScalableIcon icon={IconDeviceMobile} size={20} />}
                   onClick={() => {
                     navigate({ to: '/android-agent' })
@@ -357,7 +357,7 @@ export default function Sidebar() {
               <NavLink
                 c="kod-secondary"
                 className="rounded"
-                label="算力中心"
+                label={t('Compute Center')}
                 leftSection={<ScalableIcon icon={IconCpu} size={20} />}
                 onClick={() => {
                   navigate({ to: '/compute-center' })

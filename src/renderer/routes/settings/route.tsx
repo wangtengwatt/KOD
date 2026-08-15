@@ -38,7 +38,7 @@ const ITEMS = [
   },
   {
     key: 'wallet',
-    label: '钱包',
+    label: 'Wallet',
     icon: <IconWallet className="w-full h-full" />,
   },
   {

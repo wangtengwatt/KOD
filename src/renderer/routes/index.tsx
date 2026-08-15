@@ -11,8 +11,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 import { JK_PAGE_NAMES } from '@/analytics/jk-events'
 import { BalanceInsufficientToast } from '@/components/BalanceInsufficientToast'
-import { RelayNoticeToast } from '@/components/RelayNoticeToast'
-import { RelayStationSelector } from '@/components/RelayStationSelector'
 import { KodWelcomeCard } from '@/components/common/KodWelcomeCard'
 import { MessageLayoutSelector } from '@/components/common/MessageLayoutPreview'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
@@ -20,6 +18,8 @@ import { ImageInStorage } from '@/components/Image'
 import InputBox, { type InputBoxPayload } from '@/components/InputBox/InputBox'
 import HomepageIcon from '@/components/icons/HomepageIcon'
 import Page from '@/components/layout/Page'
+import { RelayNoticeToast } from '@/components/RelayNoticeToast'
+import { RelayStationSelector } from '@/components/RelayStationSelector'
 import { useMyCopilots, useRemoteCopilotsByCursor } from '@/hooks/useCopilots'
 import { useKodRelay } from '@/hooks/useKodRelay'
 import { useProviders } from '@/hooks/useProviders'
@@ -384,10 +384,16 @@ function Index() {
       </div>
       {relay.notice === 'balance' && <BalanceInsufficientToast onClose={() => relay.setNotice(null)} />}
       {relay.notice === 'conflict' && (
-        <RelayNoticeToast message="所选节点已被占用，请重新选择" onClose={() => relay.setNotice(null)} />
+        <RelayNoticeToast
+          message={t('The selected node is already occupied, please select another node')}
+          onClose={() => relay.setNotice(null)}
+        />
       )}
       {relay.notice === 'unavailable' && (
-        <RelayNoticeToast message="零售站节点尚未就绪，请重新选择节点" onClose={() => relay.setNotice(null)} />
+        <RelayNoticeToast
+          message={t('The relay station node is not ready, please select another node')}
+          onClose={() => relay.setNotice(null)}
+        />
       )}
     </Page>
   )
