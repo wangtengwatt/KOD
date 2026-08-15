@@ -97,6 +97,7 @@ export interface ComputeOrder {
   orderType: string
   productId?: number | null
   productName?: string | null
+  coverImageId?: number | null
   cardHours: number
   cnyAmount: number
   status: string
@@ -142,6 +143,7 @@ export interface ComputeReservation {
   disputedAt?: string | null
   productName: string
   gpuModel: string
+  coverImageId?: number | null
   createTime: string
 }
 
@@ -250,6 +252,196 @@ export interface ComputeReferralReward {
   paidAt?: string | null
   cancelReason?: string
   createTime: string
+}
+
+export type CardHourAssetType = 'STANDARD' | 'SPECIFIC'
+export type CardHourMarketType = 'PRIMARY_SALE' | 'IDLE_TRANSFER' | 'RFQ'
+
+export interface CardHourLot {
+  id: number
+  assetType: CardHourAssetType
+  gpuModel?: string | null
+  issuerUserId?: number | null
+  nodeId?: number | null
+  nodeName?: string | null
+  sourceType: string
+  sourceRef: string
+  originalAmount: number
+  remainingAmount: number
+  frozenAmount: number
+  availableAmount: number
+  rateVersion?: string | null
+  rateMultiplier?: number | null
+  custodyStatus: string
+  custodyFeeAccrued: number
+  expiresAt?: string | null
+  createTime: string
+}
+
+export interface CardHourRateRule {
+  id: number
+  versionNo: string
+  gpuModel: string
+  multiplier: number
+  status: string
+  effectiveFrom: string
+  notes: string
+}
+
+export interface CardHourListing {
+  id: number
+  listingNo: string
+  sellerUserId?: number
+  sellerEmail?: string
+  sellerName?: string
+  identityVerified?: number | boolean
+  nodeVerified?: number | boolean
+  marketType: CardHourMarketType
+  assetType: CardHourAssetType
+  gpuModel?: string | null
+  nodeId?: number | null
+  sourceLotId?: number
+  quantity: number
+  unitPrice: number
+  priceCurrency: 'CNY' | 'CARD_HOUR'
+  assetExpiresAt: string
+  listingExpiresAt?: string | null
+  rateVersion?: string | null
+  rateMultiplier?: number | null
+  title: string
+  description: string
+  status: string
+  createTime: string
+}
+
+export interface CardHourPurchaseQuote {
+  id: number
+  quoteNo: string
+  listingId: number
+  buyerUserId: number
+  quantity: number
+  unitPrice: number
+  priceCurrency: 'CNY' | 'CARD_HOUR'
+  totalPrice: number
+  cnyRate: number
+  buyerFee: number
+  sellerFee: number
+  assetExpiresAt: string
+  status: string
+  expiresAt: string
+}
+
+export interface CardHourTrade {
+  id: number
+  tradeNo: string
+  marketType: CardHourMarketType
+  assetType: CardHourAssetType
+  gpuModel?: string | null
+  quantity: number
+  unitPrice: number
+  priceCurrency: 'CNY' | 'CARD_HOUR'
+  totalPrice: number
+  buyerFee: number
+  sellerFee: number
+  buyerEmail?: string
+  sellerEmail?: string
+  status: string
+  completedAt: string
+}
+
+export interface CardHourRfq {
+  id: number
+  rfqNo: string
+  buyerUserId: number
+  buyerEmail: string
+  assetType: CardHourAssetType
+  gpuModel?: string | null
+  quantity: number
+  minimumExpiresAt: string
+  requirements: string
+  status: string
+  quoteCount: number
+  closesAt: string
+  createTime: string
+}
+
+export interface CardHourRfqQuote {
+  id: number
+  quoteNo: string
+  rfqId: number
+  supplierUserId: number
+  supplierEmail: string
+  supplierName?: string
+  listingId: number
+  unitPrice: number
+  priceCurrency: 'CNY' | 'CARD_HOUR'
+  assetExpiresAt: string
+  status: string
+  expiresAt: string
+}
+
+export interface CardHourDeposit {
+  id: number
+  depositNo: string
+  supplierUserId: number
+  email?: string
+  nodeId: number
+  nodeName?: string
+  gpuModel: string
+  gpuCount: number
+  availableFrom: string
+  availableTo: string
+  expiresAt: string
+  gpuHours: number
+  rateVersion: string
+  rateMultiplier: number
+  standardCardHours: number
+  status: string
+  lotId?: number | null
+  rejectionReason?: string
+  reviewedAt?: string | null
+  createTime: string
+}
+
+export interface CardHourRedemption {
+  id: number
+  redemptionNo: string
+  buyerUserId: number
+  supplierUserId: number
+  buyerEmail: string
+  supplierEmail: string
+  nodeId: number
+  nodeName: string
+  gpuModel: string
+  gpuCount: number
+  startTime: string
+  endTime: string
+  buyerPublicKey?: string | null
+  bookedGpuHours: number
+  rateVersion: string
+  rateMultiplier: number
+  specificHoursFrozen: number
+  standardHoursFrozen: number
+  actualGpuHours?: number | null
+  actualStandardHours?: number | null
+  status: string
+  deliveryInfo?: string
+  deliveryNote?: string
+  usageEvidence?: string
+  disputeReason?: string
+  deliveredAt?: string | null
+  stopRemindedAt?: string | null
+  usageSubmittedAt?: string | null
+  autoConfirmAt?: string | null
+  completedAt?: string | null
+  createTime: string
+}
+
+export interface CardHourMarketStats {
+  standardInventory: number
+  specificInventory: number
+  volume24h: number
+  recentTrades: CardHourTrade[]
 }
 
 export interface ComputeApiUsage {
@@ -484,6 +676,194 @@ export function bindComputeReferral(inviteCode: string, deviceId: string) {
 
 export function listComputeReferralRewards() {
   return request<ComputeReferralReward[]>('/api/compute/referrals/rewards')
+}
+
+export function listCardHourMarketListings() {
+  return request<CardHourListing[]>('/api/compute/card-hours/market/listings', undefined, false)
+}
+
+export function getCardHourMarketStats() {
+  return request<CardHourMarketStats>('/api/compute/card-hours/market/stats', undefined, false)
+}
+
+export function listCardHourRates() {
+  return request<CardHourRateRule[]>('/api/compute/card-hours/rates', undefined, false)
+}
+
+export function listCardHourLots() {
+  return request<CardHourLot[]>('/api/compute/card-hours/lots')
+}
+
+export function getCardHourCustody() {
+  return request<{ lots: CardHourLot[]; feeEnabled: boolean; accruedFee: number; rule: string }>(
+    '/api/compute/card-hours/custody'
+  )
+}
+
+export function createCardHourListing(input: {
+  marketType: 'PRIMARY_SALE' | 'IDLE_TRANSFER'
+  assetType: CardHourAssetType
+  gpuModel?: string | null
+  sourceLotId: number
+  quantity: number
+  unitPrice: number
+  assetExpiresAt: string
+  listingExpiresAt?: string | null
+  title: string
+  description: string
+}) {
+  return request<CardHourListing>('/api/compute/card-hours/listings', { method: 'POST', body: input })
+}
+
+export function listMyCardHourListings() {
+  return request<CardHourListing[]>('/api/compute/card-hours/listings/mine')
+}
+
+export function cancelCardHourListing(listingId: number) {
+  return request<CardHourListing>(`/api/compute/card-hours/listings/${listingId}/cancel`, { method: 'POST' })
+}
+
+export function createCardHourPurchaseQuote(listingId: number) {
+  return request<CardHourPurchaseQuote>(`/api/compute/card-hours/listings/${listingId}/purchase-quote`, {
+    method: 'POST',
+  })
+}
+
+export function confirmCardHourPurchaseQuote(quoteId: number, autoTopUp = false) {
+  return request<CardHourTrade>(
+    `/api/compute/card-hours/purchase-quotes/${quoteId}/confirm${autoTopUp ? '?autoTopUp=true' : ''}`,
+    { method: 'POST' }
+  )
+}
+
+export function listCardHourTrades() {
+  return request<CardHourTrade[]>('/api/compute/card-hours/trades')
+}
+
+export function createCardHourRfq(input: {
+  assetType: CardHourAssetType
+  gpuModel?: string | null
+  quantity: number
+  minimumExpiresAt: string
+  closesAt?: string | null
+  requirements: string
+}) {
+  return request<CardHourRfq>('/api/compute/card-hours/rfqs', { method: 'POST', body: input })
+}
+
+export function listCardHourRfqs() {
+  return request<CardHourRfq[]>('/api/compute/card-hours/rfqs')
+}
+
+export function quoteCardHourRfq(rfqId: number, sourceLotId: number, unitPrice: number) {
+  return request<CardHourRfqQuote>(`/api/compute/card-hours/rfqs/${rfqId}/quotes`, {
+    method: 'POST',
+    body: { sourceLotId, unitPrice },
+  })
+}
+
+export function listCardHourRfqQuotes(rfqId: number) {
+  return request<CardHourRfqQuote[]>(`/api/compute/card-hours/rfqs/${rfqId}/quotes`)
+}
+
+export function acceptCardHourRfqQuote(quoteId: number, autoTopUp = false) {
+  return request<CardHourTrade>(
+    `/api/compute/card-hours/rfq-quotes/${quoteId}/accept${autoTopUp ? '?autoTopUp=true' : ''}`,
+    { method: 'POST' }
+  )
+}
+
+export function createCardHourDeposit(input: {
+  nodeId: number
+  availableFrom: string
+  availableTo: string
+  expiresAt: string
+}) {
+  return request<CardHourDeposit>('/api/compute/card-hours/deposits', { method: 'POST', body: input })
+}
+
+export function listCardHourDeposits() {
+  return request<CardHourDeposit[]>('/api/compute/card-hours/deposits')
+}
+
+export function createCardHourRedemption(
+  input: { nodeId: number; gpuCount: number; startTime: string; endTime: string; buyerPublicKey: string },
+  autoTopUp = false
+) {
+  return request<CardHourRedemption>(`/api/compute/card-hours/redemptions${autoTopUp ? '?autoTopUp=true' : ''}`, {
+    method: 'POST',
+    body: input,
+  })
+}
+
+export function listCardHourRedemptions(role: 'buyer' | 'supplier') {
+  return request<CardHourRedemption[]>(`/api/compute/card-hours/redemptions?role=${role}`)
+}
+
+export function deliverCardHourRedemption(
+  id: number,
+  input: { sshHost: string; sshPort: number; sshUsername: string; note: string }
+) {
+  return request<CardHourRedemption>(`/api/compute/card-hours/redemptions/${id}/delivery`, {
+    method: 'POST',
+    body: input,
+  })
+}
+
+export function submitCardHourRedemptionUsage(id: number, actualGpuHours: number, evidence: string) {
+  return request<CardHourRedemption>(`/api/compute/card-hours/redemptions/${id}/usage`, {
+    method: 'POST',
+    body: { actualGpuHours, evidence },
+  })
+}
+
+export function topUpCardHourRedemption(id: number, autoTopUp = false) {
+  return request<CardHourRedemption>(
+    `/api/compute/card-hours/redemptions/${id}/top-up${autoTopUp ? '?autoTopUp=true' : ''}`,
+    { method: 'POST' }
+  )
+}
+
+export function confirmCardHourRedemption(id: number) {
+  return request<CardHourRedemption>(`/api/compute/card-hours/redemptions/${id}/confirm`, { method: 'POST' })
+}
+
+export function disputeCardHourRedemption(id: number, reason: string) {
+  return request<CardHourRedemption>(`/api/compute/card-hours/redemptions/${id}/dispute`, {
+    method: 'POST',
+    body: { reason },
+  })
+}
+
+export function listAdminCardHourDeposits() {
+  return request<CardHourDeposit[]>('/api/compute/card-hours/admin/deposits')
+}
+
+export function reviewAdminCardHourDeposit(id: number, approved: boolean, reason: string) {
+  return request<CardHourDeposit>(`/api/compute/card-hours/admin/deposits/${id}/review`, {
+    method: 'POST',
+    body: { approved, reason },
+  })
+}
+
+export function createAdminCardHourRate(input: {
+  versionNo: string
+  gpuModel: string
+  multiplier: number
+  notes: string
+}) {
+  return request<CardHourRateRule>('/api/compute/card-hours/admin/rates', { method: 'POST', body: input })
+}
+
+export function resolveAdminCardHourRedemption(id: number, actualGpuHours: number, reason: string) {
+  return request<CardHourRedemption>(`/api/compute/card-hours/admin/redemptions/${id}/resolve`, {
+    method: 'POST',
+    body: { actualGpuHours, reason },
+  })
+}
+
+export function listAdminCardHourRedemptions() {
+  return request<CardHourRedemption[]>('/api/compute/card-hours/admin/redemptions')
 }
 
 export function activateComputeApi(productId: number, autoTopUp = false) {

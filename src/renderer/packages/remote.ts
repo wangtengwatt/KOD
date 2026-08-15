@@ -219,6 +219,49 @@ export async function loginWithKod(params: {
   }
 }
 
+export async function getKaiIdentityConfig() {
+  const json = await ofetch(`${getKodApiOrigin()}/api/auth/kai/config`, {
+    ignoreResponseError: true,
+  })
+  return unwrapKodResult(
+    KodResultSchema(
+      z.object({
+        enabled: z.boolean(),
+        clientId: z.string(),
+        issuer: z.string(),
+        authorizationEndpoint: z.string(),
+        tokenEndpoint: z.string(),
+        redirectUri: z.string(),
+        scope: z.string(),
+      })
+    ).parse(json)
+  )
+}
+
+export async function loginWithKaiIdentity(accessToken: string) {
+  const json = await ofetch(`${getKodApiOrigin()}/api/auth/kai/exchange`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: { accessToken },
+    ignoreResponseError: true,
+  })
+  const data = unwrapKodResult(
+    KodResultSchema(
+      z.object({
+        token: z.string(),
+        newUser: z.boolean(),
+        email: z.string().email(),
+      })
+    ).parse(json)
+  )
+  return {
+    accessToken: data.token,
+    refreshToken: data.token,
+    newUser: data.newUser,
+    email: data.email,
+  }
+}
+
 /**
  * 发送邮箱验证码。
  */
