@@ -6,6 +6,9 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from 'zustand'
 import { JK_PAGE_NAMES } from '@/analytics/jk-events'
+import { BalanceInsufficientToast } from '@/components/BalanceInsufficientToast'
+import { RelayNoticeToast } from '@/components/RelayNoticeToast'
+import { RelayStationSelector } from '@/components/RelayStationSelector'
 import { KodWelcomeCard } from '@/components/common/KodWelcomeCard'
 import MessageList, { type MessageListRef } from '@/components/chat/MessageList'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
@@ -13,6 +16,7 @@ import InputBox from '@/components/InputBox/InputBox'
 import Header from '@/components/layout/Header'
 import Page from '@/components/layout/Page'
 import { useProviders } from '@/hooks/useProviders'
+import { useKodRelay } from '@/hooks/useKodRelay'
 import { defaultSessionsForCN, defaultSessionsForEN } from '@/packages/initial_data'
 import ThreadHistoryDrawer from '@/components/session/ThreadHistoryDrawer'
 import * as remote from '@/packages/remote'
@@ -40,6 +44,7 @@ function RouteComponent() {
   const navigate = useNavigate()
   const { session: currentSession, isFetching } = useSession(currentSessionId)
   const { providers } = useProviders()
+  const relay = useKodRelay()
   const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
   const hasExpiredLicense = useSettingsStore((s) => s.hasExpiredLicense)
   const isLoggedIn = useAuthInfoStore((s) => Boolean(s.accessToken && s.refreshToken))
@@ -93,6 +98,7 @@ function RouteComponent() {
 
   const onSelectModel = useCallback(
     (provider: ModelProvider, modelId: string) => {
+      if (provider === relay.providerId && relay.selectModel(modelId)) return
       if (!currentSession) {
         return
       }
@@ -104,7 +110,7 @@ function RouteComponent() {
         },
       })
     },
-    [currentSession]
+    [currentSession, relay.providerId, relay.selectModel]
   )
 
   const onStartNewThread = useCallback(() => {
@@ -138,6 +144,8 @@ function RouteComponent() {
       needGenerating?: boolean
       onUserMessageReady?: () => void
     }) => {
+      if (relay.selection && !(await relay.checkBalanceAndStartSync())) return
+
       messageListRef.current?.setIsNewMessage(true)
 
       if (!currentSession) {
@@ -191,6 +199,10 @@ function RouteComponent() {
     }
   }, [currentSession?.settings?.provider, currentSession?.settings?.modelId])
 
+  const effectiveModel = relay.selection?.modelId
+    ? { provider: relay.providerId, modelId: relay.selection.modelId }
+    : model
+
   return currentSession ? (
     <div className="flex flex-col h-full">
       <Header session={currentSession} />
@@ -213,13 +225,30 @@ function RouteComponent() {
           </Box>
         )}
 
+        {isLoggedIn && (
+          <Box px="md" pb="xs" className="flex justify-center">
+            <RelayStationSelector
+              apiBaseUrl={relay.apiOrigin}
+              onSelect={(selection) =>
+                relay.select(
+                  selection && effectiveModel?.modelId ? { ...selection, modelId: effectiveModel.modelId } : selection
+                )
+              }
+              selectedStationId={relay.selection?.stationId}
+              selectedApiKeyId={relay.selection?.apiKeyId}
+              loading={relay.loading}
+            />
+          </Box>
+        )}
+
         {/* <ScrollButtons /> */}
         <ErrorBoundary name="session-inputbox">
           <InputBox
             key={`input-box${currentSession.id}`}
             sessionId={currentSession.id}
             sessionType={currentSession.type}
-            model={model}
+            model={effectiveModel}
+            modelFilter={relay.modelFilter}
             onStartNewThread={onStartNewThread}
             onRollbackThread={onRollbackThread}
             onSelectModel={onSelectModel}
@@ -231,6 +260,13 @@ function RouteComponent() {
         </ErrorBoundary>
       </Box>
       <ThreadHistoryDrawer session={currentSession} />
+      {relay.notice === 'balance' && <BalanceInsufficientToast onClose={() => relay.setNotice(null)} />}
+      {relay.notice === 'conflict' && (
+        <RelayNoticeToast message="所选节点已被占用，请重新选择" onClose={() => relay.setNotice(null)} />
+      )}
+      {relay.notice === 'unavailable' && (
+        <RelayNoticeToast message="零售站节点尚未就绪，请重新选择节点" onClose={() => relay.setNotice(null)} />
+      )}
     </div>
   ) : (
     !isFetching && (

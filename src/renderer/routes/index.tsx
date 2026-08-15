@@ -10,6 +10,9 @@ import { useTranslation } from 'react-i18next'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 import { JK_PAGE_NAMES } from '@/analytics/jk-events'
+import { BalanceInsufficientToast } from '@/components/BalanceInsufficientToast'
+import { RelayNoticeToast } from '@/components/RelayNoticeToast'
+import { RelayStationSelector } from '@/components/RelayStationSelector'
 import { KodWelcomeCard } from '@/components/common/KodWelcomeCard'
 import { MessageLayoutSelector } from '@/components/common/MessageLayoutPreview'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
@@ -18,6 +21,7 @@ import InputBox, { type InputBoxPayload } from '@/components/InputBox/InputBox'
 import HomepageIcon from '@/components/icons/HomepageIcon'
 import Page from '@/components/layout/Page'
 import { useMyCopilots, useRemoteCopilotsByCursor } from '@/hooks/useCopilots'
+import { useKodRelay } from '@/hooks/useKodRelay'
 import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { navigateToSettings } from '@/modals/Settings'
@@ -63,6 +67,7 @@ function Index() {
   })
 
   const { providers } = useProviders()
+  const relay = useKodRelay()
   const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
   const hasExpiredLicense = useSettingsStore((s) => s.hasExpiredLicense)
   const isLoggedIn = useAuthInfoStore((s) => Boolean(s.accessToken && s.refreshToken))
@@ -79,6 +84,10 @@ function Index() {
       }
     }
   }, [session.settings?.provider, session.settings?.modelId])
+
+  const effectiveSelectedModel = relay.selection?.modelId
+    ? { provider: relay.providerId, modelId: relay.selection.modelId }
+    : selectedModel
 
   const { copilots: myCopilots } = useMyCopilots()
   const { copilots: remoteCopilots } = useRemoteCopilotsByCursor({ limit: 10 })
@@ -150,6 +159,8 @@ function Index() {
 
   const handleSubmit = useCallback(
     async ({ constructedMessage, needGenerating = true, onUserMessageReady }: InputBoxPayload) => {
+      if (relay.selection && !(await relay.checkBalanceAndStartSync())) return
+
       const newSession = await createSessionStore({
         name: session.name,
         type: 'chat',
@@ -201,16 +212,20 @@ function Index() {
     ]
   )
 
-  const onSelectModel = useCallback((p: string, m: string) => {
-    setSession((old) => ({
-      ...old,
-      settings: {
-        ...(old.settings || {}),
-        provider: p,
-        modelId: m,
-      },
-    }))
-  }, [])
+  const onSelectModel = useCallback(
+    (p: string, m: string) => {
+      if (p === relay.providerId && relay.selectModel(m)) return
+      setSession((old) => ({
+        ...old,
+        settings: {
+          ...(old.settings || {}),
+          provider: p,
+          modelId: m,
+        },
+      }))
+    },
+    [relay.providerId, relay.selectModel]
+  )
 
   const onClickSessionSettings = useCallback(async () => {
     const res: Session = await NiceModal.show('session-settings', {
@@ -337,10 +352,29 @@ function Index() {
             )
           )}
 
+          {isLoggedIn && (
+            <Box px="md" className={clsx('flex justify-center', widthFull ? 'w-full' : 'w-full max-w-4xl mx-auto')}>
+              <RelayStationSelector
+                apiBaseUrl={relay.apiOrigin}
+                onSelect={(selection) =>
+                  relay.select(
+                    selection && effectiveSelectedModel?.modelId
+                      ? { ...selection, modelId: effectiveSelectedModel.modelId }
+                      : selection
+                  )
+                }
+                selectedStationId={relay.selection?.stationId}
+                selectedApiKeyId={relay.selection?.apiKeyId}
+                loading={relay.loading}
+              />
+            </Box>
+          )}
+
           <InputBox
             sessionType="chat"
             sessionId="new"
-            model={selectedModel}
+            model={effectiveSelectedModel}
+            modelFilter={relay.modelFilter}
             // fullWidth
             onSelectModel={onSelectModel}
             onClickSessionSettings={onClickSessionSettings}
@@ -348,6 +382,13 @@ function Index() {
           />
         </Stack>
       </div>
+      {relay.notice === 'balance' && <BalanceInsufficientToast onClose={() => relay.setNotice(null)} />}
+      {relay.notice === 'conflict' && (
+        <RelayNoticeToast message="所选节点已被占用，请重新选择" onClose={() => relay.setNotice(null)} />
+      )}
+      {relay.notice === 'unavailable' && (
+        <RelayNoticeToast message="零售站节点尚未就绪，请重新选择节点" onClose={() => relay.setNotice(null)} />
+      )}
     </Page>
   )
 }

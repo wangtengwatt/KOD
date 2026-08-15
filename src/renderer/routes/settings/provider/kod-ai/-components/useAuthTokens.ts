@@ -1,5 +1,8 @@
 import { ModelProviderEnum } from '@shared/types'
 import { useCallback, useMemo } from 'react'
+import { clearKodRelayLocalState } from '@/hooks/useKodRelay'
+import { releaseKodRelayKey } from '@/packages/kodRelay'
+import { getKodApiOrigin } from '@/packages/remote'
 import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
 import * as premiumActions from '@/stores/premiumActions'
 import queryClient from '@/stores/queryClient'
@@ -25,6 +28,16 @@ export function useAuthTokens() {
 
   const clearAuthTokens = useCallback(async () => {
     try {
+      const relayToken = authInfoStore.getState().accessToken
+      if (relayToken) {
+        try {
+          await releaseKodRelayKey(getKodApiOrigin(), relayToken)
+        } catch (error) {
+          console.warn('[Kod relay] failed to release key during logout', error)
+        }
+      }
+      clearKodRelayLocalState()
+
       const settings = settingsStore.getState()
       if (settings.licenseActivationMethod === 'login') {
         await premiumActions.deactivate()

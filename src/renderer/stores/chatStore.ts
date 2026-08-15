@@ -21,6 +21,7 @@ import { useMemo } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import platform from '@/platform'
 import storage, { StorageKey } from '@/storage'
+import { deriveAccountKey } from '@/storage/accountKey'
 import type { SessionMetaStorage } from '@/storage/SessionMetaStorage'
 import { sortSessionRecords } from '@/storage/SessionMetaStorage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
@@ -33,6 +34,7 @@ const log = getLogger('chat-store')
 
 import { clearScrollPositionCache } from '@/components/chat/MessageList'
 import { cleanupSessionAtomCache } from './atoms/throttleWriteSessionAtom'
+import { authInfoStore } from './authInfoStore'
 import { lastUsedModelStore } from './lastUsedModelStore'
 import queryClient from './queryClient'
 import { getSessionMeta } from './sessionHelpers'
@@ -48,13 +50,29 @@ export const QueryKeys = {
 // MARK: session meta storage
 
 let _metaStorage: SessionMetaStorage | null = null
+let _currentMetaAccountKey: string | null = null
+
+function getAccountKeyForStorage(): string | undefined {
+  const email = authInfoStore.getState().loginEmail
+  return email ? deriveAccountKey(email) : undefined
+}
 
 export async function getMetaStorage(): Promise<SessionMetaStorage> {
-  if (!_metaStorage) {
+  const accountKey = getAccountKeyForStorage() ?? null
+  if (accountKey !== _currentMetaAccountKey || !_metaStorage) {
+    _currentMetaAccountKey = accountKey
     _metaStorage = platform.getSessionMetaStorage()
     await _metaStorage.initialize()
   }
   return _metaStorage
+}
+
+/**
+ * Reset meta storage singleton — call when account changes to switch databases.
+ */
+export function resetMetaStorage() {
+  _metaStorage = null
+  _currentMetaAccountKey = null
 }
 
 // MARK: session list operations
@@ -694,6 +712,9 @@ export async function recoverSessionList() {
   // Filter keys that match the session: prefix
   const sessionKeys = allKeys.filter((key) => key.startsWith('session:'))
 
+  const currentAccountKey = getAccountKeyForStorage()
+  let skippedOtherAccount = 0
+
   // Fetch all sessions with their first message timestamp
   const sessionsWithTimestamp: Array<{ meta: SessionMeta; timestamp: number }> = []
   const failedKeys: string[] = []
@@ -702,6 +723,13 @@ export async function recoverSessionList() {
     try {
       const session = await storage.getItem<Session | null>(key, null)
       if (session) {
+        // Account isolation: skip sessions belonging to other accounts.
+        // Untagged sessions (pre-migration, no accountKey) are always included
+        // for backward compatibility.
+        if (currentAccountKey && session.accountKey && session.accountKey !== currentAccountKey) {
+          skippedOtherAccount++
+          continue
+        }
         const migratedSession = migrateSession(session)
         const firstMessageTimestamp = migratedSession.messages[0]?.timestamp || 0
         sessionsWithTimestamp.push({
@@ -715,6 +743,10 @@ export async function recoverSessionList() {
       console.error(`Failed to read session "${key}":`, error)
       failedKeys.push(key)
     }
+  }
+
+  if (skippedOtherAccount > 0) {
+    console.debug('chatStore', 'recoverSessionList', `Skipped ${skippedOtherAccount} sessions from other accounts`)
   }
 
   if (failedKeys.length > 0) {
@@ -741,4 +773,36 @@ export async function recoverSessionList() {
   console.debug('chatStore', 'recoverSessionList', `Recovered ${records.length} sessions, ${failedKeys.length} failed`)
 
   return { recovered: records.length, failed: failedKeys.length }
+}
+
+// MARK: account data cleanup
+
+/**
+ * Purge all locally-stored session data for the current account.
+ * Deletes session content from the KV store and clears the meta DB.
+ * Call BEFORE clearing auth tokens so the account key is still available.
+ * Returns the count of deleted sessions.
+ */
+export async function purgeCurrentAccountData(): Promise<{ sessionCount: number }> {
+  const metaStorage = await getMetaStorage()
+  const allMeta = await metaStorage.getAll()
+
+  // Delete session content (messages, etc.) from the shared key-value store
+  for (const record of allMeta) {
+    await storage.removeItem(StorageKeyGenerator.session(record.id))
+  }
+
+  const sessionCount = allMeta.length
+
+  await metaStorage.clear()
+  resetMetaStorage()
+
+  // Clear session-related query caches
+  queryClient.removeQueries({ queryKey: QueryKeys.ChatSessionsList })
+  for (const record of allMeta) {
+    queryClient.removeQueries({ queryKey: QueryKeys.ChatSession(record.id) })
+    queryClient.removeQueries({ queryKey: QueryKeys.ChatSessionSettings(record.id) })
+  }
+
+  return { sessionCount }
 }
