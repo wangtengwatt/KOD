@@ -16,8 +16,8 @@ import { IndexedDBTaskSessionStorage, type TaskSessionStorage } from '@/storage/
 import type { Exporter, Platform, PlatformType, Storage } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
-import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
 import type { SuanbaoPlatformController } from './suanbao/interface'
+import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
 
 /**
  * 内存存储类，用于测试环境
