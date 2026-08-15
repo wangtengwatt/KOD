@@ -1,4 +1,5 @@
 import type { SessionMetaPage, SessionMetaRecord } from '@shared/types'
+import { getAccountDBName } from './accountKey'
 
 const DB_NAME = 'chatbox-session-meta'
 const STORE_NAME = 'records'
@@ -16,6 +17,8 @@ export interface SessionMetaStorage {
   getPage(cursor: number, limit?: number): Promise<SessionMetaPage>
   getTotal(): Promise<number>
   clear(): Promise<void>
+  /** Delete the entire database (for account data cleanup on logout). */
+  deleteDatabase(): Promise<void>
 }
 
 /**
@@ -35,6 +38,11 @@ export function sortSessionRecords(sessions: SessionMetaRecord[]): SessionMetaRe
 export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
   private db: IDBDatabase | null = null
   private initPromise: Promise<void> | null = null
+  private accountKey: string | undefined
+
+  constructor(accountKey?: string) {
+    this.accountKey = accountKey
+  }
 
   initialize(): Promise<void> {
     if (this.initPromise) {
@@ -46,7 +54,8 @@ export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
 
   private openDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 1)
+      const dbName = getAccountDBName(DB_NAME, this.accountKey)
+      const request = indexedDB.open(dbName, 1)
 
       request.onerror = () => reject(request.error)
 
@@ -184,6 +193,30 @@ export class IndexedDBSessionMetaStorage implements SessionMetaStorage {
       const request = store.clear()
       request.onsuccess = () => resolve()
       request.onerror = () => reject(request.error)
+    })
+  }
+
+  async deleteDatabase(): Promise<void> {
+    // Close existing connection first
+    if (this.db) {
+      this.db.close()
+      this.db = null
+    }
+    this.initPromise = null
+    const dbName = getAccountDBName(DB_NAME, this.accountKey)
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.deleteDatabase(dbName)
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+      request.onblocked = () => {
+        console.warn(`Database deletion blocked for ${dbName}, retrying...`)
+        // Retry once after a short delay
+        setTimeout(() => {
+          const retryRequest = indexedDB.deleteDatabase(dbName)
+          retryRequest.onsuccess = () => resolve()
+          retryRequest.onerror = () => reject(retryRequest.error)
+        }, 1000)
+      }
     })
   }
 }

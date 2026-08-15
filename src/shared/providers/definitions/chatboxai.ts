@@ -4,7 +4,7 @@ import ChatboxAI from './models/chatboxai'
 
 export const chatboxAIProvider = defineProvider({
   id: ModelProviderEnum.ChatboxAI,
-  name: 'Kod AI',
+  name: 'KOD AI',
   type: ModelProviderType.ChatboxAI,
   urls: {
     website: 'https://kod.kai.com',
@@ -32,8 +32,8 @@ export const chatboxAIProvider = defineProvider({
   },
   getDisplayName: (modelId, providerSettings, sessionType) => {
     if (sessionType === 'picture') {
-      return 'Kod AI'
+      return 'KOD AI'
     }
-    return `Kod AI (${providerSettings?.models?.find((m) => m.modelId === modelId)?.nickname || modelId})`
+    return `KOD AI (${providerSettings?.models?.find((m) => m.modelId === modelId)?.nickname || modelId})`
   },
 })

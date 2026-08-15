@@ -158,8 +158,33 @@ function unwrapKodResult<T>(result: { code: number; message?: string; data?: T |
   return result.data
 }
 
-export async function loginWithKod(params: { email: string; password: string; inviteCode?: string }) {
-  const json = await ofetch(`${KOD_API_ORIGIN}/api/auth/login`, {
+export const KOD_ACCOUNT_DELETE_CONFIRMATION = 'DELETE'
+
+export async function deleteKodAccount(params: { accessToken: string; password: string; confirmation?: string }) {
+  const json = await ofetch(`${getKodApiOrigin()}/api/account`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: {
+      password: params.password,
+      confirmation: params.confirmation ?? KOD_ACCOUNT_DELETE_CONFIRMATION,
+    },
+    ignoreResponseError: true,
+  })
+
+  const result = KodResultSchema(z.unknown()).parse(json)
+  if (result.code !== 0) throw new Error(result.message || 'Kod account deletion failed')
+}
+
+export async function loginWithKod(params: {
+  email: string
+  password: string
+  inviteCode?: string
+  emailCode?: string
+}) {
+  const json = await ofetch(`${getKodApiOrigin()}/api/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -168,6 +193,7 @@ export async function loginWithKod(params: { email: string; password: string; in
       email: params.email,
       password: params.password,
       ...(params.inviteCode ? { inviteCode: params.inviteCode } : {}),
+      ...(params.emailCode ? { emailCode: params.emailCode } : {}),
     },
     ignoreResponseError: true,
   })
@@ -188,6 +214,16 @@ export async function loginWithKod(params: { email: string; password: string; in
   }
 }
 
+export async function sendKodEmailCode(email: string) {
+  const json = await ofetch<{ code: number; message?: string }>(`${getKodApiOrigin()}/api/auth/send-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: { email },
+    ignoreResponseError: true,
+  })
+  if (json.code !== 0) throw new Error(json.message || '发送验证码失败')
+}
+
 export interface KodRelayStationConfig {
   url: string
   apiKey: string
@@ -198,7 +234,7 @@ export async function getKodRelayStationConfig(token?: string | null): Promise<K
     throw new Error('Missing Kod login token')
   }
 
-  const json = await ofetch(`${KOD_API_ORIGIN}/api/relay-station/config`, {
+  const json = await ofetch(`${getKodApiOrigin()}/api/relay-station/config`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,

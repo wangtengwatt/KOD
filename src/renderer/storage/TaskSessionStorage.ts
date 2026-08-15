@@ -1,4 +1,5 @@
 import type { TaskSession, TaskSessionPage } from '@shared/types'
+import { getAccountDBName } from './accountKey'
 
 const PAGE_SIZE = 20
 const DB_NAME = 'chatbox-task-session'
@@ -12,11 +13,17 @@ export interface TaskSessionStorage {
   delete(id: string): Promise<void>
   getPage(cursor: number, limit?: number): Promise<TaskSessionPage>
   getTotal(): Promise<number>
+  deleteDatabase(): Promise<void>
 }
 
 export class IndexedDBTaskSessionStorage implements TaskSessionStorage {
   private db: IDBDatabase | null = null
   private initPromise: Promise<void> | null = null
+  private accountKey: string | undefined
+
+  constructor(accountKey?: string) {
+    this.accountKey = accountKey
+  }
 
   initialize(): Promise<void> {
     if (this.initPromise) {
@@ -28,7 +35,8 @@ export class IndexedDBTaskSessionStorage implements TaskSessionStorage {
 
   private openDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 1)
+      const dbName = getAccountDBName(DB_NAME, this.accountKey)
+      const request = indexedDB.open(dbName, 1)
 
       request.onerror = () => reject(request.error)
 
@@ -133,6 +141,18 @@ export class IndexedDBTaskSessionStorage implements TaskSessionStorage {
       }
 
       request.onerror = () => reject(request.error)
+    })
+  }
+
+  async deleteDatabase(): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      this.db?.close()
+      this.db = null
+      this.initPromise = null
+      const request = indexedDB.deleteDatabase(getAccountDBName(DB_NAME, this.accountKey))
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error ?? new Error('Failed to delete task session database'))
+      request.onblocked = () => reject(new Error('Task session database deletion blocked'))
     })
   }
 

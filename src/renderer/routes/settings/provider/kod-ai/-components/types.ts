@@ -5,6 +5,7 @@ export type LoginState = 'idle' | 'sending_code' | 'code_sent' | 'verifying_code
 export interface AuthTokens {
   accessToken: string
   refreshToken: string
+  email?: string
 }
 
 export interface UserProfile {

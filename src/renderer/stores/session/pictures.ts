@@ -67,7 +67,7 @@ export async function orchestratePictureGeneration(
   }
 
   try {
-    const model = await createModel(settings)
+    const model = await createModel(settings, undefined, { type: 'image', label: '图片生成' })
 
     // Picture message generation
     if (session.type === 'picture') {

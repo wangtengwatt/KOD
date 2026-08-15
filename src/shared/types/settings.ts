@@ -28,6 +28,23 @@ export const DocumentParserConfigSchema = z.object({
 
 export type DocumentParserConfig = z.infer<typeof DocumentParserConfigSchema>
 
+export const LanguageSchema = z.enum([
+  'en',
+  'zh-Hans',
+  'zh-Hant',
+  'ja',
+  'ko',
+  'ru',
+  'de',
+  'fr',
+  'pt-PT',
+  'es',
+  'ar',
+  'it-IT',
+  'sv',
+  'nb-NO',
+])
+
 export const DEFAULT_DOCUMENT_PARSER_CONFIG: DocumentParserConfig = {
   type: 'local',
 }

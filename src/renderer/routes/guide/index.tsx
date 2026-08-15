@@ -16,9 +16,9 @@ import {
   Title,
   UnstyledButton,
 } from '@mantine/core'
-import WindowControls from '@/components/layout/WindowControls'
 import type { Language } from '@shared/types'
 import {
+  IconArrowUp,
   IconBug,
   IconCheck,
   IconChevronRight,
@@ -27,7 +27,6 @@ import {
   IconMenu2,
   IconPlayerSkipForward,
   IconPlayerStopFilled,
-  IconArrowUp,
   IconRefresh,
   IconUserCheck,
 } from '@tabler/icons-react'
@@ -297,7 +296,7 @@ function GuidePage() {
           )}
         </Flex>
 
-        <WindowControls className="-mr-3 ml-2" />
+        <div className="w-[120px] shrink-0" />
       </Flex>
       <Divider />
 

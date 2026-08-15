@@ -5,6 +5,7 @@ import type { SessionMetaStorage } from '@/storage/SessionMetaStorage'
 import type { TaskSessionStorage } from '@/storage/TaskSessionStorage'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
+import type { SuanbaoPlatformController } from './suanbao/interface'
 
 export type PlatformType = 'web' | 'desktop' | 'mobile'
 
@@ -44,6 +45,7 @@ export interface Platform extends Storage {
   checkForUpdate?(): Promise<{ started: boolean }>
   onNavigate?(callback: (path: string) => void): () => void
   openLink(url: string): Promise<void>
+  openPaymentUrl(url: string): Promise<void>
   getDeviceName(): Promise<string>
   getInstanceName(): Promise<string>
   getLocale(): Promise<Language>
@@ -100,12 +102,13 @@ export interface Platform extends Storage {
 
   getKnowledgeBaseController(): KnowledgeBaseController
   getSessionAttachmentRagController(): SessionAttachmentRagController
+  getSuanbaoController(): SuanbaoPlatformController
 
-  getImageGenerationStorage(): ImageGenerationStorage
+  getImageGenerationStorage(accountKey?: string): ImageGenerationStorage
 
-  getTaskSessionStorage(): TaskSessionStorage
+  getTaskSessionStorage(accountKey?: string): TaskSessionStorage
 
-  getSessionMetaStorage(): SessionMetaStorage
+  getSessionMetaStorage(accountKey?: string): SessionMetaStorage
 
   // Sandbox operations (Desktop only)
   sandboxInit?(config: { workingDirectory: string }): Promise<{ success: boolean; error?: string }>

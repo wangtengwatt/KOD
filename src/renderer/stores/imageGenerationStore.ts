@@ -5,7 +5,9 @@ import { createStore, useStore } from 'zustand'
 import { getLogger } from '@/lib/utils'
 import platform from '@/platform'
 import blobStorage from '@/storage'
+import { deriveAccountKey } from '@/storage/accountKey'
 import type { ImageGenerationStorage } from '@/storage/ImageGenerationStorage'
+import { authInfoStore } from '@/stores/authInfoStore'
 
 const log = getLogger('image-generation-store')
 
@@ -32,12 +34,56 @@ export const imageGenerationStore = createStore<ImageGenerationUIState & ImageGe
 }))
 
 let storage: ImageGenerationStorage | null = null
+let _currentImageGenAccountKey: string | null = null
+
+function getAccountKeyForStorage(): string | undefined {
+  const email = authInfoStore.getState().loginEmail
+  return email ? deriveAccountKey(email) : undefined
+}
 
 function getStorage(): ImageGenerationStorage {
-  if (!storage) {
-    storage = platform.getImageGenerationStorage()
+  const accountKey = getAccountKeyForStorage() ?? null
+  if (accountKey !== _currentImageGenAccountKey || !storage) {
+    _currentImageGenAccountKey = accountKey
+    storage = platform.getImageGenerationStorage(accountKey ?? undefined)
   }
   return storage
+}
+
+/** Reset image generation storage singleton — call when account changes. */
+export async function purgeImageGenerationData(accountKey: string): Promise<void> {
+  const target =
+    _currentImageGenAccountKey === accountKey && storage ? storage : platform.getImageGenerationStorage(accountKey)
+  await target.initialize()
+  const blobKeys = new Set<string>()
+  let cursor = 0
+  while (true) {
+    const page = await target.getPage(cursor, 100)
+    for (const record of page.items) {
+      for (const key of [...record.generatedImages, ...record.referenceImages]) {
+        if (key.startsWith('picture:image-gen:') || key.startsWith('picture:image-creator-ref:')) blobKeys.add(key)
+      }
+    }
+    if (page.nextCursor === null) break
+    cursor = page.nextCursor
+  }
+  const blobErrors: unknown[] = []
+  for (const key of blobKeys) {
+    try {
+      await blobStorage.delBlob(key)
+    } catch (error) {
+      blobErrors.push(error)
+    }
+  }
+  await target.deleteDatabase()
+  resetImageGenerationStorage()
+  imageGenerationStore.setState({ currentGeneratingId: null, currentRecordId: null, initialized: false })
+  if (blobErrors.length) throw new AggregateError(blobErrors, 'Failed to delete some image blobs')
+}
+
+export function resetImageGenerationStorage() {
+  storage = null
+  _currentImageGenAccountKey = null
 }
 
 async function initializeStore(): Promise<void> {

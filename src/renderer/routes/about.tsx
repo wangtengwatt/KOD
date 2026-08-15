@@ -36,8 +36,8 @@ function RouteComponent() {
             <Image h={100} w={100} mah={'20vw'} maw={'20vw'} src={iconPNG} />
             <Stack flex={1} gap="xxs">
               <Flex justify="space-between" align="center" wrap="wrap" gap={isSmallScreen ? 'xs' : 'sm'} rowGap="xs">
-                <Title order={5} lh={1.5} lineClamp={1} title={`Kod v${version.version}`}>
-                  Kod {/\d/.test(version.version) ? `(v${version.version})` : ''}
+                <Title order={5} lh={1.5} lineClamp={1} title={`KOD v${version.version}`}>
+                  KOD {/\d/.test(version.version) ? `(v${version.version})` : ''}
                 </Title>
 
                 <UpdateSection />
@@ -48,7 +48,7 @@ function RouteComponent() {
               <Flex gap="sm">
                 <Anchor
                   size="sm"
-                  href="https://chatboxai.app/privacy"
+                  href="https://kod.kai.com/privacy"
                   target="_blank"
                   underline="hover"
                   c="kod-tertiary"
@@ -57,7 +57,7 @@ function RouteComponent() {
                 </Anchor>
                 <Anchor
                   size="sm"
-                  href="https://chatboxai.app/terms"
+                  href="https://kod.kai.com/terms"
                   target="_blank"
                   underline="hover"
                   c="kod-tertiary"

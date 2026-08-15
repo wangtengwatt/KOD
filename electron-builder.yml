@@ -59,6 +59,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
   include: assets/installer.nsh
 
 linux:

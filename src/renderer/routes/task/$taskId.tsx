@@ -38,10 +38,10 @@ import Divider from '@/components/common/Divider'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
 import TokenCountMenu from '@/components/InputBox/TokenCountMenu'
 import ProviderImageIcon from '@/components/icons/ProviderImageIcon'
-import WindowControls from '@/components/layout/WindowControls'
 import Markdown, { BlockCodeCollapsedStateProvider } from '@/components/Markdown'
 import ModelSelector from '@/components/ModelSelector'
 import DirectoryMenu from '@/components/task/DirectoryMenu'
+import { useKodRelay } from '@/hooks/useKodRelay'
 import useNeedRoomForWinControls from '@/hooks/useNeedRoomForWinControls'
 import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
@@ -360,11 +360,15 @@ function TaskChat({ session }: { session: NonNullable<ReturnType<typeof useTaskS
   const setShowSidebar = useUIStore((s) => s.setShowSidebar)
   const isSmallScreen = useIsSmallScreen()
   const { needRoomForMacWindowControls } = useNeedRoomForWinControls()
+  const relay = useKodRelay()
 
   const generating = session.messages.some((m) => m.generating)
 
   // Model state from session settings or lastUsedModelStore.task
   const model = useMemo(() => {
+    if (relay.selection?.modelId) {
+      return { provider: relay.providerId, modelId: relay.selection.modelId }
+    }
     if (session.settings?.provider && session.settings?.modelId) {
       return { provider: session.settings.provider, modelId: session.settings.modelId }
     }
@@ -373,7 +377,7 @@ function TaskChat({ session }: { session: NonNullable<ReturnType<typeof useTaskS
       return lastUsedTask
     }
     return undefined
-  }, [session.settings?.provider, session.settings?.modelId])
+  }, [relay.providerId, relay.selection?.modelId, session.settings?.provider, session.settings?.modelId])
 
   const { contextTokens, currentInputTokens, totalTokens, isCalculating, pendingTasks, messageCount } =
     useTaskContextTokens({
@@ -417,6 +421,7 @@ function TaskChat({ session }: { session: NonNullable<ReturnType<typeof useTaskS
 
   const handleSelectModel = useCallback(
     async (provider: string, modelId: string) => {
+      if (provider === relay.providerId && relay.selectModel(modelId)) return
       const updated = await updateTaskSession(session.id, {
         settings: { ...(session.settings || {}), provider, modelId },
       })
@@ -425,7 +430,7 @@ function TaskChat({ session }: { session: NonNullable<ReturnType<typeof useTaskS
       }
       lastUsedModelStore.getState().setTaskModel(provider, modelId)
     },
-    [session.id, session.settings, queryClient]
+    [session.id, session.settings, queryClient, relay.providerId, relay.selectModel]
   )
 
   const handleSelectDirectory = useCallback(
@@ -515,7 +520,7 @@ function TaskChat({ session }: { session: NonNullable<ReturnType<typeof useTaskS
             {session.name}
           </Text>
         </Flex>
-        <WindowControls className="-mr-3 ml-2" />
+        <div className="w-[120px] shrink-0" />
       </Flex>
       <Divider />
 
@@ -661,6 +666,7 @@ function TaskChat({ session }: { session: NonNullable<ReturnType<typeof useTaskS
                   selectedProviderId={model?.provider}
                   selectedModelId={model?.modelId}
                   modelFilter={(m, providerId) => {
+                    if (relay.selection && providerId !== relay.providerId) return false
                     if (!m.capabilities?.includes('tool_use')) return false
                     if (providerId === 'chatbox-ai' && DEEPSEEK_EXCLUDED_RE.test(m.modelId)) return false
                     return true

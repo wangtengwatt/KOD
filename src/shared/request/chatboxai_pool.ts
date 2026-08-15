@@ -2,14 +2,17 @@ import uniq from 'lodash/uniq'
 import { ofetch } from 'ofetch'
 import { cache } from '../utils/cache'
 
-let API_ORIGIN = 'https://api.chatboxai.app'
+// KOD: Replaced Chatbox AI domain pool with KOD's own API.
+// The pool is configurable via KOD_API_POOL env var (comma-separated URLs).
+// Falls back to KOD_API_ORIGIN if no pool is configured.
+const KOD_API_ORIGIN = process.env.KOD_API_ORIGIN || 'https://kod.kai.com'
+const KOD_API_POOL = process.env.KOD_API_POOL
+  ? process.env.KOD_API_POOL.split(',').map((s) => s.trim()).filter(Boolean)
+  : []
 
-let POOL = [
-  'https://api.chatboxai.app',
-  'https://chatboxai.app',
-  'https://api.ai-chatbox.com',
-  'https://api.chatboxapp.xyz',
-]
+const DEFAULT_POOL: string[] = KOD_API_POOL.length > 0 ? KOD_API_POOL : []
+let POOL: string[] = [...DEFAULT_POOL]
+let API_ORIGIN = DEFAULT_POOL.length > 0 ? DEFAULT_POOL[0] : KOD_API_ORIGIN
 
 export function isChatboxAPI(input: RequestInfo | URL) {
   const url = typeof input === 'string' ? input : ((input as Request).url ?? input.toString())
@@ -24,11 +27,19 @@ export function getChatboxAPIOrigin() {
 }
 
 /**
- * 按顺序测试 API 的可用性，只要有一个 API 域名可用，就终止测试并切换所有流量到该域名。
- * 在测试过程中，会根据服务器返回添加新的 API 域名，并缓存到本地
+ * Test API origin availability.
+ * KOD: Pool is configurable via KOD_API_POOL env var.
+ * If no pool is configured, skips probing and uses KOD_API_ORIGIN directly.
+ * When servers return additional origins via /api/api_origins, they are added to the pool.
  */
 export async function testApiOrigins() {
-  // 按顺序测试 API 的可用性
+  if (DEFAULT_POOL.length === 0) {
+    // No pool configured — use KOD_API_ORIGIN directly, no probing needed
+    API_ORIGIN = KOD_API_ORIGIN
+    POOL = [KOD_API_ORIGIN]
+    return POOL
+  }
+
   const result = await cache(
     'api_origins',
     async () => {
@@ -38,27 +49,27 @@ export async function testApiOrigins() {
         try {
           const origin: string = pool[i]
           const controller = new AbortController()
-          setTimeout(() => controller.abort(), 2000) // 2秒超时
+          setTimeout(() => controller.abort(), 2000)
           const res = await ofetch<{ data: { api_origins: string[] } }>(`${origin}/api/api_origins`, {
             signal: controller.signal,
             retry: 1,
           })
-          // 如果服务器返回了新的 API 域名，则更新缓存
           if (res.data.api_origins.length > 0) {
             pool = uniq([...pool, ...res.data.api_origins])
           }
-          // 如果当前 API 可用，则切换所有流量到该域名
           API_ORIGIN = origin
-          pool = uniq([origin, ...pool]) // 将当前 API 域名添加到列表顶部
+          pool = uniq([origin, ...pool])
           POOL = pool
           return pool
         } catch (e) {
           i++
         }
       }
+      // All pool entries failed, fall back to KOD_API_ORIGIN
+      API_ORIGIN = KOD_API_ORIGIN
       return POOL
     },
-    { ttl: 1000 * 60 * 60, refreshFallbackToCache: true } // 1小时缓存，失败时使用旧缓存
+    { ttl: 1000 * 60 * 60, refreshFallbackToCache: true }
   )
 
   return result

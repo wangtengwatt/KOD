@@ -80,7 +80,7 @@ describe('settingsStore persistence', () => {
           isCustom: true,
         },
       ],
-      __version: 4,
+      __version: 5,
     }
 
     const { initSettingsStore, settingsStore } = await loadSettingsStoreModule(persistedSettings)
@@ -107,7 +107,7 @@ describe('settingsStore persistence', () => {
           apiKey: 'sk-claude',
         },
       },
-      __version: 4,
+      __version: 5,
     }
 
     const { initSettingsStore, settingsStore, mergeProviderSettings, mockStorage } =
@@ -145,7 +145,76 @@ describe('settingsStore persistence', () => {
           apiHost: 'https://api.openai.com',
         },
       },
-      __version: 4,
+      __version: 5,
+    })
+  })
+
+  it.each([
+    { name: 'missing settings', persisted: null, expected: 'zh-Hans' },
+    { name: 'missing language', persisted: { __version: 4 }, expected: 'zh-Hans' },
+    { name: 'invalid language', persisted: { language: 'invalid', __version: 4 }, expected: 'zh-Hans' },
+    { name: 'explicit English', persisted: { language: 'en', __version: 4 }, expected: 'en' },
+    { name: 'explicit Traditional Chinese', persisted: { language: 'zh-Hant', __version: 4 }, expected: 'zh-Hant' },
+    { name: 'explicit language without init marker', persisted: { language: 'ja', __version: 4 }, expected: 'ja' },
+  ])('uses the correct language for $name', async ({ persisted, expected }) => {
+    const { initSettingsStore } = await loadSettingsStoreModule(persisted)
+
+    const hydrated = await initSettingsStore()
+
+    expect(hydrated.language).toBe(expected)
+  })
+
+  it('backfills suanbao preferences when missing from persisted settings', async () => {
+    // 旧用户（persist 版本 4）无 suanbao 字段：经 deepmerge(defaults.settings()) 回填默认偏好
+    const persistedSettings = { __version: 4 }
+    const { initSettingsStore } = await loadSettingsStoreModule(persistedSettings)
+
+    const hydrated = await initSettingsStore()
+
+    expect(hydrated.suanbao).toBeDefined()
+    expect(hydrated.suanbao).toMatchObject({
+      schemaVersion: 2,
+      enabled: false,
+      hidden: false,
+      activeMode: false,
+      soundEnabled: false,
+      animation: 'full',
+      locked: false,
+      desktopOverlayEnabled: false,
+      notificationsEnabled: false,
+      locationMode: 'off',
+      calendarEnabled: false,
+    })
+  })
+
+  it('preserves explicit suanbao preferences from persisted settings', async () => {
+    // 已有 suanbao 偏好的用户（persist 版本 5）：用户值保留，缺失子字段由 schema 回退
+    const persistedSettings = {
+      __version: 5,
+      suanbao: {
+        schemaVersion: 2,
+        enabled: true,
+        hidden: true,
+        activeMode: true,
+        soundEnabled: true,
+        animation: 'reduced',
+        locked: true,
+        desktopOverlayEnabled: true,
+        notificationsEnabled: true,
+        locationMode: 'manual',
+        calendarEnabled: true,
+      },
+    }
+    const { initSettingsStore } = await loadSettingsStoreModule(persistedSettings)
+
+    const hydrated = await initSettingsStore()
+
+    expect(hydrated.suanbao).toMatchObject({
+      enabled: true,
+      animation: 'reduced',
+      locked: true,
+      locationMode: 'manual',
+      calendarEnabled: true,
     })
   })
 })

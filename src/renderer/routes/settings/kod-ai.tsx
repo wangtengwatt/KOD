@@ -2,10 +2,13 @@ import { Stack } from '@mantine/core'
 import { type ModelProvider, ModelProviderEnum } from '@shared/types'
 import { createFileRoute } from '@tanstack/react-router'
 import useKodAIModels from '@/hooks/useKodAIModels'
+import platform from '@/platform'
 import { useLanguage, useProviderSettings } from '@/stores/settingsStore'
+import { deleteCurrentKodAccount } from './provider/kod-ai/-components/accountDeletion'
 import { LoggedInView } from './provider/kod-ai/-components/LoggedInView'
 import { LoginView } from './provider/kod-ai/-components/LoginView'
 import { ModelManagement } from './provider/kod-ai/-components/ModelManagement'
+import { TinpayDemoCard } from './provider/kod-ai/-components/TinpayDemoCard'
 import { useAuthTokens } from './provider/kod-ai/-components/useAuthTokens'
 
 export const Route = createFileRoute('/settings/kod-ai')({
@@ -35,7 +38,10 @@ export function RouteComponent() {
   return (
     <Stack gap="xxl" p="md">
       {isLoggedIn ? (
-        <LoggedInView onLogout={clearAuthTokens} />
+        <>
+          <LoggedInView onLogout={clearAuthTokens} onDeleteAccount={deleteCurrentKodAccount} />
+          {platform.type === 'desktop' && <TinpayDemoCard />}
+        </>
       ) : (
         <LoginView language={language} saveAuthTokens={saveAuthTokens} />
       )}

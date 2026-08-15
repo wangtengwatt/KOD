@@ -27,6 +27,14 @@ const translations = {
     en: 'Show/Hide',
     zh: '显示/隐藏',
   },
+  'Show/Hide Suanbao': {
+    en: 'Show/Hide Suanbao',
+    zh: '显示/隐藏蒜宝',
+  },
+  'Pause/Resume Suanbao Animation': {
+    en: 'Pause/Resume Suanbao Animation',
+    zh: '暂停/恢复蒜宝动画',
+  },
   Exit: {
     en: 'Exit',
     zh: '退出',

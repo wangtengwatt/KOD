@@ -116,6 +116,16 @@ authInfoStore.subscribe(
   (email) => suanbaoStore.getState().switchAccount(email)
 )
 
+export function purgeSuanbaoPreferences(accountKey: string): void {
+  getLocalStorage()?.removeItem(storageKey(accountKey))
+  if (suanbaoStore.getState().accountKey === accountKey) {
+    suanbaoStore.setState({
+      accountKey: 'guest',
+      ...sanitizeSuanbaoPreferences(DEFAULT_PREFERENCES),
+    })
+  }
+}
+
 export function useSuanbaoStore<U>(selector: Parameters<typeof useStore<typeof suanbaoStore, U>>[1]) {
   return useStore<typeof suanbaoStore, U>(suanbaoStore, selector)
 }

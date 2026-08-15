@@ -3,6 +3,7 @@ import SwipeableDrawer from '@mui/material/SwipeableDrawer'
 import {
   IconCirclePlus,
   IconCode,
+  IconCpu,
   IconDeviceMobile,
   IconDownload,
   IconInfoCircle,
@@ -277,6 +278,18 @@ export default function Sidebar() {
                   p="xs"
                 />
               )}
+              <NavLink
+                c="kod-secondary"
+                className="rounded"
+                label="算力中心"
+                leftSection={<ScalableIcon icon={IconCpu} size={22} />}
+                onClick={() => {
+                  navigate({ to: '/compute-center' })
+                  setShowSidebar(false)
+                }}
+                variant="light"
+                p="xs"
+              />
               <Flex gap="md" align="center" justify="space-between">
                 <NavLink
                   c="kod-secondary"
@@ -338,6 +351,15 @@ export default function Sidebar() {
                   p="xs"
                 />
               )}
+              <NavLink
+                c="kod-secondary"
+                className="rounded"
+                label="算力中心"
+                leftSection={<ScalableIcon icon={IconCpu} size={20} />}
+                onClick={() => navigate({ to: '/compute-center' })}
+                variant="light"
+                p="xs"
+              />
               <NavLink
                 c="kod-secondary"
                 className="rounded"

@@ -33,7 +33,7 @@ export function RouteComponent() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${extension.webSearch.queritApiKey}`,
           },
-          body: { query: 'Kod' },
+          body: { query: 'KOD' },
         })
         setQueritAvailable(true)
       } catch (e) {
@@ -51,7 +51,7 @@ export function RouteComponent() {
       setCheckingBocha(true)
       setBochaAvailable(undefined)
       try {
-        await new BochaSearch(extension.webSearch.bochaApiKey).search('Kod')
+        await new BochaSearch(extension.webSearch.bochaApiKey).search('KOD')
         setBochaAvailable(true)
       } catch (e) {
         setBochaAvailable(false)
@@ -75,7 +75,7 @@ export function RouteComponent() {
             Authorization: `Bearer ${extension.webSearch.tavilyApiKey}`,
           },
           body: {
-            query: 'Kod',
+            query: 'KOD',
             search_depth: 'basic',
             include_domains: [],
             exclude_domains: [],

@@ -1,8 +1,5 @@
-export interface ElectronSuanbaoAPI {
-  publishBootstrap: (bootstrap: import('./types/suanbao').SuanbaoBootstrap) => Promise<import('./types/suanbao').SuanbaoBootstrap>
-  publishViewModel: (viewModel: import('./types/suanbao').SuanbaoViewModel) => Promise<import('./types/suanbao').SuanbaoViewModel>
-  onCommand: (callback: (value: unknown) => void) => () => void
-}
+import type { TinpayRendererApi } from './tinpay'
+import type { SuanbaoHostBridgeApi } from './types/suanbao'
 
 export interface ElectronIPC {
   invoke: (channel: string, ...args: any[]) => Promise<any>
@@ -14,7 +11,9 @@ export interface ElectronIPC {
   onUpdateDownloaded: (callback: () => void) => () => void
   addMcpStdioTransportEventListener: (transportId: string, event: string, callback?: (...args: any[]) => void) => void
   onNavigate: (callback: (path: string) => void) => () => void
-  suanbao?: ElectronSuanbaoAPI
+  suanbao?: SuanbaoHostBridgeApi
+  tinpay: TinpayRendererApi
+  openPaymentUrl: (url: string) => Promise<void>
 
   // Auto-updater events
   onUpdaterChecking: (callback: () => void) => () => void

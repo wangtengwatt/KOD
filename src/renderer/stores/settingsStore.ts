@@ -2,8 +2,8 @@
 /** biome-ignore-all lint/suspicious/noFallthroughSwitchClause: migrate */
 
 import * as defaults from '@shared/defaults'
-import { type ProviderSettings, type Settings, SettingsSchema } from '@shared/types'
-import type { DocumentParserConfig } from '@shared/types/settings'
+import { type Settings, SettingsSchema } from '@shared/types'
+import { type DocumentParserConfig, LanguageSchema } from '@shared/types/settings'
 import deepmerge from 'deepmerge'
 import type { WritableDraft } from 'immer'
 import { createStore, useStore } from 'zustand'
@@ -62,7 +62,7 @@ export const settingsStore = createStore<Settings & Action>()(
           },
           removeItem: async (name) => await storage.removeItem(name),
         })),
-        version: 4,
+        version: 5,
         partialize: (state) => {
           try {
             return SettingsSchema.parse(state)
@@ -71,6 +71,8 @@ export const settingsStore = createStore<Settings & Action>()(
           }
         },
         migrate: (persisted: any, version) => {
+          const hasExplicitLanguage =
+            Object.hasOwn(persisted, 'language') && LanguageSchema.safeParse(persisted.language).success
           // merge the newly added fields in defaults.settings() into the persisted values (deep merge).
           const settings: any = deepmerge(defaults.settings(), persisted, {
             arrayMerge: (_target, source) => source,
@@ -99,6 +101,8 @@ export const settingsStore = createStore<Settings & Action>()(
             default:
               break
           }
+
+          if (!hasExplicitLanguage) settings.language = 'zh-Hans'
 
           // Apply platform-specific default for documentParser if not set
           if (!settings.extension?.documentParser) {

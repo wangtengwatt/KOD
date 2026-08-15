@@ -5,7 +5,9 @@ import { createStore, useStore } from 'zustand'
 import { combine, persist } from 'zustand/middleware'
 import { getLogger } from '@/lib/utils'
 import platform from '@/platform'
+import { deriveAccountKey } from '@/storage/accountKey'
 import type { TaskSessionStorage } from '@/storage/TaskSessionStorage'
+import { authInfoStore } from '@/stores/authInfoStore'
 import { queryClient } from '@/stores/queryClient'
 import { safeStorage } from '@/stores/safeStorage'
 
@@ -45,12 +47,35 @@ export const taskSessionStore = createStore(
 )
 
 let storage: TaskSessionStorage | null = null
+let _currentTaskAccountKey: string | null = null
+
+function getAccountKeyForStorage(): string | undefined {
+  const email = authInfoStore.getState().loginEmail
+  return email ? deriveAccountKey(email) : undefined
+}
 
 function getStorage(): TaskSessionStorage {
-  if (!storage) {
-    storage = platform.getTaskSessionStorage()
+  const accountKey = getAccountKeyForStorage() ?? null
+  if (accountKey !== _currentTaskAccountKey || !storage) {
+    _currentTaskAccountKey = accountKey
+    storage = platform.getTaskSessionStorage(accountKey ?? undefined)
   }
   return storage
+}
+
+/** Reset task session storage singleton — call when account changes. */
+export async function purgeTaskSessionData(accountKey: string): Promise<void> {
+  const target = _currentTaskAccountKey === accountKey && storage ? storage : platform.getTaskSessionStorage(accountKey)
+  await target.deleteDatabase()
+  resetTaskSessionStorage()
+  taskSessionStore.setState({ currentTaskId: null, initialized: false })
+  queryClient.removeQueries({ queryKey: [TASK_SESSION_QUERY_KEY] })
+  queryClient.removeQueries({ queryKey: [TASK_SESSION_LIST_QUERY_KEY] })
+}
+
+export function resetTaskSessionStorage() {
+  storage = null
+  _currentTaskAccountKey = null
 }
 
 async function initializeStore(): Promise<void> {

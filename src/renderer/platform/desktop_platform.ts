@@ -15,6 +15,8 @@ import { getOS } from '../packages/navigator'
 import type { Platform, PlatformType } from './interfaces'
 import DesktopKnowledgeBaseController from './knowledge-base/desktop-controller'
 import DesktopSessionAttachmentRagController from './session-attachment-rag/desktop-controller'
+import { DesktopSuanbaoPlatformController } from './suanbao/desktop-controller'
+import type { SuanbaoPlatformController } from './suanbao/interface'
 import WebExporter from './web_exporter'
 import { parseTextFileLocally } from './web_platform_utils'
 
@@ -29,9 +31,12 @@ export default class DesktopPlatform implements Platform {
 
   private _kbController?: DesktopKnowledgeBaseController
   private _sessionAttachmentRagController?: DesktopSessionAttachmentRagController
+  private _suanbaoController?: SuanbaoPlatformController
   private _imageGenerationStorage: ImageGenerationStorage | null = null
   private _taskSessionStorage: TaskSessionStorage | null = null
   private _sessionMetaStorage: SessionMetaStorage | null = null
+  private _currentAccountKey: string | null = null
+  private _currentImageGenAccountKey: string | null = null
 
   public ipc: ElectronIPC
   constructor(ipc: ElectronIPC) {
@@ -94,6 +99,12 @@ export default class DesktopPlatform implements Platform {
   }
   public async openLink(url: string): Promise<void> {
     return this.ipc.invoke('openLink', url)
+  }
+  public async openPaymentUrl(url: string): Promise<void> {
+    const { assertPaymentUrl, parsePaymentHosts } = await import('@shared/payment-url')
+    const { KOD_API_ORIGIN, KOD_PAYMENT_HOSTS } = await import('@/variables')
+    assertPaymentUrl(url, parsePaymentHosts(KOD_PAYMENT_HOSTS, KOD_API_ORIGIN))
+    return this.ipc.openPaymentUrl(url)
   }
   public async getDeviceName(): Promise<string> {
     const deviceName = await cache('ipc:getDeviceName', () => this.ipc.invoke('getDeviceName'), {
@@ -326,23 +337,34 @@ export default class DesktopPlatform implements Platform {
     return this._sessionAttachmentRagController
   }
 
-  public getImageGenerationStorage(): ImageGenerationStorage {
-    if (!this._imageGenerationStorage) {
-      this._imageGenerationStorage = new IndexedDBImageGenerationStorage()
+  public getSuanbaoController(): SuanbaoPlatformController {
+    if (!this._suanbaoController) this._suanbaoController = new DesktopSuanbaoPlatformController(this.ipc)
+    return this._suanbaoController
+  }
+
+  public getImageGenerationStorage(accountKey?: string): ImageGenerationStorage {
+    const key = accountKey ?? null
+    if (key !== this._currentImageGenAccountKey || !this._imageGenerationStorage) {
+      this._currentImageGenAccountKey = key
+      this._imageGenerationStorage = new IndexedDBImageGenerationStorage(accountKey)
     }
     return this._imageGenerationStorage
   }
 
-  public getTaskSessionStorage(): TaskSessionStorage {
-    if (!this._taskSessionStorage) {
-      this._taskSessionStorage = new IndexedDBTaskSessionStorage()
+  public getTaskSessionStorage(accountKey?: string): TaskSessionStorage {
+    const key = accountKey ?? null
+    if (key !== this._currentAccountKey || !this._taskSessionStorage) {
+      this._currentAccountKey = key
+      this._taskSessionStorage = new IndexedDBTaskSessionStorage(accountKey)
     }
     return this._taskSessionStorage
   }
 
-  public getSessionMetaStorage(): SessionMetaStorage {
-    if (!this._sessionMetaStorage) {
-      this._sessionMetaStorage = new IndexedDBSessionMetaStorage()
+  public getSessionMetaStorage(accountKey?: string): SessionMetaStorage {
+    const key = accountKey ?? null
+    if (key !== this._currentAccountKey || !this._sessionMetaStorage) {
+      this._currentAccountKey = key
+      this._sessionMetaStorage = new IndexedDBSessionMetaStorage(accountKey)
     }
     return this._sessionMetaStorage
   }

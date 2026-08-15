@@ -1,5 +1,6 @@
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite'
 import type { ImageGeneration, ImageGenerationPage } from '@shared/types'
+import { getAccountDBName } from './accountKey'
 import type { ImageGenerationStorage } from './ImageGenerationStorage'
 
 const PAGE_SIZE = 20
@@ -9,9 +10,11 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
   private sqlite: SQLiteConnection
   private database!: SQLiteDBConnection
   private initPromise: Promise<void> | null = null
+  private accountKey: string | undefined
 
-  constructor() {
+  constructor(accountKey?: string) {
     this.sqlite = new SQLiteConnection(CapacitorSQLite)
+    this.accountKey = accountKey
   }
 
   initialize(): Promise<void> {
@@ -29,8 +32,10 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
       // ignore - connection may not exist
     }
 
+    const dbName = getAccountDBName(DB_NAME, this.accountKey)
+
     // Bump version to 2 for new columns
-    this.database = await this.sqlite.createConnection(DB_NAME, false, 'no-encryption', 2, false)
+    this.database = await this.sqlite.createConnection(dbName, false, 'no-encryption', 2, false)
     await this.database.open()
 
     await this.database.execute(`
@@ -211,6 +216,24 @@ export class SQLiteImageGenerationStorage implements ImageGenerationStorage {
     const nextCursor = cursor + limit < total ? cursor + limit : null
 
     return { items, nextCursor, total }
+  }
+
+  async deleteDatabase(): Promise<void> {
+    const dbName = getAccountDBName(DB_NAME, this.accountKey)
+    try {
+      if (this.initPromise) {
+        await this.initPromise
+        await this.database.close()
+      }
+    } finally {
+      this.initPromise = null
+    }
+    try {
+      await this.sqlite.closeConnection(dbName, false)
+    } catch {
+      // The connection may already be closed or absent.
+    }
+    await CapacitorSQLite.deleteDatabase({ database: dbName, readonly: false })
   }
 
   async getTotal(): Promise<number> {

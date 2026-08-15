@@ -6,15 +6,24 @@ import { type FC, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { platformTypeAtom } from '@/hooks/useNeedRoomForWinControls'
 import { useWindowMaximized } from '@/hooks/useWindowMaximized'
+import { getOS } from '@/packages/navigator'
 import platform from '@/platform'
 import { ScalableIcon } from '../common/ScalableIcon'
 
-export const WindowControls: FC<FlexProps> = ({ className, ...otherProps }) => {
+type WindowControlsProps = FlexProps & {
+  forceVisible?: boolean
+}
+
+export const WindowControls: FC<WindowControlsProps> = ({ className, forceVisible = false, ...otherProps }) => {
   const { t } = useTranslation()
   const windowMaximized = useWindowMaximized()
   const platformType = useAtomValue(platformTypeAtom)
-  return platformType === 'win32' || platformType === 'linux' ? (
-    <Flex align="center" className={clsx('controls self-start', className)} {...otherProps}>
+  const os = getOS()
+  const isWindowsStyleDesktop =
+    (forceVisible && os === 'Linux') || platformType === 'linux' || (platform.type === 'desktop' && os === 'Linux')
+
+  return isWindowsStyleDesktop ? (
+    <Flex align="center" className={clsx('controls window-controls self-start', className)} {...otherProps}>
       <ControlButton label={t('Minimize') ?? ''} icon={IconMinus} onClick={() => platform.minimize()} />
       {!windowMaximized ? (
         <ControlButton label={t('Maximize') ?? ''} icon={IconSquare} onClick={() => platform.maximize()} />

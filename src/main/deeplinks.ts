@@ -1,30 +1,81 @@
+import { type TinpaySessionId, tinpaySessionIdSchema } from '@shared/tinpay'
 import type { BrowserWindow } from 'electron'
 import log from 'electron-log/main'
 
-export function handleDeepLink(mainWindow: BrowserWindow, link: string) {
-  const normalizedLink = link.replace(/^chatbox-dev:\/\//, 'chatbox://')
-  const url = new URL(normalizedLink)
+const MAX_DEEP_LINK_LENGTH = 4096
+const ALLOWED_SCHEMES = new Set(['kod:', 'kod-dev:'])
 
-  log.info('🔗 Parsed URL:', { hostname: url.hostname, pathname: url.pathname, params: url.searchParams.toString() })
+export type DeepLinkAction = { type: 'navigate'; path: string } | { type: 'tinpay-result'; sessionId: TinpaySessionId }
 
-  // handle `chatbox://mcp/install?server=`
-  if (url.hostname === 'mcp' && url.pathname === '/install') {
-    const encodedConfig = url.searchParams.get('server') || ''
-    mainWindow.webContents.send('navigate-to', `/settings/mcp?install=${encodeURIComponent(encodedConfig)}`)
+export function isKodDeepLink(value: string): boolean {
+  if (value.length === 0 || value.length > MAX_DEEP_LINK_LENGTH) return false
+  try {
+    return ALLOWED_SCHEMES.has(new URL(value).protocol)
+  } catch {
+    return false
+  }
+}
+
+export function findKodDeepLink(args: readonly string[]): string | undefined {
+  return args.find(isKodDeepLink)
+}
+
+export function parseDeepLink(link: string): DeepLinkAction | null {
+  if (!isKodDeepLink(link)) return null
+
+  try {
+    const url = new URL(link)
+    if (url.username || url.password || url.hash) return null
+
+    if (url.hostname === 'mcp' && url.pathname === '/install') {
+      if ([...url.searchParams.keys()].some((key) => key !== 'server')) return null
+      const encodedConfig = url.searchParams.get('server')
+      if (!encodedConfig || encodedConfig.length > 8192) return null
+      return { type: 'navigate', path: `/settings/mcp?install=${encodeURIComponent(encodedConfig)}` }
+    }
+
+    if (url.hostname === 'provider' && url.pathname === '/import') {
+      if ([...url.searchParams.keys()].some((key) => key !== 'config')) return null
+      const encodedConfig = url.searchParams.get('config')
+      if (!encodedConfig || encodedConfig.length > 8192) return null
+      return { type: 'navigate', path: `/settings/provider?import=${encodeURIComponent(encodedConfig)}` }
+    }
+
+    if (url.hostname === 'compute' && url.pathname === '/invite') {
+      if ([...url.searchParams.keys()].some((key) => key !== 'code')) return null
+      const code = url.searchParams.get('code')?.trim().toLowerCase()
+      if (!code?.match(/^[0-9a-f]{32}$/)) return null
+      return { type: 'navigate', path: `/compute-center?invite=${encodeURIComponent(code)}` }
+    }
+
+    if (url.hostname === 'tinpay' && url.pathname === '/result') {
+      if ([...url.searchParams.keys()].some((key) => !['sessionId', 'callbackState'].includes(key))) return null
+      const callbackState = url.searchParams.get('callbackState')
+      if (callbackState && callbackState.length > 2048) return null
+      const sessionId = tinpaySessionIdSchema.safeParse(url.searchParams.get('sessionId'))
+      if (!sessionId.success) return null
+      return { type: 'tinpay-result', sessionId: sessionId.data }
+    }
+  } catch {
+    return null
   }
 
-  // handle `chatbox://provider/import?config=`
-  if (url.hostname === 'provider' && url.pathname === '/import') {
-    const encodedConfig = url.searchParams.get('config') || ''
-    mainWindow.webContents.send('navigate-to', `/settings/provider?import=${encodeURIComponent(encodedConfig)}`)
+  return null
+}
+
+export function handleDeepLink(
+  mainWindow: BrowserWindow,
+  link: string,
+  handlers: { onTinpayResult?: (sessionId: TinpaySessionId) => void } = {}
+): boolean {
+  const action = parseDeepLink(link)
+  if (!action) {
+    log.warn('[DeepLink] Rejected malformed or unsupported link.')
+    return false
   }
 
-  // handle `chatbox://auth/callback?ticket_id=xxx&status=success`
-  // // 不需要，实际跳回到 app 后业务hooks useLogin 会处理后续动作
-  // if (url.hostname === 'auth' && url.pathname === '/callback') {
-  //   const ticketId = url.searchParams.get('ticket_id') || ''
-  //   const status = url.searchParams.get('status') || ''
-  //   log.info('✅ Auth callback received:', { ticketId, status })
-  //   mainWindow.webContents.send('navigate-to', `/settings/provider/kod-ai?ticket_id=${ticketId}&status=${status}`)
-  // }
+  log.info('[DeepLink] Accepted action.', { type: action.type })
+  if (action.type === 'navigate') mainWindow.webContents.send('navigate-to', action.path)
+  else handlers.onTinpayResult?.(action.sessionId)
+  return true
 }

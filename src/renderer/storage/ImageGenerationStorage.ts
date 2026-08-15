@@ -1,4 +1,5 @@
 import type { ImageGeneration, ImageGenerationPage } from '@shared/types'
+import { getAccountDBName } from './accountKey'
 
 const PAGE_SIZE = 20
 const DB_NAME = 'chatbox-image-generation'
@@ -12,6 +13,7 @@ export interface ImageGenerationStorage {
   delete(id: string): Promise<void>
   getPage(cursor: number, limit?: number): Promise<ImageGenerationPage>
   getTotal(): Promise<number>
+  deleteDatabase(): Promise<void>
 }
 
 /** In-memory fallback when IndexedDB is corrupted / unavailable (session-only). */
@@ -50,12 +52,21 @@ class MemoryImageGenerationStorage implements ImageGenerationStorage {
   async getTotal(): Promise<number> {
     return this.records.size
   }
+
+  async deleteDatabase(): Promise<void> {
+    this.records.clear()
+  }
 }
 
 export class IndexedDBImageGenerationStorage implements ImageGenerationStorage {
   private db: IDBDatabase | null = null
   private initPromise: Promise<void> | null = null
   private memoryFallback: MemoryImageGenerationStorage | null = null
+  private accountKey: string | undefined
+
+  constructor(accountKey?: string) {
+    this.accountKey = accountKey
+  }
 
   initialize(): Promise<void> {
     if (this.memoryFallback) {
@@ -99,7 +110,8 @@ export class IndexedDBImageGenerationStorage implements ImageGenerationStorage {
 
   private openDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 1)
+      const dbName = getAccountDBName(DB_NAME, this.accountKey)
+      const request = indexedDB.open(dbName, 1)
 
       request.onerror = () => reject(request.error || new Error('Failed to open IndexedDB'))
 
@@ -127,13 +139,14 @@ export class IndexedDBImageGenerationStorage implements ImageGenerationStorage {
     })
   }
 
-  private deleteDatabase(): Promise<void> {
+  deleteDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.db) {
         this.db.close()
         this.db = null
       }
-      const request = indexedDB.deleteDatabase(DB_NAME)
+      const dbName = getAccountDBName(DB_NAME, this.accountKey)
+      const request = indexedDB.deleteDatabase(dbName)
       request.onsuccess = () => resolve()
       request.onerror = () => reject(request.error || new Error('Failed to delete IndexedDB'))
       // Another connection may briefly block; treat as soft success and retry open

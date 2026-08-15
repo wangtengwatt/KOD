@@ -128,7 +128,14 @@ export async function orchestrateGeneration(
 
   try {
     const dependencies = await createModelDependencies()
-    const model = await createModel(settings, dependencies)
+    const requiresVision = messages
+      .slice(0, targetMsgIx)
+      .some((message) => message.contentParts.some((part) => part.type === 'image' && !part.ocrResult))
+    const model = await createModel(
+      settings,
+      dependencies,
+      requiresVision ? { capability: 'vision', label: '图片理解' } : undefined
+    )
     const sessionKnowledgeBaseMap = uiStore.getState().sessionKnowledgeBaseMap
     const knowledgeBase = sessionKnowledgeBaseMap[sessionId]
     const webBrowsing = getSessionWebBrowsing(sessionId, settings.provider)

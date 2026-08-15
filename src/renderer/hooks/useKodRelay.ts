@@ -25,7 +25,7 @@ import { getKodApiOrigin } from '@/packages/remote'
 import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
 import { settingsStore } from '@/stores/settingsStore'
 
-export type KodRelayNotice = 'conflict' | 'balance' | 'unavailable' | null
+export type KodRelayNotice = 'conflict' | 'balance' | 'package' | 'unavailable' | null
 
 export interface KodRelayRecommendation {
   requirement: KodRelayModelRequirement

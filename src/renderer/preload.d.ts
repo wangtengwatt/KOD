@@ -1,4 +1,4 @@
-import { ElectronIPC } from '../shared/electron-types'
+import type { ElectronIPC } from '../shared/electron-types'
 
 declare global {
   // eslint-disable-next-line no-unused-vars

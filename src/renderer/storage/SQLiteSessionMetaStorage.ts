@@ -5,6 +5,7 @@ import {
   type SQLiteDBConnection,
 } from '@capacitor-community/sqlite'
 import type { SessionMetaPage, SessionMetaRecord } from '@shared/types'
+import { getAccountDBName } from './accountKey'
 import { type SessionMetaStorage, sortSessionRecords } from './SessionMetaStorage'
 
 const DB_NAME = 'chatbox-session-meta'
@@ -39,8 +40,10 @@ export class SQLiteSessionMetaStorage implements SessionMetaStorage {
   private sqlite: SQLiteConnection
   private database!: SQLiteDBConnection
   private initPromise: Promise<void> | null = null
+  private accountKey: string | undefined
 
-  constructor() {
+  constructor(accountKey?: string) {
+    this.accountKey = accountKey
     this.sqlite = new SQLiteConnection(CapacitorSQLite)
   }
 
@@ -53,13 +56,14 @@ export class SQLiteSessionMetaStorage implements SessionMetaStorage {
   }
 
   private async openDatabase(): Promise<void> {
+    const dbName = getAccountDBName(DB_NAME, this.accountKey)
     try {
-      this.sqlite.closeConnection(DB_NAME, false)
+      this.sqlite.closeConnection(dbName, false)
     } catch {
       // ignore - connection may not exist
     }
 
-    this.database = await this.sqlite.createConnection(DB_NAME, false, 'no-encryption', 1, false)
+    this.database = await this.sqlite.createConnection(dbName, false, 'no-encryption', 1, false)
     await this.database.open()
 
     await this.database.execute(`
@@ -244,5 +248,19 @@ export class SQLiteSessionMetaStorage implements SessionMetaStorage {
   async clear(): Promise<void> {
     await this.initialize()
     await this.database.run('DELETE FROM session_meta')
+  }
+
+  async deleteDatabase(): Promise<void> {
+    try {
+      if (this.database) {
+        await this.database.close()
+      }
+    } catch {
+      // ignore close errors
+    }
+    this.initPromise = null
+    // For SQLite via Capacitor, we rely on clear() to remove data
+    // and resetMetaStorage() to drop the in-memory handle.
+    // The physical database file is reused with the same name.
   }
 }

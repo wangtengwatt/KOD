@@ -49,14 +49,8 @@ export function RelayStationSelector({
   const keysRequest = useRef(0)
   const wasSelecting = useRef(false)
 
-  useEffect(() => {
-    setPendingStationId(selectedStationId || null)
-  }, [selectedStationId])
-
-  useEffect(() => {
-    setPendingKeyId(selectedApiKeyId || null)
-  }, [selectedApiKeyId])
-
+  useEffect(() => setPendingStationId(selectedStationId || null), [selectedStationId])
+  useEffect(() => setPendingKeyId(selectedApiKeyId || null), [selectedApiKeyId])
   useEffect(() => {
     if (wasSelecting.current && !loading) {
       setPendingStationId(selectedStationId || null)
@@ -74,7 +68,7 @@ export function RelayStationSelector({
         try {
           localStorage.setItem(KOD_STATIONS_STORAGE_KEY, JSON.stringify(items))
         } catch {
-          // Keep the fetched list in memory when storage is unavailable.
+          // The selector still works when local storage is unavailable.
         }
       })
       .catch((error) => {
@@ -98,9 +92,10 @@ export function RelayStationSelector({
     void listKodRelayKeys(apiBaseUrl, pendingStationId, controller.signal)
       .then((items) => {
         if (request !== keysRequest.current) return
-        const indexes = new Map([...items].sort((a, b) => a.id - b.id).map((item, index) => [item.id, index + 1]))
+        const sorted = [...items].sort((a, b) => a.id - b.id)
+        const indexes = new Map(sorted.map((item, index) => [item.id, index + 1]))
         setKeys(
-          [...items]
+          sorted
             .sort((a, b) => a.status - b.status || a.id - b.id)
             .map((item) => ({ ...item, displayIndex: indexes.get(item.id) || 0 }))
         )

@@ -25,20 +25,34 @@ const log = getLogger('index')
 // 按需加载 polyfill
 import './setup/load_polyfill'
 
-// Sentry 初始化
-import './setup/sentry_init'
-
-// 全局错误处理
+// 全局错误处理（始终加载）
 import './setup/global_error_handler'
 
-// GA4 初始化
-import './setup/ga_init'
+// API origin 初始化（必须在任何 API 调用之前）
+import './setup/api_origin_init'
 
-// Plausible 初始化
-import './setup/plausible_init'
+// KOD opt: Skip analytics and Sentry in dev to save ~100MB memory
+const isDev = process.env.NODE_ENV === 'development'
 
-// jk analytics 初始化
-import './setup/jk_analytics_init'
+// Sentry 初始化（仅生产环境）
+if (!isDev) {
+  import('./setup/sentry_init')
+}
+
+// GA4 初始化（仅生产环境）
+if (!isDev) {
+  import('./setup/ga_init')
+}
+
+// Plausible 初始化（仅生产环境）
+if (!isDev) {
+  import('./setup/plausible_init')
+}
+
+// jk analytics 初始化（仅生产环境）
+if (!isDev) {
+  import('./setup/jk_analytics_init')
+}
 
 // 引入保护代码
 import './setup/protect'

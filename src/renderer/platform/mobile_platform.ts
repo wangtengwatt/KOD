@@ -1,4 +1,4 @@
-import { App } from '@capacitor/app'
+﻿import { App } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Device } from '@capacitor/device'
 import * as defaults from '@shared/defaults'
@@ -19,6 +19,8 @@ import MobileExporter from './mobile_exporter'
 import mobileLogger from './mobile_logger'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
 import { MobileSQLiteStorage } from './storages'
+import type { SuanbaoPlatformController } from './suanbao/interface'
+import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
 import { parseTextFileLocally } from './web_platform_utils'
 
 export default class MobilePlatform extends MobileSQLiteStorage implements Platform {
@@ -30,35 +32,58 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
   private _imageGenerationStorage: ImageGenerationStorage | null = null
   private _taskSessionStorage: TaskSessionStorage | null = null
   private _sessionMetaStorage: SessionMetaStorage | null = null
+  private _currentAccountKey: string | null = null
+  private _currentImageGenAccountKey: string | null = null
 
   constructor() {
     super()
     mobileLogger.init().catch((e) => console.error('Failed to init mobile logger:', e))
-    // 监听深度链接 (Deep Links)
+    // Listen for both the custom KOD scheme and verified HTTPS app links.
     App.addListener('appUrlOpen', (event) => {
       console.debug('App URL opened:', event.url)
       this.handleDeepLink(event.url)
     })
   }
 
-  // 处理深度链接
   private handleDeepLink(url: string): void {
     try {
-      // 支持 chatbox:// 和 chatbox-dev:// 两种协议（归一化处理）
-      const normalizedUrl = url.replace(/^chatbox-dev:\/\//, 'chatbox://')
+      const normalizedUrl = url.replace(/^kod-dev:\/\//, 'kod://')
       const parsedUrl = new URL(normalizedUrl)
+      const isKodScheme = parsedUrl.protocol === 'kod:'
+      const isKodWebLink = parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'kod.kai.com'
 
-      // 处理 provider 导入链接: chatbox://provider/import?config=<base64-encoded-config>
-      if (parsedUrl.hostname === 'provider' && parsedUrl.pathname === '/import') {
+      if (!isKodScheme && !isKodWebLink) {
+        console.warn('Rejected non-KOD deep link:', url)
+        return
+      }
+
+      const host = isKodScheme ? parsedUrl.hostname : parsedUrl.pathname.split('/').filter(Boolean)[0]
+      const pathname = isKodScheme
+        ? parsedUrl.pathname
+        : `/${parsedUrl.pathname.split('/').filter(Boolean).slice(1).join('/')}`
+
+      if (host === 'provider' && pathname === '/import') {
         const encodedConfig = parsedUrl.searchParams.get('config') || ''
         const path = `/settings/provider?import=${encodeURIComponent(encodedConfig)}`
         this.triggerNavigation(path)
         return
       }
 
-      // 处理 auth 回调链接: chatbox://auth/callback?ticket_id=xxx&status=success
-      if (parsedUrl.hostname === 'auth' && parsedUrl.pathname === '/callback') {
-        // 不需要，实际跳回到 app 后业务hooks useLogin 会处理后续动作
+      if (host === 'mcp' && pathname === '/install') {
+        const server = parsedUrl.searchParams.get('server') || ''
+        this.triggerNavigation(`/settings/mcp?install=${encodeURIComponent(server)}`)
+        return
+      }
+
+      if (host === 'compute' && pathname === '/invite') {
+        const code = parsedUrl.searchParams.get('code')?.trim().toLowerCase() || ''
+        if (/^[0-9a-f]{32}$/.test(code)) this.triggerNavigation(`/compute-center?invite=${encodeURIComponent(code)}`)
+        return
+      }
+
+      if (host === 'auth' && pathname === '/callback') {
+        // The login hook completes authentication after the application becomes active.
+        return
       }
 
       console.warn('Unhandled deep link:', url)
@@ -103,14 +128,25 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
     }
   }
   public onWindowShow(callback: () => void): () => void {
-    return () => null
+    return this.onWindowFocused(callback)
   }
   public onWindowFocused(callback: () => void): () => void {
-    return () => null
+    let active = true
+    const handle = App.addListener('appStateChange', ({ isActive }) => {
+      if (active && isActive) callback()
+    })
+    return () => {
+      active = false
+      void handle.then((listener) => listener.remove())
+    }
   }
   public onUpdateDownloaded(callback: () => void): () => void {
     return () => null
   }
+  public async openPaymentUrl(url: string): Promise<void> {
+    await this.openLink(url)
+  }
+
   public async openLink(url: string): Promise<void> {
     try {
       // 使用 Browser.open 打开
@@ -281,23 +317,33 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
     throw new Error('Session attachment RAG is not implemented on mobile.')
   }
 
-  public getImageGenerationStorage(): ImageGenerationStorage {
-    if (!this._imageGenerationStorage) {
-      this._imageGenerationStorage = new SQLiteImageGenerationStorage()
+  public getSuanbaoController(): SuanbaoPlatformController {
+    return new UnsupportedSuanbaoPlatformController('Desktop overlay is unavailable in the mobile client')
+  }
+
+  public getImageGenerationStorage(accountKey?: string): ImageGenerationStorage {
+    const key = accountKey ?? null
+    if (key !== this._currentImageGenAccountKey || !this._imageGenerationStorage) {
+      this._currentImageGenAccountKey = key
+      this._imageGenerationStorage = new SQLiteImageGenerationStorage(accountKey)
     }
     return this._imageGenerationStorage
   }
 
-  public getTaskSessionStorage(): TaskSessionStorage {
-    if (!this._taskSessionStorage) {
-      this._taskSessionStorage = new IndexedDBTaskSessionStorage()
+  public getTaskSessionStorage(accountKey?: string): TaskSessionStorage {
+    const key = accountKey ?? null
+    if (key !== this._currentAccountKey || !this._taskSessionStorage) {
+      this._currentAccountKey = key
+      this._taskSessionStorage = new IndexedDBTaskSessionStorage(accountKey)
     }
     return this._taskSessionStorage
   }
 
-  public getSessionMetaStorage(): SessionMetaStorage {
-    if (!this._sessionMetaStorage) {
-      this._sessionMetaStorage = new SQLiteSessionMetaStorage()
+  public getSessionMetaStorage(accountKey?: string): SessionMetaStorage {
+    const key = accountKey ?? null
+    if (key !== this._currentAccountKey || !this._sessionMetaStorage) {
+      this._currentAccountKey = key
+      this._sessionMetaStorage = new SQLiteSessionMetaStorage(accountKey)
     }
     return this._sessionMetaStorage
   }

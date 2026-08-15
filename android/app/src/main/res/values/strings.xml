@@ -1,8 +1,8 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Kod</string>
-    <string name="title_activity_main">Kod</string>
+    <string name="app_name">KOD</string>
+    <string name="title_activity_main">KOD</string>
     <string name="package_name">com.kod.app</string>
-    <string name="custom_url_scheme">com.kod.app</string>
-    <string name="accessibility_service_description">允许 KOD 在用户授权的任务中控制微信和 QQ。支付、密码和验证码操作始终被禁止。</string>
+    <string name="custom_url_scheme">kod</string>
+    <string name="accessibility_service_description">允许 KOD 在用户明确授权的任务中控制微信和 QQ。支付、密码和验证码操作始终被禁止。</string>
 </resources>

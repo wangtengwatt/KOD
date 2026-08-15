@@ -32,6 +32,13 @@ function writeMigrationDebugFile(debugPath: string, state: MigrationDebugState) 
 }
 
 function migrateLegacyKnowledgeBaseDatabase() {
+  // Guard: app may not be available during very early module initialization in some Electron versions.
+  // The migration is safe to skip when app is not ready — it only moves legacy database files.
+  if (!app || !app.getPath) {
+    log.warn('[DB] Skipping legacy KB migration: electron.app not yet available')
+    return
+  }
+
   const userDataPath = app.getPath('userData')
   const legacyDbPath = path.join(userDataPath, 'databases', 'chatbox_kb.db')
   const targetDbPath = path.join(userDataPath, 'chatbox-databases', 'chatbox_kb.db')

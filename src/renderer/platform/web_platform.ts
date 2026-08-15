@@ -1,4 +1,4 @@
-import * as defaults from '@shared/defaults'
+﻿import * as defaults from '@shared/defaults'
 import type { Config, Settings, ShortcutSetting } from '@shared/types'
 import localforage from 'localforage'
 import { v4 as uuidv4 } from 'uuid'
@@ -10,6 +10,8 @@ import { getBrowser, getOS } from '../packages/navigator'
 import type { Platform, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
+import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
+import type { SuanbaoPlatformController } from './suanbao/interface'
 import { IndexedDBStorage } from './storages'
 import WebExporter from './web_exporter'
 import webLogger from './web_logger'
@@ -23,6 +25,8 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
   private imageGenerationStorage: ImageGenerationStorage | null = null
   private taskSessionStorage: TaskSessionStorage | null = null
   private sessionMetaStorage: SessionMetaStorage | null = null
+  private currentAccountKey: string | null = null
+  private currentImageGenAccountKey: string | null = null
 
   constructor() {
     super()
@@ -56,6 +60,10 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
   public onUpdateDownloaded(callback: () => void): () => void {
     return () => null
   }
+  public async openPaymentUrl(url: string): Promise<void> {
+    throw new Error('安全支付链接仅支持桌面客户端')
+  }
+
   public async openLink(url: string): Promise<void> {
     window.open(url)
   }
@@ -192,23 +200,33 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
     throw new Error('Session attachment RAG is not implemented on web.')
   }
 
-  public getImageGenerationStorage(): ImageGenerationStorage {
-    if (!this.imageGenerationStorage) {
-      this.imageGenerationStorage = new IndexedDBImageGenerationStorage()
+  public getSuanbaoController(): SuanbaoPlatformController {
+    return new UnsupportedSuanbaoPlatformController('Desktop overlay is unavailable in the web client')
+  }
+
+  public getImageGenerationStorage(accountKey?: string): ImageGenerationStorage {
+    const key = accountKey ?? null
+    if (key !== this.currentImageGenAccountKey || !this.imageGenerationStorage) {
+      this.currentImageGenAccountKey = key
+      this.imageGenerationStorage = new IndexedDBImageGenerationStorage(accountKey)
     }
     return this.imageGenerationStorage
   }
 
-  public getTaskSessionStorage(): TaskSessionStorage {
-    if (!this.taskSessionStorage) {
-      this.taskSessionStorage = new IndexedDBTaskSessionStorage()
+  public getTaskSessionStorage(accountKey?: string): TaskSessionStorage {
+    const key = accountKey ?? null
+    if (key !== this.currentAccountKey || !this.taskSessionStorage) {
+      this.currentAccountKey = key
+      this.taskSessionStorage = new IndexedDBTaskSessionStorage(accountKey)
     }
     return this.taskSessionStorage
   }
 
-  public getSessionMetaStorage(): SessionMetaStorage {
-    if (!this.sessionMetaStorage) {
-      this.sessionMetaStorage = new IndexedDBSessionMetaStorage()
+  public getSessionMetaStorage(accountKey?: string): SessionMetaStorage {
+    const key = accountKey ?? null
+    if (key !== this.currentAccountKey || !this.sessionMetaStorage) {
+      this.currentAccountKey = key
+      this.sessionMetaStorage = new IndexedDBSessionMetaStorage(accountKey)
     }
     return this.sessionMetaStorage
   }

@@ -57,7 +57,7 @@ type MigrateStore = {
   setBlob?: (key: string, value: string) => Promise<void>
 }
 
-export const CurrentVersion = 15
+export const CurrentVersion = 16
 
 async function doMigrateStorage(oldStorage: Storage) {
   // 找到老版本的数据，说明是升级，执行数据迁移操作
@@ -202,6 +202,7 @@ export async function migrateOnData(dataStore: MigrateStore, canRelaunch = true)
     migrate_12_to_13,
     migrate_13_to_14,
     migrate_14_to_15,
+    migrate_15_to_16,
   ]
 
   for (; configVersion < CurrentVersion; configVersion++) {
@@ -819,5 +820,20 @@ async function migrate_14_to_15(dataStore: MigrateStore) {
   await sessionMetaStorage.createMany(records)
 
   log.info(`migrate_14_to_15, migrated ${records.length} session meta records to DB`)
+  return false
+}
+
+async function migrate_15_to_16(dataStore: MigrateStore) {
+  // 蒜宝（suanbao）A 区偏好上云前补齐：旧用户无 suanbao 字段时合并默认值写回（幂等）。
+  // 设置走文件存储（desktop 端 doMigrateStorage 已排除 settings/configs/configVersion），故在此补字段。
+  const settings = await dataStore.getData(StorageKey.Settings, defaults.settings())
+  if (!settings.suanbao) {
+    const { suanbao } = defaults.settings()
+    await dataStore.setData(StorageKey.Settings, {
+      ...settings,
+      suanbao,
+    })
+    log.info('migrate_15_to_16, backfilled suanbao preferences')
+  }
   return false
 }

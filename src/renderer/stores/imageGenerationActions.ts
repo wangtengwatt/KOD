@@ -1,7 +1,6 @@
 import { BaseError } from '@shared/models/errors'
-import { getModel } from '@shared/providers'
 import type { ImageGeneration, ImageGenerationModel } from '@shared/types'
-import { createModelDependencies } from '@/adapters'
+import { createModel, createModelDependencies } from '@/adapters'
 import { getLogger } from '@/lib/utils'
 import {
   type ImageGenerationTaskResponse,
@@ -255,13 +254,11 @@ async function generateImagesDirect(recordId: string, params: GenerateImageParam
 
     // Build model instance via provider registry
     const dependencies = await createModelDependencies()
-    const globalSettings = settingsStore.getState().getSettings()
-    const configs = await platform.getConfig()
     const sessionSettings = {
       provider: params.model.provider,
       modelId: params.model.modelId,
     }
-    const model = getModel(sessionSettings, globalSettings, configs, dependencies)
+    const model = await createModel(sessionSettings, dependencies, { type: 'image', label: '图片生成' })
 
     // Prepare reference images: storage keys → base64 data URLs
     const images: { imageUrl: string }[] = []

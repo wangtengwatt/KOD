@@ -113,6 +113,9 @@ build-web.sh
 # misc
 .DS_Store
 *.pem
+*.jks
+*.keystore
+signing.properties
 
 # debug
 npm-debug.log*

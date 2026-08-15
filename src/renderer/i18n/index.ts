@@ -65,7 +65,8 @@ i18n.use(initReactI18next).init({
       translation: nbNO,
     },
   },
-  fallbackLng: 'en',
+  lng: 'zh-Hans',
+  fallbackLng: 'zh-Hans',
 
   interpolation: {
     escapeValue: false,

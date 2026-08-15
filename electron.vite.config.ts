@@ -32,7 +32,8 @@ export function injectReleaseDate(): Plugin {
   const releaseDate = new Date().toISOString().slice(0, 10)
   return {
     name: 'inject-release-date',
-    transformIndexHtml() {
+    transformIndexHtml(_html, context) {
+      if (context.path.endsWith('/suanbao-window/index.html')) return []
       return [
         {
           tag: 'script',
@@ -70,6 +71,22 @@ export function injectViewportContent(isDesktop: boolean): Plugin {
     name: 'inject-viewport-content',
     transformIndexHtml(html) {
       return html.replace('%VIEWPORT_CONTENT%', content)
+    },
+  }
+}
+
+/** Keep the isolated Suanbao renderer strict in production while allowing Vite HMR in development. */
+export function injectSuanbaoContentSecurityPolicy(isProduction: boolean): Plugin {
+  const productionPolicy =
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+  const developmentPolicy =
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+
+  return {
+    name: 'inject-suanbao-content-security-policy',
+    transformIndexHtml(html, context) {
+      if (!context.path.endsWith('/suanbao-window/index.html')) return html
+      return html.replace('%SUANBAO_CONTENT_SECURITY_POLICY%', isProduction ? productionPolicy : developmentPolicy)
     },
   }
 }
@@ -141,7 +158,7 @@ export default defineConfig(({ mode }) => {
         lib: {
           entry: resolve(__dirname, 'src/main/main.ts'),
         },
-        sourcemap: isProduction ? 'hidden' : true,
+        sourcemap: isProduction ? 'hidden' : false, // KOD opt: disable sourcemaps in dev to save ~40% memory
         minify: isProduction,
         rollupOptions: {
           external: Object.keys(packageJson.dependencies || {}),
@@ -169,6 +186,10 @@ export default defineConfig(({ mode }) => {
         'process.env.USE_NEWDB_API': JSON.stringify(process.env.USE_NEWDB_API || ''),
         'process.env.USE_LOCAL_CHATBOX': JSON.stringify(process.env.USE_LOCAL_CHATBOX || ''),
         'process.env.USE_BETA_CHATBOX': JSON.stringify(process.env.USE_BETA_CHATBOX || ''),
+        'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
+        'process.env.KOD_PAYMENT_HOSTS': JSON.stringify(process.env.KOD_PAYMENT_HOSTS || 'kod.kai.com,mzf.mapay.cc'),
+        'process.env.KOD_VIDEO_API_HOST': JSON.stringify(process.env.KOD_VIDEO_API_HOST || ''),
+        'process.env.KOD_VIDEO_API_KEY': JSON.stringify(process.env.KOD_VIDEO_API_KEY || ''),
       },
     },
     preload: {
@@ -182,9 +203,13 @@ export default defineConfig(({ mode }) => {
       build: {
         outDir: isProduction ? 'release/app/dist/preload' : undefined,
         lib: {
-          entry: resolve(__dirname, 'src/preload/index.ts'),
+          entry: {
+            index: resolve(__dirname, 'src/preload/index.ts'),
+            suanbao: resolve(__dirname, 'src/preload/suanbao.ts'),
+            tinpay: resolve(__dirname, 'src/preload/tinpay.ts'),
+          },
         },
-        sourcemap: isProduction ? 'hidden' : true,
+        sourcemap: isProduction ? 'hidden' : false, // KOD opt: disable sourcemaps in dev to save ~40% memory
         minify: isProduction,
       },
       resolve: {
@@ -212,6 +237,7 @@ export default defineConfig(({ mode }) => {
         react({}),
         dvhToVh(),
         injectViewportContent(isDesktop),
+        injectSuanbaoContentSecurityPolicy(isProduction),
         isWeb ? injectBaseTag() : undefined,
         injectReleaseDate(),
         isWeb ? replacePlausibleDomain() : undefined,
@@ -240,9 +266,15 @@ export default defineConfig(({ mode }) => {
       build: {
         outDir: isProduction ? 'release/app/dist/renderer' : undefined,
         target: 'es2020', // Avoid static initialization blocks for browser compatibility
-        sourcemap: isProduction ? 'hidden' : true,
+        sourcemap: isProduction ? 'hidden' : false, // KOD opt: disable sourcemaps in dev to save ~40% memory
         minify: isProduction ? 'esbuild' : false, // Use esbuild for faster, less memory-intensive minification
         rollupOptions: {
+          input: isDesktop
+            ? {
+                index: resolve(__dirname, 'src/renderer/index.html'),
+                suanbao: resolve(__dirname, 'src/renderer/suanbao-window/index.html'),
+              }
+            : resolve(__dirname, 'src/renderer/index.html'),
           output: {
             entryFileNames: 'js/[name].[hash].js',
             chunkFileNames: 'js/[name].[hash].js',
@@ -291,6 +323,13 @@ export default defineConfig(({ mode }) => {
       },
       server: {
         port: Number(process.env.DEV_PORT) || 1212,
+        // KOD opt: reduce file system watcher overhead on Windows (saves ~100MB)
+        watch: {
+          ignored: ['**/node_modules/**', '**/.git/**', '**/release/**', '**/out/**', '**/dist/**'],
+        },
+        fs: {
+          strict: false, // Allow serving files outside of the root
+        },
       },
       define: {
         'process.type': '"renderer"',
@@ -303,10 +342,15 @@ export default defineConfig(({ mode }) => {
         'process.env.USE_NEWDB_API': JSON.stringify(process.env.USE_NEWDB_API || ''),
         'process.env.USE_LOCAL_CHATBOX': JSON.stringify(process.env.USE_LOCAL_CHATBOX || ''),
         'process.env.USE_BETA_CHATBOX': JSON.stringify(process.env.USE_BETA_CHATBOX || ''),
+        'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
+        'process.env.KOD_PAYMENT_HOSTS': JSON.stringify(process.env.KOD_PAYMENT_HOSTS || 'kod.kai.com,mzf.mapay.cc'),
+        'process.env.KOD_VIDEO_API_HOST': JSON.stringify(process.env.KOD_VIDEO_API_HOST || ''),
+        'process.env.KOD_VIDEO_API_KEY': JSON.stringify(process.env.KOD_VIDEO_API_KEY || ''),
       },
       optimizeDeps: {
-        // Avoid forcing a fresh dep optimization on every dev startup.
-        // Large prebundles can overwhelm local Windows environments; opt in when needed.
+        // KOD opt: disabled force to allow Vite dependency cache (saves ~200MB on repeated dev starts).
+        // Opt in via env when needed: VITE_FORCE_DEP_OPTIMIZE=true (or --force on the CLI).
+        // If MUI breaks after dependency changes, run: pnpm exec electron-vite dev --force
         force: process.env.VITE_FORCE_DEP_OPTIMIZE === 'true',
         include: ['mermaid'],
         esbuildOptions: {

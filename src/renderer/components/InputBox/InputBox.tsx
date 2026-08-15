@@ -85,6 +85,7 @@ import {
   type KnowledgeBase,
   type Message,
   ModelProviderEnum,
+  type ProviderModelInfo,
   type SessionAttachment,
   type SessionAttachmentIndexingStage,
   type SessionType,
@@ -137,6 +138,7 @@ export type InputBoxProps = {
     modelId: string
   }
   fullWidth?: boolean
+  modelFilter?: (model: ProviderModelInfo, providerId?: string) => boolean
   onSelectModel?(provider: string, model: string): void
   onSubmit?(payload: InputBoxPayload): Promise<void>
   onStopGenerating?(): boolean
@@ -223,6 +225,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       generating = false,
       model,
       fullWidth = false,
+      modelFilter,
       onSelectModel,
       onSubmit,
       onStopGenerating,
@@ -1760,6 +1763,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       onSelect={onSelectModel}
                       selectedProviderId={model?.provider}
                       selectedModelId={model?.modelId}
+                      modelFilter={modelFilter}
                       position="top-end"
                       transitionProps={{
                         transition: 'fade-up',

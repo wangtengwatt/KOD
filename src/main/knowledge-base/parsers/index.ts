@@ -21,7 +21,8 @@ export function createParser(config: DocumentParserConfig, kbId?: number): Docum
     case 'local':
       return new LocalParser(kbId)
     case 'chatbox-ai':
-      // Preserve legacy configs, but route them through the local parser.
+      // KOD: 去云化 — 旧 chatbox-ai 配置路由到 ChatboxParser（其内部已降级为本地解析）。
+      log.warn(`[PARSER] Chatbox AI parser redirected to local parser (KOD de-cloud)`)
       return new ChatboxParser(kbId)
     case 'mineru':
       if (!config.mineru?.apiToken) {

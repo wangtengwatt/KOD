@@ -79,6 +79,7 @@ vi.mock('./sentry', () => {
 import { getModel } from '@shared/models'
 import type { SessionSettings } from '@shared/types'
 import { createModel } from '@/adapters'
+import { kodRelayStore } from '@/hooks/useKodRelay'
 import platform from '@/platform'
 
 function createTestSettings(overrides: SessionSettings = {}): SessionSettings {
@@ -101,6 +102,7 @@ function getFirstGetModelCall() {
 describe('createModel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    kodRelayStore.setState({ selection: null, models: [], fallback: null, recommendation: null })
   })
 
   it('passes settings through to getModel', async () => {
@@ -111,6 +113,33 @@ describe('createModel', () => {
     expect(getModel).toHaveBeenCalledWith(settings, expect.any(Object), expect.any(Object), expect.any(Object))
     const callArgs = getFirstGetModelCall()
     expect(callArgs[0]).toBe(settings)
+  })
+
+  it('dynamically routes model creation through the active relay without rewriting session settings', async () => {
+    const settings = createTestSettings()
+    kodRelayStore.setState({
+      selection: {
+        stationId: 1,
+        stationUrl: 'https://relay.example/v1',
+        apiKeyId: 2,
+        apiKey: 'sk-relay',
+        modelId: 'relay-model',
+      },
+      models: [{ modelId: 'relay-model' }],
+    })
+
+    await createModel(settings)
+
+    const callArgs = getFirstGetModelCall()
+    expect(callArgs[0]).toMatchObject({ provider: '__kod_relay_station__', modelId: 'relay-model' })
+    expect(settings).toEqual(createTestSettings())
+  })
+
+  it('uses the system default instead of passing an empty provider to Suanbao-style callers', async () => {
+    await createModel({})
+
+    const callArgs = getFirstGetModelCall()
+    expect(callArgs[0]).toMatchObject({ provider: 'chatbox-ai', modelId: 'chatboxai-4' })
   })
 
   it('gets globalSettings from settingsStore', async () => {

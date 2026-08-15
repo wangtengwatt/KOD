@@ -14,18 +14,29 @@ import './legacy-database-migration'
  */
 
 import fs from 'node:fs'
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, nativeTheme, session, shell, Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  nativeTheme,
+  safeStorage,
+  session,
+  shell,
+  Tray,
+} from 'electron'
 import electronDebug from 'electron-debug'
 import log from 'electron-log/main'
 import os from 'os'
 import path from 'path'
-// @ts-expect-error - source-map-support doesn't have type definitions
-import * as sourceMapSupport from 'source-map-support'
+import { assertPaymentUrl, parsePaymentHosts } from 'src/shared/payment-url'
 import type { ShortcutSetting } from 'src/shared/types'
 import * as analystic from './analystic-node'
 import { AppUpdater } from './app-updater'
 import * as autoLauncher from './autoLauncher'
-import { handleDeepLink } from './deeplinks'
+import { findKodDeepLink, handleDeepLink } from './deeplinks'
 import { parseFile } from './file-parser'
 import Locale from './locales'
 import * as mcpIpc from './mcp/ipc-stdio-transport'
@@ -43,13 +54,24 @@ import {
   setStoreBlob,
   store,
 } from './store-node'
+import { createSuanbaoDesktopModule, type SuanbaoDesktopModule } from './suanbao'
+import { createSuanbaoTrayItems } from './suanbao/tray'
+import { createTinpayDesktopModule, type TinpayDesktopModule } from './tinpay'
 import * as windowState from './window_state'
 
-const knowledgeBaseInitPromise = import('./knowledge-base/index.js')
-  .then((mod) => mod.getInitPromise())
-  .catch((error) => {
-    log.error('[KB] Failed to initialize knowledge base during bootstrap:', error)
-  })
+// KOD opt: Knowledge base initialized lazily on first use (saves ~300MB at startup).
+// The init promise is kept so existing callers awaiting it still work correctly.
+let _kbInitPromise: Promise<void> | null = null
+const knowledgeBaseInitPromise = (() => {
+  if (!_kbInitPromise) {
+    _kbInitPromise = import('./knowledge-base/index.js')
+      .then((mod) => mod.getInitPromise())
+      .catch((error) => {
+        log.error('[KB] Failed to initialize knowledge base during bootstrap:', error)
+      })
+  }
+  return _kbInitPromise
+})()
 
 const TRUTHY_ENV_VALUES = new Set(['1', 'true', 'yes', 'on'])
 
@@ -97,8 +119,9 @@ function getRuntimeFlags(): RuntimeFlags {
   const useSoftwareRenderingByDefault = process.platform === 'win32' && !app.isPackaged
 
   return {
-    disableGpu:
-      forceGpu ? false : forceDisableGpu || isCI || isContainer || !hasDisplayServer || useSoftwareRenderingByDefault,
+    disableGpu: forceGpu
+      ? false
+      : forceDisableGpu || isCI || isContainer || !hasDisplayServer || useSoftwareRenderingByDefault,
     disableDevShmUsage: isCI || isContainer,
   }
 }
@@ -133,8 +156,7 @@ const getAssetPath = (...paths: string[]): string => {
   return path.join(RESOURCES_PATH, ...paths)
 }
 
-// 开发环境使用 chatbox-dev:// 协议，避免和正式版冲突
-const PROTOCOL_SCHEME = process.defaultApp ? 'chatbox-dev' : 'chatbox'
+const PROTOCOL_SCHEME = process.defaultApp ? 'kod-dev' : 'kod'
 
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
@@ -150,6 +172,24 @@ log.info(`📱 URL Scheme registered: ${PROTOCOL_SCHEME}://`)
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+let suanbaoModule: SuanbaoDesktopModule | null = null
+let tinpayModule: TinpayDesktopModule | null = null
+const suanbaoBoundMainWindows = new WeakSet<BrowserWindow>()
+
+function syncSuanbaoFloatingVisibility() {
+  void suanbaoModule?.windowManager.syncFloatingVisibility()
+}
+
+function attachSuanbaoMainWindowListeners(win: BrowserWindow) {
+  if (suanbaoBoundMainWindows.has(win)) return
+  suanbaoBoundMainWindows.add(win)
+  win.on('show', syncSuanbaoFloatingVisibility)
+  win.on('hide', syncSuanbaoFloatingVisibility)
+  win.on('minimize', syncSuanbaoFloatingVisibility)
+  win.on('restore', syncSuanbaoFloatingVisibility)
+}
+
+let isQuitting = false
 
 // --------- 快捷键 ---------
 
@@ -249,13 +289,22 @@ function createTray() {
       click: showOrHideWindow,
       accelerator: getSettings().shortcuts.quickToggle,
     },
+    ...(suanbaoModule
+      ? createSuanbaoTrayItems(suanbaoModule.windowManager, {
+          toggle: locale.t('Show/Hide Suanbao'),
+          toggleAnimation: locale.t('Pause/Resume Suanbao Animation'),
+        })
+      : []),
     {
       label: locale.t('Exit'),
-      click: () => app.quit(),
+      click: () => {
+        isQuitting = true
+        app.quit()
+      },
       accelerator: 'Command+Q',
     },
   ])
-  tray.setToolTip('Kod')
+  tray.setToolTip('KOD')
   tray.setContextMenu(contextMenu)
   tray.on('double-click', showOrHideWindow)
   return tray
@@ -290,14 +339,15 @@ function destroyTray() {
 
 // --------- 开发模式 ---------
 
+// KOD opt: source-map-support only loaded in production (saves ~150MB in dev)
 if (process.env.NODE_ENV === 'production') {
-  sourceMapSupport.install()
+  require('source-map-support').install()
 }
 
 const isDebug = process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true'
 
 if (isDebug) {
-  electronDebug()
+  electronDebug({ showDevTools: false })
 }
 
 // const installExtensions = async () => {
@@ -322,13 +372,14 @@ async function createWindow() {
   }
 
   const [state] = windowState.getState()
+  const useNativeWindowsFrame = process.platform === 'win32'
 
   mainWindow = new BrowserWindow({
     show: false,
-    // remove the default titlebar
-    titleBarStyle: 'hidden',
-    // expose window controlls in Windows/Linux
-    frame: false,
+    // Windows uses the native frame so its minimize/maximize/close controls
+    // remain available even when the renderer or preload bridge is recovering.
+    titleBarStyle: useNativeWindowsFrame ? 'default' : 'hidden',
+    frame: useNativeWindowsFrame,
     trafficLightPosition: { x: 10, y: 16 },
     width: state.width,
     height: state.height,
@@ -341,6 +392,11 @@ async function createWindow() {
       spellcheck: true,
       webSecurity: false, // 其中一个作用是解决跨域问题
       allowRunningInsecureContent: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      // electron-vite emits a shared preload chunk. Sandboxed preload scripts
+      // cannot require that local chunk, so window.electronAPI is never exposed.
+      sandbox: false,
       preload: app.isPackaged
         ? path.join(__dirname, '../preload/index.js')
         : path.join(__dirname, '../../out/preload/index.js'),
@@ -373,15 +429,22 @@ async function createWindow() {
   })
 
   // 窗口关闭时保存窗口大小与位置
-  mainWindow.on('close', () => {
+  mainWindow.on('close', (event) => {
     if (mainWindow) {
       windowState.saveState(mainWindow)
+    }
+    if (!isQuitting && suanbaoModule?.windowManager.shouldKeepMainRendererAlive()) {
+      event.preventDefault()
+      mainWindow?.hide()
+      syncSuanbaoFloatingVisibility()
     }
   })
 
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  attachSuanbaoMainWindowListeners(mainWindow)
 
   // Send maximized state changes to renderer
   mainWindow.on('maximize', () => {
@@ -454,16 +517,35 @@ async function showOrHideWindow() {
   }
 }
 
+async function showMainWindow() {
+  if (!mainWindow) await createWindow()
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  syncSuanbaoFloatingVisibility()
+  mainWindow.focus()
+  mainWindow.webContents.send('window-show')
+}
+
 // --------- 应用管理 ---------
 
-const gotTheLock = app.isPackaged ? app.requestSingleInstanceLock() : true
+const gotTheLock = app.requestSingleInstanceLock()
+
+function dispatchDeepLink(url: string) {
+  if (!mainWindow) return
+  handleDeepLink(mainWindow, url, {
+    onTinpayResult: (sessionId) => {
+      tinpayModule?.handleDeepLinkResult(sessionId)
+    },
+  })
+}
 
 if (!gotTheLock) {
   app.quit()
 } else {
-  app.on('second-instance', async (event, commandLine, workingDirectory) => {
+  app.on('second-instance', async (_event, commandLine, _workingDirectory) => {
     // on windows and linux, the deep link is passed in the command line
-    const url = commandLine.find((arg) => arg.startsWith('chatbox://') || arg.startsWith('chatbox-dev://'))
+    const url = findKodDeepLink(commandLine)
 
     if (url) {
       // Deep Link 场景：总是显示并聚焦窗口
@@ -483,16 +565,16 @@ if (!gotTheLock) {
         if (mainWindow.webContents.isLoading()) {
           mainWindow.webContents.once('did-finish-load', () => {
             if (mainWindow) {
-              handleDeepLink(mainWindow, url)
+              dispatchDeepLink(url)
             }
           })
         } else {
-          handleDeepLink(mainWindow, url)
+          dispatchDeepLink(url)
         }
       }
     } else {
-      // 非 Deep Link 场景：切换显示/隐藏
-      await showOrHideWindow()
+      // 非 Deep Link 场景：始终显示并聚焦现有窗口，不切换为隐藏
+      await showMainWindow()
     }
   })
 
@@ -507,8 +589,32 @@ if (!gotTheLock) {
   app
     .whenReady()
     .then(async () => {
-      await knowledgeBaseInitPromise
+      // Register Suanbao IPC before the main renderer starts. The renderer
+      // synchronizes its persisted preference as soon as React mounts, so
+      // registering after createWindow() leaves a startup race where the
+      // first setEnabled/publishBootstrap calls can be lost.
+      suanbaoModule = createSuanbaoDesktopModule({
+        ipcMain,
+        isPackaged: app.isPackaged,
+        dirname: __dirname,
+        rendererUrl: process.env.ELECTRON_RENDERER_URL,
+        getMainWindow: () => mainWindow,
+        openMainWindow: () => void showMainWindow(),
+        loadPlacement: () => store.get('suanbao.desktop-placement'),
+        savePlacement: (placement) => store.set('suanbao.desktop-placement', placement),
+      })
+      tinpayModule = createTinpayDesktopModule({
+        ipcMain,
+        isPackaged: app.isPackaged,
+        dirname: __dirname,
+        getMainWindow: () => mainWindow,
+      })
+      // KOD opt: Create window immediately, let KB init in background.
+      // This avoids blocking the first paint on SQLite migrations (~2-5s).
       await createWindow()
+      knowledgeBaseInitPromise.catch((error) => {
+        log.error('[KB] Background knowledge base init failed:', error)
+      })
       await initializeSessionAttachmentRagAfterAppReady()
       ensureTray()
       // Remove this if your app does not use auto updates
@@ -518,17 +624,17 @@ if (!gotTheLock) {
       // 处理启动时的 Deep Link (Windows/Linux)
       // macOS 会通过 open-url 事件处理，不需要在这里处理
       if (process.platform !== 'darwin') {
-        const url = process.argv.find((arg) => arg.startsWith('chatbox://') || arg.startsWith('chatbox-dev://'))
+        const url = findKodDeepLink(process.argv)
         if (url && mainWindow) {
           // 确保窗口加载完成后再处理 Deep Link
           if (mainWindow.webContents.isLoading()) {
             mainWindow.webContents.once('did-finish-load', () => {
               if (mainWindow) {
-                handleDeepLink(mainWindow, url)
+                dispatchDeepLink(url)
               }
             })
           } else {
-            handleDeepLink(mainWindow, url)
+            dispatchDeepLink(url)
           }
         }
       }
@@ -561,9 +667,14 @@ if (!gotTheLock) {
           log.error('shortcut: failed to unregister', e)
         }
         mcpIpc.closeAllTransports()
+        suanbaoModule?.dispose()
+        suanbaoModule = null
+        tinpayModule?.dispose()
+        tinpayModule = null
         destroyTray()
       })
       app.on('before-quit', () => {
+        isQuitting = true
         destroyTray()
       })
     })
@@ -588,16 +699,89 @@ app.on('open-url', async (_event, url) => {
     if (mainWindow.webContents.isLoading()) {
       mainWindow.webContents.once('did-finish-load', () => {
         if (mainWindow) {
-          handleDeepLink(mainWindow, url)
+          dispatchDeepLink(url)
         }
       })
     } else {
-      handleDeepLink(mainWindow, url)
+      dispatchDeepLink(url)
     }
   }
 })
 
 // --------- IPC 监听 ---------
+
+const SAVED_LOGIN_ACCOUNTS_KEY = 'kodSavedLoginAccountsV1'
+const MAX_SAVED_LOGIN_ACCOUNTS = 10
+
+interface StoredLoginAccount {
+  email: string
+  encryptedPassword?: string
+  updatedAt: number
+}
+
+function normalizeLoginEmail(value: unknown) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+function readStoredLoginAccounts(): StoredLoginAccount[] {
+  const stored = store.get(SAVED_LOGIN_ACCOUNTS_KEY, []) as unknown
+  if (!Array.isArray(stored)) return []
+  return stored
+    .filter((item): item is StoredLoginAccount => Boolean(item && typeof item.email === 'string'))
+    .map((item) => ({
+      email: normalizeLoginEmail(item.email),
+      encryptedPassword: typeof item.encryptedPassword === 'string' ? item.encryptedPassword : undefined,
+      updatedAt: Number(item.updatedAt) || 0,
+    }))
+    .filter((item) => item.email)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, MAX_SAVED_LOGIN_ACCOUNTS)
+}
+
+function savedLoginAccountsResponse() {
+  const passwordStorageAvailable =
+    safeStorage.isEncryptionAvailable() &&
+    (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+  const accounts = readStoredLoginAccounts().map((item) => {
+    let password: string | undefined
+    if (passwordStorageAvailable && item.encryptedPassword) {
+      try {
+        password = safeStorage.decryptString(Buffer.from(item.encryptedPassword, 'base64'))
+      } catch (error) {
+        log.warn('[KOD Login] Failed to decrypt a saved password; returning email only', error)
+      }
+    }
+    return { email: item.email, password, updatedAt: item.updatedAt }
+  })
+  return { accounts, passwordStorageAvailable }
+}
+
+ipcMain.handle('kod-login:list-saved-accounts', () => savedLoginAccountsResponse())
+
+ipcMain.handle('kod-login:save-account', (_event, rawEmail: unknown, rawPassword: unknown) => {
+  const email = normalizeLoginEmail(rawEmail)
+  if (!email || email.length > 320) throw new Error('Invalid login email')
+  if (typeof rawPassword !== 'string' || rawPassword.length > 4096) throw new Error('Invalid login password')
+  const passwordStorageAvailable =
+    safeStorage.isEncryptionAvailable() &&
+    (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text')
+  const encryptedPassword = passwordStorageAvailable
+    ? safeStorage.encryptString(rawPassword).toString('base64')
+    : undefined
+  const next = [
+    { email, encryptedPassword, updatedAt: Date.now() },
+    ...readStoredLoginAccounts().filter((item) => item.email !== email),
+  ].slice(0, MAX_SAVED_LOGIN_ACCOUNTS)
+  store.set(SAVED_LOGIN_ACCOUNTS_KEY, next)
+  return savedLoginAccountsResponse()
+})
+
+ipcMain.handle('kod-login:delete-account', (_event, rawEmail: unknown) => {
+  const email = normalizeLoginEmail(rawEmail)
+  const next = readStoredLoginAccounts().filter((item) => item.email !== email)
+  store.set(SAVED_LOGIN_ACCOUNTS_KEY, next)
+  return savedLoginAccountsResponse()
+})
 
 ipcMain.handle('getStoreValue', (event, key) => {
   return store.get(key)
@@ -670,6 +854,11 @@ ipcMain.handle('getLocale', () => {
 })
 ipcMain.handle('openLink', (event, link) => {
   return shell.openExternal(link)
+})
+ipcMain.handle('payment:open-url', async (_event, url: string) => {
+  const apiOrigin = process.env.KOD_API_ORIGIN || 'https://kod.kai.com'
+  const safeUrl = assertPaymentUrl(url, parsePaymentHosts(process.env.KOD_PAYMENT_HOSTS, apiOrigin))
+  await shell.openExternal(safeUrl.toString())
 })
 ipcMain.handle('ensureShortcutConfig', (event, json) => {
   const config: ShortcutSetting = JSON.parse(json)

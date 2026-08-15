@@ -280,6 +280,8 @@ export const SessionSchema = z.object({
   threadName: z.string().optional(),
   messageForksHash: z.record(z.string(), MessageForkSchema).optional(),
   compactionPoints: z.array(CompactionPointSchema).optional(),
+  /** Account isolation marker — set when session is created while logged into a Kod account */
+  accountKey: z.string().optional(),
 })
 
 export const SessionMetaSchema = SessionSchema.pick({

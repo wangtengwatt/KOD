@@ -11,9 +11,11 @@ import {
   IconInfoCircle,
   IconKeyboard,
   IconMessages,
+  IconPlant,
   IconSparkles,
   IconWand,
   IconWorldWww,
+  IconWallet,
 } from '@tabler/icons-react'
 import { createFileRoute, Link, Outlet, useCanGoBack, useRouter, useRouterState } from '@tanstack/react-router'
 import clsx from 'clsx'
@@ -31,8 +33,13 @@ import { getSettingsParentPath } from './-settings-navigation'
 const ITEMS = [
   {
     key: 'chatbox-ai',
-    label: 'Kod AI',
+    label: 'KOD AI',
     icon: <IconSparkles className="w-full h-full" />,
+  },
+  {
+    key: 'wallet',
+    label: 'Wallet',
+    icon: <IconWallet className="w-full h-full" />,
   },
   {
     key: 'provider',
@@ -95,6 +102,11 @@ const ITEMS = [
           icon: <IconKeyboard className="w-full h-full" />,
         },
       ]),
+  {
+    key: 'suanbao',
+    label: 'Suanbao',
+    icon: <IconPlant className="w-full h-full" />,
+  },
   {
     key: 'general',
     label: 'General Settings',

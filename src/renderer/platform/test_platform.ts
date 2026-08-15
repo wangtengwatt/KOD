@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TestPlatform - 用于集成测试的平台实现
  *
  * 特点：
@@ -16,6 +16,8 @@ import { IndexedDBTaskSessionStorage, type TaskSessionStorage } from '@/storage/
 import type { Exporter, Platform, PlatformType, Storage } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
+import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
+import type { SuanbaoPlatformController } from './suanbao/interface'
 
 /**
  * 内存存储类，用于测试环境
@@ -121,6 +123,8 @@ export default class TestPlatform implements Platform {
   private _sessionMetaStorage: SessionMetaStorage | null = null
   private _imageGenerationStorage: ImageGenerationStorage | null = null
   private _taskSessionStorage: TaskSessionStorage | null = null
+  private _currentAccountKey: string | null = null
+  private _currentImageGenAccountKey: string | null = null
   private blobs = new Map<string, string>()
   private configs: Config | null = null
   private settings: Settings | null = null
@@ -211,6 +215,10 @@ export default class TestPlatform implements Platform {
 
   public onUpdateDownloaded(callback: () => void): () => void {
     return () => {}
+  }
+
+  public async openPaymentUrl(url: string): Promise<void> {
+    throw new Error('安全支付链接仅支持桌面客户端')
   }
 
   public async openLink(url: string): Promise<void> {
@@ -325,23 +333,33 @@ export default class TestPlatform implements Platform {
     throw new Error('Session attachment RAG not implemented in test platform.')
   }
 
-  public getImageGenerationStorage(): ImageGenerationStorage {
-    if (!this._imageGenerationStorage) {
-      this._imageGenerationStorage = new IndexedDBImageGenerationStorage()
+  public getSuanbaoController(): SuanbaoPlatformController {
+    return new UnsupportedSuanbaoPlatformController('Desktop overlay is disabled in tests')
+  }
+
+  public getImageGenerationStorage(accountKey?: string): ImageGenerationStorage {
+    const key = accountKey ?? null
+    if (key !== this._currentImageGenAccountKey || !this._imageGenerationStorage) {
+      this._currentImageGenAccountKey = key
+      this._imageGenerationStorage = new IndexedDBImageGenerationStorage(accountKey)
     }
     return this._imageGenerationStorage
   }
 
-  public getTaskSessionStorage(): TaskSessionStorage {
-    if (!this._taskSessionStorage) {
-      this._taskSessionStorage = new IndexedDBTaskSessionStorage()
+  public getTaskSessionStorage(accountKey?: string): TaskSessionStorage {
+    const key = accountKey ?? null
+    if (key !== this._currentAccountKey || !this._taskSessionStorage) {
+      this._currentAccountKey = key
+      this._taskSessionStorage = new IndexedDBTaskSessionStorage(accountKey)
     }
     return this._taskSessionStorage
   }
 
-  public getSessionMetaStorage(): SessionMetaStorage {
-    if (!this._sessionMetaStorage) {
-      this._sessionMetaStorage = new IndexedDBSessionMetaStorage()
+  public getSessionMetaStorage(accountKey?: string): SessionMetaStorage {
+    const key = accountKey ?? null
+    if (key !== this._currentAccountKey || !this._sessionMetaStorage) {
+      this._currentAccountKey = key
+      this._sessionMetaStorage = new IndexedDBSessionMetaStorage(accountKey)
     }
     return this._sessionMetaStorage
   }

@@ -63,17 +63,17 @@ export default class MenuBuilder {
 
   buildDarwinTemplate(): MenuItemConstructorOptions[] {
     const subMenuAbout: DarwinMenuItemConstructorOptions = {
-      label: 'Kod',
+      label: 'KOD',
       submenu: [
         {
-          label: 'About Kod',
+          label: 'About KOD',
           selector: 'orderFrontStandardAboutPanel:',
         },
         { type: 'separator' },
         { label: 'Services', submenu: [] },
         { type: 'separator' },
         {
-          label: 'Hide Kod',
+          label: 'Hide KOD',
           accelerator: 'Command+H',
           selector: 'hide:',
         },
@@ -205,13 +205,13 @@ export default class MenuBuilder {
         {
           label: 'Learn More',
           click() {
-            shell.openExternal('https://chatboxai.app')
+            shell.openExternal('https://kod.kai.com')
           },
         },
         {
           label: 'Github Repo',
           click() {
-            shell.openExternal('https://github.com/chatboxai/chatbox')
+            shell.openExternal('https://github.com/lfrenvip/kod')
           },
         },
         // {
@@ -223,7 +223,7 @@ export default class MenuBuilder {
         {
           label: 'Search Issues',
           click() {
-            shell.openExternal('https://github.com/chatboxai/chatbox/issues?q=is%3Aissue')
+            shell.openExternal('https://github.com/lfrenvip/kod/issues?q=is%3Aissue')
           },
         },
       ],
@@ -296,13 +296,13 @@ export default class MenuBuilder {
           {
             label: 'Learn More',
             click() {
-              shell.openExternal('https://chatboxai.app')
+              shell.openExternal('https://kod.kai.com')
             },
           },
           {
             label: 'Github Repo',
             click() {
-              shell.openExternal('https://github.com/chatboxai/chatbox')
+              shell.openExternal('https://github.com/lfrenvip/kod')
             },
           },
           // {
@@ -314,7 +314,7 @@ export default class MenuBuilder {
           {
             label: 'Search Issues',
             click() {
-              shell.openExternal('https://github.com/chatboxai/chatbox/issues?q=is%3Aissue')
+              shell.openExternal('https://github.com/lfrenvip/kod/issues?q=is%3Aissue')
             },
           },
         ],

@@ -1,9 +1,12 @@
+import * as defaults from '@shared/defaults'
 import { getModel } from '@shared/models'
 import type { ModelInterface } from '@shared/models/types'
-import { OAuthIpcChannels, type OAuthCredentials, toOAuthSettingsProviderId } from '@shared/oauth'
+import { type OAuthCredentials, OAuthIpcChannels, toOAuthSettingsProviderId } from '@shared/oauth'
 import { createAfetch } from '@shared/request/request'
 import type { SessionSettings } from '@shared/types'
 import type { ApiRequestOptions, ModelDependencies } from '@shared/types/adapters'
+import { ensureKodRelayRequirement, kodRelayStore } from '@/hooks/useKodRelay'
+import { KOD_RELAY_PROVIDER_ID, type KodRelayModelRequirement, pickKodRelayModel } from '@/packages/kodRelay'
 import { getOS } from '@/packages/navigator'
 import platform from '@/platform'
 import storage from '@/storage'
@@ -123,10 +126,36 @@ export async function createModelDependencies(): Promise<ModelDependencies> {
 
 export async function createModel(
   settings: SessionSettings,
-  dependencies?: ModelDependencies
+  dependencies?: ModelDependencies,
+  requirement?: KodRelayModelRequirement
 ): Promise<ModelInterface> {
+  if (requirement) await ensureKodRelayRequirement(requirement)
   const globalSettings = settingsStore.getState().getSettings()
   const configs = await platform.getConfig()
   const modelDependencies = dependencies ?? (await createModelDependencies())
-  return getModel(settings, globalSettings, configs, modelDependencies)
+  const relayState = kodRelayStore.getState()
+  const relayModel = relayState.selection
+    ? pickKodRelayModel(relayState.models, relayState.selection.modelId, requirement)
+    : undefined
+  const effectiveSettings: SessionSettings =
+    relayState.selection && relayModel
+      ? {
+          ...settings,
+          provider: KOD_RELAY_PROVIDER_ID,
+          modelId: relayModel.modelId,
+        }
+      : settings.provider && settings.modelId
+        ? settings
+        : globalSettings.defaultChatModel
+          ? {
+              ...settings,
+              provider: globalSettings.defaultChatModel.provider,
+              modelId: globalSettings.defaultChatModel.model,
+            }
+          : {
+              ...settings,
+              provider: defaults.chatSessionSettings().provider,
+              modelId: defaults.chatSessionSettings().modelId,
+            }
+  return getModel(effectiveSettings, globalSettings, configs, modelDependencies)
 }
