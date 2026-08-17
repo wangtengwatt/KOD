@@ -28,9 +28,11 @@ import {
 import {
   IconBell,
   IconBuildingStore,
+  IconChartLine,
   IconCopy,
   IconCpu,
   IconDatabaseDollar,
+  IconExternalLink,
   IconGauge,
   IconGift,
   IconReceipt,
@@ -60,6 +62,9 @@ import {
   type ComputeGpuNode,
   type ComputeIdentity,
   type ComputeLedgerEntry,
+  type ComputeMarketPriceHistory,
+  type ComputeMarketPricePoint,
+  type ComputeMarketPriceQuote,
   type ComputeNodeInput,
   type ComputeNotification,
   type ComputeOrder,
@@ -94,6 +99,8 @@ import {
   getComputeAdminOverview,
   getComputeConfig,
   getComputeIdentity,
+  getComputeMarketPriceHistory,
+  getComputeMarketPrices,
   getComputePackageCredential,
   getComputeProductImageUrl,
   getComputeReferralProfile,
@@ -363,19 +370,41 @@ function ComputeCenterPage() {
             </ScrollArea>
 
             <Tabs.Panel value="market" pt="md">
-              <Tabs defaultValue="resources" keepMounted={false}>
+              <Tabs defaultValue="gpu-products" keepMounted={false}>
                 <Tabs.List>
-                  <Tabs.Tab value="resources">GPU 与 API 商品</Tabs.Tab>
+                  <Tabs.Tab value="gpu-products" leftSection={<IconCpu size={15} />}>
+                    GPU 算力商品
+                  </Tabs.Tab>
+                  <Tabs.Tab value="api-products" leftSection={<IconGauge size={15} />}>
+                    模型 API 套餐
+                  </Tabs.Tab>
+                  <Tabs.Tab value="live-prices" leftSection={<IconChartLine size={15} />}>
+                    实时行情
+                  </Tabs.Tab>
                   <Tabs.Tab value="card-hour-market">卡时现货与询价</Tabs.Tab>
                 </Tabs.List>
-                <Tabs.Panel value="resources" pt="md">
+                <Tabs.Panel value="gpu-products" pt="md">
                   <MarketPanel
                     products={productsQuery.data || []}
                     loading={productsQuery.isLoading}
+                    productType="GPU"
                     isLoggedIn={isLoggedIn}
                     busy={busy}
                     runCardHourAction={runCardHourAction}
                   />
+                </Tabs.Panel>
+                <Tabs.Panel value="api-products" pt="md">
+                  <MarketPanel
+                    products={productsQuery.data || []}
+                    loading={productsQuery.isLoading}
+                    productType="API"
+                    isLoggedIn={isLoggedIn}
+                    busy={busy}
+                    runCardHourAction={runCardHourAction}
+                  />
+                </Tabs.Panel>
+                <Tabs.Panel value="live-prices" pt="md">
+                  <MarketPricePanel />
                 </Tabs.Panel>
                 <Tabs.Panel value="card-hour-market" pt="md">
                   <CardHourMarketplace
@@ -850,23 +879,24 @@ function Metric({ label, value }: { label: string; value: string }) {
 function MarketPanel({
   products,
   loading,
+  productType,
   isLoggedIn,
   busy,
   runCardHourAction,
 }: {
   products: ComputeProduct[]
   loading: boolean
+  productType: ProductType
   isLoggedIn: boolean
   busy: string | null
   runCardHourAction: RunCardHourAction
 }) {
-  const [type, setType] = useState<ProductType | 'ALL'>('ALL')
   const [keyword, setKeyword] = useState('')
   const [reservationProduct, setReservationProduct] = useState<ComputeProduct | null>(null)
   const visible = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLocaleLowerCase('zh-CN')
     return products.filter((product) => {
-      if (type !== 'ALL' && product.productType !== type) return false
+      if (product.productType !== productType) return false
       if (!normalizedKeyword) return true
       return [
         product.name,
@@ -877,7 +907,7 @@ function MarketPanel({
         product.supplierName,
       ].some((value) => value?.toLocaleLowerCase('zh-CN').includes(normalizedKeyword))
     })
-  }, [keyword, products, type])
+  }, [keyword, productType, products])
 
   return (
     <Stack gap="md">
@@ -885,7 +915,9 @@ function MarketPanel({
         <Box>
           <Title order={4}>算力市场</Title>
           <Text size="sm" c="chatbox-tertiary">
-            模型 API 和 GPU 均按固定套餐交易；GPU 由已审核商家自主交付，平台只提供卡时担保与争议处理。
+            {productType === 'GPU'
+              ? '已认证供应方发布固定 GPU 套餐并自主交付，平台提供卡时担保、确认结算与争议处理。'
+              : '购买指定模型的固定 Token 套餐，交付独立代理地址与密钥，不影响 KOD 原有对话和生图链路。'}
           </Text>
         </Box>
         <Group gap="sm">
@@ -894,16 +926,6 @@ function MarketPanel({
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             w={240}
-          />
-          <Select
-            value={type}
-            onChange={(value) => setType((value || 'ALL') as ProductType | 'ALL')}
-            data={[
-              { value: 'ALL', label: '全部商品' },
-              { value: 'API', label: '模型 API' },
-              { value: 'GPU', label: 'GPU 资源' },
-            ]}
-            w={150}
           />
         </Group>
       </Flex>
@@ -951,79 +973,528 @@ function ProductCard({
   onReserve: () => void
 }) {
   const actionKey = `product-${product.id}`
+  const isApi = product.productType === 'API'
   return (
-    <Card withBorder radius="md" padding="lg">
-      <Stack gap="sm" h="100%">
+    <Card withBorder radius="lg" padding={0} style={{ overflow: 'hidden' }}>
+      <Stack gap={0} h="100%">
         {product.coverImageId ? (
           <Box
             component="img"
             src={getComputeProductImageUrl(product.id, product.coverImageId)}
             alt={product.name}
-            h={150}
-            style={{ width: '100%', objectFit: 'cover', borderRadius: 8 }}
+            h={184}
+            style={{ width: '100%', objectFit: 'cover' }}
           />
-        ) : null}
-        <Flex justify="space-between" align="flex-start" gap="sm">
-          <Badge color={product.productType === 'API' ? 'blue' : 'teal'} variant="light">
-            {product.productType === 'API' ? '模型 API' : 'GPU 资源'}
-          </Badge>
-          <Text size="xs" c="chatbox-tertiary">
-            {product.region || '区域待定'}
-          </Text>
-        </Flex>
-        <Box>
-          <Title order={4}>{product.name}</Title>
-          <Text size="sm" c="chatbox-tertiary" lineClamp={3} mt={4}>
-            {product.description || '暂无商品说明'}
-          </Text>
-        </Box>
-        <Divider />
-        {product.productType === 'API' ? (
-          <Stack gap={4}>
-            <DataRow label="模型" value={product.modelId || '-'} />
-            <DataRow label="输入额度" value={`${formatTokens(product.packagePromptTokens)} Token`} />
-            <DataRow label="输出额度" value={`${formatTokens(product.packageCompletionTokens)} Token`} />
-            <DataRow label="套餐价" value={`${formatCardHours(product.packagePriceCardHours)} 卡时`} />
-          </Stack>
         ) : (
-          <Stack gap={4}>
-            <DataRow label="规格" value={`${product.gpuModel || '-'} ${product.gpuMemoryGb || '-'}GB`} />
-            <DataRow label="套餐资源" value={`${product.gpuCount || 0} 张 GPU`} />
-            <DataRow label="使用时长" value={`${product.packageDurationHours || 0} 小时`} />
-            <DataRow label="套餐价格" value={`${formatCardHours(product.packagePriceCardHours)} 卡时`} />
-            <DataRow label="承诺交付" value={`付款后 ${product.deliveryDeadlineHours || 0} 小时内`} />
-          </Stack>
+          <Flex
+            h={184}
+            align="center"
+            justify="center"
+            direction="column"
+            gap={8}
+            style={{
+              background: isApi
+                ? 'linear-gradient(135deg, var(--mantine-color-blue-0), var(--mantine-color-indigo-1))'
+                : 'linear-gradient(135deg, var(--mantine-color-cyan-0), var(--mantine-color-blue-1))',
+            }}
+          >
+            <ThemeIcon size={54} radius="xl" variant="white" color={isApi ? 'blue' : 'cyan'}>
+              {isApi ? <IconGauge size={30} /> : <IconCpu size={30} />}
+            </ThemeIcon>
+            <Text fw={800} size="lg">
+              {isApi ? product.modelId || '模型 API' : product.gpuModel || 'GPU 算力'}
+            </Text>
+            <Text size="xs" c="chatbox-tertiary">
+              商品图片由供应方上传
+            </Text>
+          </Flex>
         )}
-        <Text size="xs" c="chatbox-tertiary">
-          供应方：{product.supplierName || 'KOD 官方'} · {product.slaDescription || 'SLA 待确认'}
-        </Text>
-        {Boolean(product.isTest) && (
-          <Badge color="orange" variant="light">
-            仅内测，不代表真实资源
-          </Badge>
-        )}
-        {product.productType === 'API' && !product.upstreamKeyId && (
-          <Alert color="orange">管理员尚未配置零售站上游，当前不可购买。</Alert>
-        )}
-        <Button
-          mt="auto"
-          disabled={!isLoggedIn || (product.productType === 'API' && !product.upstreamKeyId)}
-          loading={busy === actionKey}
-          onClick={() =>
-            product.productType === 'API'
-              ? runCardHourAction(
-                  actionKey,
-                  (autoTopUp) => activateComputeApi(product.id, autoTopUp),
-                  `${product.name} 套餐购买成功`
-                )
-              : onReserve()
-          }
-        >
-          {!isLoggedIn ? '登录后操作' : product.productType === 'API' ? '用卡时购买套餐' : '购买 GPU 套餐'}
-        </Button>
+        <Stack gap="sm" p="lg" style={{ flex: 1 }}>
+          <Flex justify="space-between" align="center" gap="sm">
+            <Group gap={6}>
+              <Badge color={isApi ? 'blue' : 'teal'} variant="light">
+                {isApi ? '模型 API' : 'GPU 算力'}
+              </Badge>
+              {Boolean(product.isTest) && (
+                <Badge color="orange" variant="light">
+                  仅内测
+                </Badge>
+              )}
+            </Group>
+            <Text size="xs" c="chatbox-tertiary">
+              {product.region || '区域待定'}
+            </Text>
+          </Flex>
+          <Box>
+            <Title order={3} lineClamp={1}>
+              {product.name}
+            </Title>
+            <Text size="sm" c="chatbox-tertiary" lineClamp={2} mt={5} mih={42}>
+              {product.description || '暂无商品说明'}
+            </Text>
+          </Box>
+          <Paper radius="md" p="sm" bg={isApi ? 'blue.0' : 'cyan.0'}>
+            <Text size="xs" c="chatbox-tertiary">
+              固定套餐价
+            </Text>
+            <Group gap={6} align="baseline">
+              <Text size="xl" fw={800} c={isApi ? 'blue.8' : 'cyan.9'}>
+                {formatCardHours(product.packagePriceCardHours)}
+              </Text>
+              <Text size="sm" fw={600}>
+                卡时
+              </Text>
+            </Group>
+          </Paper>
+          {isApi ? (
+            <SimpleGrid cols={2} spacing="xs">
+              <ProductSpec label="指定模型" value={product.modelId || '-'} />
+              <ProductSpec label="有效期" value="永久有效" />
+              <ProductSpec label="输入额度" value={formatTokens(product.packagePromptTokens)} />
+              <ProductSpec label="输出额度" value={formatTokens(product.packageCompletionTokens)} />
+            </SimpleGrid>
+          ) : (
+            <SimpleGrid cols={2} spacing="xs">
+              <ProductSpec label="GPU 规格" value={`${product.gpuModel || '-'} ${product.gpuMemoryGb || '-'}GB`} />
+              <ProductSpec label="GPU 数量" value={`${product.gpuCount || 0} 张`} />
+              <ProductSpec label="套餐时长" value={`${product.packageDurationHours || 0} 小时`} />
+              <ProductSpec label="交付时效" value={`${product.deliveryDeadlineHours || 0} 小时内`} />
+            </SimpleGrid>
+          )}
+          <Divider />
+          <Text size="xs" c="chatbox-tertiary" lineClamp={2}>
+            供应方：{product.supplierName || 'KOD 官方'} · {product.slaDescription || 'SLA 待确认'}
+          </Text>
+          {isApi && !product.upstreamKeyId && <Alert color="orange">管理员尚未配置零售站上游，当前不可购买。</Alert>}
+          <Button
+            mt="auto"
+            size="md"
+            disabled={!isLoggedIn || (isApi && !product.upstreamKeyId)}
+            loading={busy === actionKey}
+            onClick={() =>
+              isApi
+                ? runCardHourAction(
+                    actionKey,
+                    (autoTopUp) => activateComputeApi(product.id, autoTopUp),
+                    `${product.name} 套餐购买成功`
+                  )
+                : onReserve()
+            }
+          >
+            {!isLoggedIn ? '登录后操作' : isApi ? '用卡时购买套餐' : '购买 GPU 套餐'}
+          </Button>
+        </Stack>
       </Stack>
     </Card>
   )
+}
+
+function ProductSpec({ label, value }: { label: string; value: string }) {
+  return (
+    <Paper withBorder radius="md" p="xs">
+      <Text size="xs" c="chatbox-tertiary">
+        {label}
+      </Text>
+      <Text size="sm" fw={600} lineClamp={1} title={value}>
+        {value}
+      </Text>
+    </Paper>
+  )
+}
+
+type MarketPriceRange = '1h' | '6h' | '24h' | '7d'
+
+function MarketPricePanel() {
+  const [gpuModel, setGpuModel] = useState('H100')
+  const [range, setRange] = useState<MarketPriceRange>('24h')
+  const latestQuery = useQuery({
+    queryKey: ['compute', 'market-prices', 'latest'],
+    queryFn: getComputeMarketPrices,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  })
+  const historyQuery = useQuery({
+    queryKey: ['compute', 'market-prices', 'history', gpuModel, range],
+    queryFn: () => getComputeMarketPriceHistory(gpuModel, range),
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  })
+  const snapshot = latestQuery.data
+  const selectedQuotes = (snapshot?.quotes || []).filter((quote) => quote.gpuModel === gpuModel)
+  const chartPoints = useMemo(
+    () => mergeLivePricePoints(historyQuery.data, selectedQuotes),
+    [historyQuery.data, selectedQuotes]
+  )
+
+  return (
+    <Stack gap="md">
+      <Paper
+        withBorder
+        radius="lg"
+        p="lg"
+        style={{ background: 'linear-gradient(135deg, var(--mantine-color-blue-0), var(--mantine-color-cyan-0))' }}
+      >
+        <Flex justify="space-between" align="flex-start" gap="md" wrap="wrap">
+          <Box>
+            <Group gap="xs">
+              <ThemeIcon variant="light" color="blue" radius="xl">
+                <IconChartLine size={18} />
+              </ThemeIcon>
+              <Title order={3}>全球 GPU 参考行情</Title>
+            </Group>
+            <Text size="sm" c="chatbox-tertiary" mt={6} maw={760}>
+              Vast.ai 为已验证、当前可租的按需实例中位价；Akamai 为官方公开 GPU
+              类型的起步小时标价。第三方数据仅供比价，不能在 KOD 直接下单。
+            </Text>
+          </Box>
+          <Group gap="xs">
+            <Badge color={latestQuery.isError ? 'red' : latestQuery.isFetching ? 'blue' : 'green'} variant="light">
+              {latestQuery.isError ? '刷新失败' : latestQuery.isFetching ? '正在刷新' : '每 5 秒刷新'}
+            </Badge>
+            <Text size="xs" c="chatbox-tertiary">
+              更新时间：{formatDate(snapshot?.generatedAt)}
+            </Text>
+          </Group>
+        </Flex>
+      </Paper>
+
+      {latestQuery.isError && (
+        <Alert color="red" title="行情暂不可用">
+          {latestQuery.error instanceof Error ? latestQuery.error.message : '无法连接行情服务，请检查后端与环境变量。'}
+        </Alert>
+      )}
+
+      <Flex justify="space-between" align="end" gap="md" wrap="wrap">
+        <Group align="end" gap="sm">
+          <Select
+            label="GPU 型号"
+            data={snapshot?.trackedModels || ['H100', 'H200', 'A100', 'RTX 4090']}
+            value={gpuModel}
+            onChange={(value) => value && setGpuModel(value)}
+            searchable
+            w={240}
+          />
+          <Select
+            label="时间范围"
+            data={[
+              { value: '1h', label: '近 1 小时' },
+              { value: '6h', label: '近 6 小时' },
+              { value: '24h', label: '近 24 小时' },
+              { value: '7d', label: '近 7 天' },
+            ]}
+            value={range}
+            onChange={(value) => value && setRange(value as MarketPriceRange)}
+            w={150}
+          />
+        </Group>
+        <Text size="xs" c="chatbox-tertiary">
+          汇率：1 USD ≈ ¥{formatNumber(snapshot?.usdCnyRate, 4)}；1 卡时 ≈ ¥{formatNumber(snapshot?.cardHourCnyRate, 3)}
+        </Text>
+      </Flex>
+
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+        {selectedQuotes.map((quote) => (
+          <MarketPriceQuoteCard key={`${quote.source}-${quote.gpuModel}`} quote={quote} />
+        ))}
+      </SimpleGrid>
+
+      <Paper withBorder radius="lg" p="lg">
+        <Flex justify="space-between" align="center" gap="sm" wrap="wrap" mb="md">
+          <Box>
+            <Title order={4}>{gpuModel} 价格走势</Title>
+            <Text size="xs" c="chatbox-tertiary">
+              页面读取实时缓存，历史数据每分钟采样；最多保留 {snapshot?.historyRetentionDays || 30} 天。
+            </Text>
+          </Box>
+          <Group gap="md">
+            <ChartLegend color="#228be6" label="Vast.ai 可租实例中位价" />
+            <ChartLegend color="#12b886" label="Akamai 官方起步价" />
+          </Group>
+        </Flex>
+        {historyQuery.isLoading && chartPoints.length === 0 ? (
+          <Text c="chatbox-tertiary">正在加载行情历史…</Text>
+        ) : (
+          <MarketPriceChart points={chartPoints} />
+        )}
+      </Paper>
+
+      <MarketPriceMatrix snapshot={snapshot} />
+    </Stack>
+  )
+}
+
+function MarketPriceQuoteCard({ quote }: { quote: ComputeMarketPriceQuote }) {
+  const available = quote.priceUsdPerGpuHour != null
+  const status = marketPriceStatus(quote)
+  return (
+    <Paper withBorder radius="lg" p="lg">
+      <Flex justify="space-between" align="flex-start" gap="md">
+        <Box>
+          <Text fw={700}>{quote.sourceLabel}</Text>
+          <Text size="xs" c="chatbox-tertiary">
+            {quote.quoteType === 'MEDIAN_AVAILABLE' ? '当前可租实例中位价' : '官方公开起步小时标价'}
+          </Text>
+        </Box>
+        <Badge color={status.color} variant="light">
+          {status.label}
+        </Badge>
+      </Flex>
+      {available ? (
+        <Stack gap={4} mt="md">
+          <Group gap={6} align="baseline">
+            <Text size="32px" fw={800}>
+              ${formatNumber(quote.priceUsdPerGpuHour, 4)}
+            </Text>
+            <Text size="sm" c="chatbox-tertiary">
+              / GPU·小时
+            </Text>
+          </Group>
+          <Text size="sm">
+            约 ¥{formatNumber(quote.priceCnyPerGpuHour, 4)} / GPU·小时 · {formatNumber(quote.cardHoursPerGpuHour, 4)}{' '}
+            卡时 / GPU·小时
+          </Text>
+          <Text size="xs" c="chatbox-tertiary">
+            {quote.quoteType === 'MEDIAN_AVAILABLE' ? `样本 ${quote.sampleSize || 0} 个可租实例 · ` : ''}
+            采样：{formatDate(quote.sampledAt)}
+          </Text>
+        </Stack>
+      ) : (
+        <Stack gap={4} mt="lg" mb="sm">
+          <Text size="xl" fw={700} c="chatbox-tertiary">
+            暂无报价
+          </Text>
+          <Text size="xs" c="chatbox-tertiary">
+            {quote.status === 'UNCONFIGURED'
+              ? '后端尚未配置 Vast.ai API Key。'
+              : quote.errorMessage || '该平台未提供此型号。'}
+          </Text>
+        </Stack>
+      )}
+      <Button
+        variant="subtle"
+        size="xs"
+        px={0}
+        mt="sm"
+        rightSection={<IconExternalLink size={14} />}
+        onClick={() => void platform.openLink(quote.sourceUrl)}
+      >
+        查看官方来源
+      </Button>
+    </Paper>
+  )
+}
+
+function MarketPriceMatrix({ snapshot }: { snapshot?: Awaited<ReturnType<typeof getComputeMarketPrices>> }) {
+  if (!snapshot) return null
+  const byKey = new Map(snapshot.quotes.map((quote) => [`${quote.gpuModel}:${quote.source}`, quote]))
+  return (
+    <Paper withBorder radius="lg" p="lg">
+      <Title order={4} mb="xs">
+        主流型号价格速览
+      </Title>
+      <Text size="xs" c="chatbox-tertiary" mb="md">
+        “暂无报价”表示来源平台没有该型号或当前没有可租样本，不以 0 元代替。
+      </Text>
+      <ScrollArea>
+        <Table striped highlightOnHover miw={700}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>GPU 型号</Table.Th>
+              <Table.Th>Vast.ai 中位价</Table.Th>
+              <Table.Th>Akamai 官方起步价</Table.Th>
+              <Table.Th>Vast 样本量</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {snapshot.trackedModels.map((model) => {
+              const vast = byKey.get(`${model}:VAST_AI`)
+              const akamai = byKey.get(`${model}:AKAMAI`)
+              return (
+                <Table.Tr key={model}>
+                  <Table.Td>
+                    <Text fw={600}>{model}</Text>
+                  </Table.Td>
+                  <Table.Td>{formatMarketPrice(vast)}</Table.Td>
+                  <Table.Td>{formatMarketPrice(akamai)}</Table.Td>
+                  <Table.Td>{vast?.priceUsdPerGpuHour != null ? `${vast.sampleSize || 0} 个` : '-'}</Table.Td>
+                </Table.Tr>
+              )
+            })}
+          </Table.Tbody>
+        </Table>
+      </ScrollArea>
+    </Paper>
+  )
+}
+
+function MarketPriceChart({ points }: { points: ComputeMarketPricePoint[] }) {
+  const width = 900
+  const height = 300
+  const padding = { left: 70, right: 24, top: 20, bottom: 42 }
+  const valid = points
+    .map((point) => ({ ...point, time: new Date(point.sampledAt).getTime() }))
+    .filter((point) => Number.isFinite(point.time) && Number.isFinite(Number(point.priceUsdPerGpuHour)))
+  if (valid.length === 0) {
+    return <EmptyState title="正在积累行情" description="部署后开始采样；有实时报价时会先显示当前价格。" />
+  }
+  const times = valid.map((point) => point.time)
+  const prices = valid.map((point) => Number(point.priceUsdPerGpuHour))
+  const minTime = Math.min(...times)
+  const maxTime = Math.max(...times)
+  const rawMinPrice = Math.min(...prices)
+  const rawMaxPrice = Math.max(...prices)
+  const pricePadding = Math.max((rawMaxPrice - rawMinPrice) * 0.12, rawMaxPrice * 0.03, 0.01)
+  const minPrice = Math.max(0, rawMinPrice - pricePadding)
+  const maxPrice = rawMaxPrice + pricePadding
+  const plotWidth = width - padding.left - padding.right
+  const plotHeight = height - padding.top - padding.bottom
+  const x = (time: number) => padding.left + ((time - minTime) / Math.max(1, maxTime - minTime)) * plotWidth
+  const y = (price: number) =>
+    padding.top + (1 - (price - minPrice) / Math.max(0.000001, maxPrice - minPrice)) * plotHeight
+  const sources = [
+    { source: 'VAST_AI', color: '#228be6' },
+    { source: 'AKAMAI', color: '#12b886' },
+  ] as const
+  const gridValues = Array.from({ length: 5 }, (_, index) => minPrice + ((maxPrice - minPrice) * index) / 4)
+
+  return (
+    <Box style={{ width: '100%', overflow: 'hidden' }}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="GPU 美元每小时价格折线图"
+        style={{ width: '100%' }}
+      >
+        {gridValues.map((value) => (
+          <g key={value}>
+            <line
+              x1={padding.left}
+              x2={width - padding.right}
+              y1={y(value)}
+              y2={y(value)}
+              stroke="var(--mantine-color-gray-3)"
+              strokeDasharray="4 5"
+            />
+            <text
+              x={padding.left - 10}
+              y={y(value) + 4}
+              textAnchor="end"
+              fontSize="11"
+              fill="currentColor"
+              opacity="0.6"
+            >
+              ${value.toFixed(2)}
+            </text>
+          </g>
+        ))}
+        {sources.map(({ source, color }) => {
+          const sourcePoints = valid.filter((point) => point.source === source).sort((a, b) => a.time - b.time)
+          if (sourcePoints.length === 0) return null
+          const coordinates = sourcePoints
+            .map((point) => `${x(point.time)},${y(Number(point.priceUsdPerGpuHour))}`)
+            .join(' ')
+          return (
+            <g key={source}>
+              <polyline
+                fill="none"
+                stroke={color}
+                strokeWidth="3"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                points={coordinates}
+              />
+              {sourcePoints.map((point) => (
+                <circle
+                  key={`${source}-${point.time}`}
+                  cx={x(point.time)}
+                  cy={y(Number(point.priceUsdPerGpuHour))}
+                  r="3"
+                  fill={color}
+                >
+                  <title>
+                    {`${point.gpuModel} · $${Number(point.priceUsdPerGpuHour).toFixed(4)} · ${formatDate(point.sampledAt)}`}
+                  </title>
+                </circle>
+              ))}
+            </g>
+          )
+        })}
+        <text x={padding.left} y={height - 12} fontSize="11" fill="currentColor" opacity="0.6">
+          {formatChartTime(minTime)}
+        </text>
+        <text
+          x={width - padding.right}
+          y={height - 12}
+          textAnchor="end"
+          fontSize="11"
+          fill="currentColor"
+          opacity="0.6"
+        >
+          {formatChartTime(maxTime)}
+        </text>
+      </svg>
+    </Box>
+  )
+}
+
+function ChartLegend({ color, label }: { color: string; label: string }) {
+  return (
+    <Group gap={6}>
+      <Box w={18} h={3} bg={color} style={{ borderRadius: 3 }} />
+      <Text size="xs">{label}</Text>
+    </Group>
+  )
+}
+
+function mergeLivePricePoints(
+  history: ComputeMarketPriceHistory | undefined,
+  quotes: ComputeMarketPriceQuote[]
+): ComputeMarketPricePoint[] {
+  const points = [...(history?.points || [])]
+  for (const quote of quotes) {
+    if (quote.priceUsdPerGpuHour == null || !quote.sampledAt || !quote.quoteType) continue
+    points.push({
+      source: quote.source,
+      gpuModel: quote.gpuModel,
+      quoteType: quote.quoteType,
+      priceUsdPerGpuHour: quote.priceUsdPerGpuHour,
+      priceCnyPerGpuHour: quote.priceCnyPerGpuHour || 0,
+      cardHoursPerGpuHour: quote.cardHoursPerGpuHour || 0,
+      sampleSize: quote.sampleSize || 0,
+      sampledAt: quote.sampledAt,
+    })
+  }
+  const unique = new Map(points.map((point) => [`${point.source}:${point.sampledAt}`, point]))
+  return [...unique.values()].sort((a, b) => new Date(a.sampledAt).getTime() - new Date(b.sampledAt).getTime())
+}
+
+function marketPriceStatus(quote: ComputeMarketPriceQuote) {
+  switch (quote.status) {
+    case 'OK':
+      return { label: '数据正常', color: 'green' }
+    case 'STALE':
+      return { label: '使用上次数据', color: 'yellow' }
+    case 'UNCONFIGURED':
+      return { label: '未配置', color: 'orange' }
+    case 'UNAVAILABLE':
+      return { label: '来源异常', color: 'red' }
+    default:
+      return { label: '暂无该型号', color: 'gray' }
+  }
+}
+
+function formatMarketPrice(quote?: ComputeMarketPriceQuote) {
+  return quote?.priceUsdPerGpuHour == null ? '暂无报价' : `$${formatNumber(quote.priceUsdPerGpuHour, 4)} / GPU·小时`
+}
+
+function formatChartTime(timestamp: number) {
+  return new Date(timestamp).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
 }
 
 function ReservationModal({
@@ -2915,10 +3386,12 @@ function AdminSettings({
   run: RunAction
 }) {
   const [transferReviewThreshold, setTransferReviewThreshold] = useState(1000)
+  const [usdCnyRate, setUsdCnyRate] = useState(7.2)
 
   useEffect(() => {
     if (!overview) return
     setTransferReviewThreshold(Number(overview.transferReviewThreshold))
+    setUsdCnyRate(Number(overview.usdCnyRate || 7.2))
   }, [overview])
 
   return (
@@ -2933,6 +3406,15 @@ function AdminSettings({
           w={240}
         />
         <NumberInput
+          label="美元兑人民币估算汇率"
+          description="仅用于第三方 GPU 行情折算展示"
+          min={0.0001}
+          decimalScale={4}
+          value={usdCnyRate}
+          onChange={(value) => setUsdCnyRate(Number(value) || 0)}
+          w={240}
+        />
+        <NumberInput
           label="平台佣金（第一版固定）"
           description="商家订单确认后获得全部卡时"
           value={0}
@@ -2941,7 +3423,7 @@ function AdminSettings({
         />
         <Button
           loading={busy === 'admin-settings'}
-          disabled={transferReviewThreshold <= 0}
+          disabled={transferReviewThreshold <= 0 || usdCnyRate <= 0}
           onClick={() =>
             run(
               'admin-settings',
@@ -2949,6 +3431,7 @@ function AdminSettings({
                 updateComputeAdminSettings({
                   transferReviewThreshold,
                   platformFeeRate: 0,
+                  usdCnyRate,
                 }),
               '结算规则已更新'
             )
@@ -3323,19 +3806,6 @@ function EmptyState({ title, description }: { title: string; description: string
         {description}
       </Text>
     </Paper>
-  )
-}
-
-function DataRow({ label, value }: { label: string; value: string }) {
-  return (
-    <Flex justify="space-between" gap="md">
-      <Text size="sm" c="chatbox-tertiary">
-        {label}
-      </Text>
-      <Text size="sm" fw={500} ta="right">
-        {value}
-      </Text>
-    </Flex>
   )
 }
 

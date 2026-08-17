@@ -129,6 +129,18 @@ export function getKodApiOrigin() {
   return USE_LOCAL_API || NODE_ENV === 'development' ? 'http://localhost:8080' : KOD_API_ORIGIN
 }
 
+export const KOD_AUTH_REQUEST_TIMEOUT_MS = 12_000
+
+function throwReadableKodAuthError(error: unknown): never {
+  if (error instanceof Error) {
+    const detail = `${error.name} ${error.message}`
+    if (/abort|timeout|timed out|failed to fetch|fetch failed|network error/i.test(detail)) {
+      throw new Error('登录服务连接超时，请确认本机后端已启动且数据库网络可用后重试')
+    }
+  }
+  throw error
+}
+
 export function buildChatboxUrl(path: string) {
   return new URL(path, getChatboxOrigin()).toString()
 }
@@ -189,19 +201,26 @@ export async function loginWithKod(params: {
   inviteCode?: string
   emailCode?: string
 }) {
-  const json = await ofetch(`${getKodApiOrigin()}/api/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: {
-      email: params.email,
-      password: params.password,
-      ...(params.inviteCode ? { inviteCode: params.inviteCode } : {}),
-      ...(params.emailCode ? { emailCode: params.emailCode } : {}),
-    },
-    ignoreResponseError: true,
-  })
+  let json: unknown
+  try {
+    json = await ofetch(`${getKodApiOrigin()}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: {
+        email: params.email,
+        password: params.password,
+        ...(params.inviteCode ? { inviteCode: params.inviteCode } : {}),
+        ...(params.emailCode ? { emailCode: params.emailCode } : {}),
+      },
+      ignoreResponseError: true,
+      retry: 0,
+      timeout: KOD_AUTH_REQUEST_TIMEOUT_MS,
+    })
+  } catch (error) {
+    throwReadableKodAuthError(error)
+  }
 
   const data = unwrapKodResult(
     KodResultSchema(

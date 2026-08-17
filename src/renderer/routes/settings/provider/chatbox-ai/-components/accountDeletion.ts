@@ -12,7 +12,8 @@ import queryClient from '@/stores/queryClient'
 import { settingsStore } from '@/stores/settingsStore'
 import { purgeTaskSessionData, resetTaskSessionStorage } from '@/stores/taskSessionStore'
 
-export const ACCOUNT_DELETE_CONFIRMATION = 'DELETE'
+export const ACCOUNT_DELETE_CONFIRMATION = '确认删除'
+const SERVER_ACCOUNT_DELETE_CONFIRMATION = 'DELETE'
 
 export function canDeleteAccount(password: string, confirmation: string, acknowledged: boolean): boolean {
   return password.length > 0 && confirmation === ACCOUNT_DELETE_CONFIRMATION && acknowledged
@@ -21,9 +22,7 @@ export function canDeleteAccount(password: string, confirmation: string, acknowl
 export class AccountDeletedWithCleanupError extends Error {
   readonly serverAccountDeleted = true
   constructor(readonly cleanupErrors: unknown[]) {
-    super(
-      'Account deleted, but some local data could not be removed. You have been signed out; restart the app or remove the remaining data manually.'
-    )
+    super('账号已删除，但部分本地数据未能清除。当前账号已退出，请重启应用或手动清理剩余数据。')
     this.name = 'AccountDeletedWithCleanupError'
   }
 }
@@ -50,11 +49,14 @@ function clearAccountCaches() {
 
 export async function deleteCurrentKodAccount(password: string): Promise<void> {
   const auth = authInfoStore.getState()
-  if (!auth.accessToken || !auth.loginEmail)
-    throw new Error('KOD login information is unavailable. Sign in again and retry.')
+  if (!auth.accessToken || !auth.loginEmail) throw new Error('KOD 登录信息不可用，请重新登录后再试。')
   const accountKey = deriveAccountKey(auth.loginEmail)
 
-  await deleteKodAccount({ accessToken: auth.accessToken, password, confirmation: ACCOUNT_DELETE_CONFIRMATION })
+  await deleteKodAccount({
+    accessToken: auth.accessToken,
+    password,
+    confirmation: SERVER_ACCOUNT_DELETE_CONFIRMATION,
+  })
 
   const cleanupErrors: unknown[] = []
   const cleanup = async (work: () => void | Promise<void>) => {

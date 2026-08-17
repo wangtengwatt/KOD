@@ -1,7 +1,6 @@
 import { Button, Paper, Stack, Text } from '@mantine/core'
 import { tinpaySessionIdSchema } from '@shared/tinpay'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { createTinpaySession, getTinpaySession, type TinpayStatus } from '@/packages/tinpay'
 import platform from '@/platform'
 
@@ -33,7 +32,6 @@ function loadSession(): Session | null {
   }
 }
 export function TinpayDemoCard() {
-  const { t } = useTranslation()
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [status, setStatus] = useState<TinpayStatus['status'] | 'idle'>(() => loadSession()?.status || 'idle')
   const [loading, setLoading] = useState(false)
@@ -117,19 +115,17 @@ export function TinpayDemoCard() {
   return (
     <Paper withBorder p="md">
       <Stack gap="sm">
-        <Text fw={600}>{t('Tinpay demo')}</Text>
+        <Text fw={600}>Tinpay 支付演示</Text>
         <Text c="chatbox-tertiary">
-          {completed
-            ? t('Tinpay demo completed. No real funds were deducted.')
-            : t('This feature is currently a demo experience and will not result in an actual charge.')}
+          {completed ? 'Tinpay 支付演示已完成，未扣除任何真实资金。' : '该功能目前仅用于演示，不会产生真实扣款。'}
         </Text>
-        {error && <Text c="red">{t('Unable to start or check the Tinpay demo.')}</Text>}
+        {error && <Text c="red">无法启动或查询 Tinpay 支付演示，请稍后重试。</Text>}
         <Button
           loading={loading}
           disabled={loading || (session !== null && !active)}
           onClick={() => (active && session ? void window.electronAPI.tinpay.open(session) : void start())}
         >
-          {active ? t('Reopen demo') : t('Start demo')}
+          {active ? '重新打开演示' : '开始演示'}
         </Button>
         {session && (
           <Button
@@ -139,7 +135,7 @@ export function TinpayDemoCard() {
               void window.electronAPI.tinpay.openExternal({ sessionId: tinpaySessionIdSchema.parse(session.sessionId) })
             }
           >
-            {t('Open in browser')}
+            在浏览器中打开
           </Button>
         )}
       </Stack>
