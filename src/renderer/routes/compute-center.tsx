@@ -37,7 +37,6 @@ import {
   IconRefresh,
   IconServer,
   IconShieldCheck,
-  IconTransfer,
   IconWallet,
 } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -45,6 +44,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { zodValidator } from '@tanstack/zod-adapter'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
+import { CardHourAdminPanel, CardHourBusiness, CardHourMarketplace } from '@/components/compute/CardHourBusiness'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import {
@@ -289,10 +289,10 @@ function ComputeCenterPage() {
   const account = accountQuery.data
   const tabs = [
     { value: 'market', label: '算力市场', icon: <IconBuildingStore size={16} /> },
+    { value: 'card-hours', label: '卡时资产', icon: <IconDatabaseDollar size={16} /> },
     { value: 'account', label: '我的资产', icon: <IconWallet size={16} />, login: true },
     { value: 'purchases', label: '购买记录', icon: <IconReceipt size={16} />, login: true },
     { value: 'reservations', label: '我的订单', icon: <IconServer size={16} />, login: true },
-    { value: 'transfers', label: '转让', icon: <IconTransfer size={16} />, login: true },
     { value: 'supplier', label: '我的设备', icon: <IconCpu size={16} />, login: true },
     { value: 'notifications', label: '通知', icon: <IconBell size={16} />, login: true },
   ]
@@ -363,12 +363,44 @@ function ComputeCenterPage() {
             </ScrollArea>
 
             <Tabs.Panel value="market" pt="md">
-              <MarketPanel
-                products={productsQuery.data || []}
-                loading={productsQuery.isLoading}
+              <Tabs defaultValue="resources" keepMounted={false}>
+                <Tabs.List>
+                  <Tabs.Tab value="resources">GPU 与 API 商品</Tabs.Tab>
+                  <Tabs.Tab value="card-hour-market">卡时现货与询价</Tabs.Tab>
+                </Tabs.List>
+                <Tabs.Panel value="resources" pt="md">
+                  <MarketPanel
+                    products={productsQuery.data || []}
+                    loading={productsQuery.isLoading}
+                    isLoggedIn={isLoggedIn}
+                    busy={busy}
+                    runCardHourAction={runCardHourAction}
+                  />
+                </Tabs.Panel>
+                <Tabs.Panel value="card-hour-market" pt="md">
+                  <CardHourMarketplace
+                    account={account}
+                    isLoggedIn={isLoggedIn}
+                    busy={busy}
+                    run={run}
+                    runCardHourAction={runCardHourAction}
+                  />
+                </Tabs.Panel>
+              </Tabs>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="card-hours" pt="md">
+              <CardHourBusiness
+                account={account}
                 isLoggedIn={isLoggedIn}
                 busy={busy}
+                run={run}
                 runCardHourAction={runCardHourAction}
+                directTransferPanel={
+                  isLoggedIn ? (
+                    <TransfersPanel account={account} busy={busy} run={run} runCardHourAction={runCardHourAction} />
+                  ) : undefined
+                }
               />
             </Tabs.Panel>
 
@@ -382,9 +414,6 @@ function ComputeCenterPage() {
                 </Tabs.Panel>
                 <Tabs.Panel value="reservations" pt="md">
                   <ReservationsPanel busy={busy} run={run} />
-                </Tabs.Panel>
-                <Tabs.Panel value="transfers" pt="md">
-                  <TransfersPanel account={account} busy={busy} run={run} runCardHourAction={runCardHourAction} />
                 </Tabs.Panel>
                 <Tabs.Panel value="supplier" pt="md">
                   <SupplierPanel busy={busy} run={run} />
@@ -788,11 +817,11 @@ function AssetDashboard({
       <Section title="常用功能">
         <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="sm">
           {[
+            ['card-hours', '卡时资产'],
             ['supplier', supplierEntryLabel],
             ['market', '购买算力'],
             ['reservations', '我的订单'],
             ['purchases', '购买记录'],
-            ['transfers', '卡时转让'],
             ['notifications', '通知中心'],
           ].map(([value, label]) => (
             <Button key={value} variant="light" h={52} onClick={() => onOpen(value)}>
@@ -1488,22 +1517,25 @@ function ReservationCard({
   return (
     <Paper withBorder p="md" radius="md">
       <Stack gap="sm">
-        <Flex justify="space-between" align="flex-start" gap="md" wrap="wrap">
-          <Box>
-            <Group gap="xs">
-              <Title order={5}>{reservation.productName}</Title>
-              <StatusBadge status={reservation.status} />
-            </Group>
-            <Text size="sm" c="chatbox-tertiary">
-              {reservation.gpuModel} × {reservation.gpuCount}
-              {marketplace && reservation.deliveredAt
-                ? ` · 商定使用时间 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`
-                : marketplace
-                  ? ` · 交付截止 ${formatDate(reservation.deliveryDeadlineAt)}`
-                  : ` · 历史预订 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`}
-            </Text>
-          </Box>
-          <Text fw={700}>{formatCardHours(reservation.frozenCardHours)} 卡时</Text>
+        <Flex align="flex-start" gap="md" wrap="wrap">
+          <OrderProductImage reservation={reservation} />
+          <Flex justify="space-between" align="flex-start" gap="md" wrap="wrap" style={{ flex: 1, minWidth: 0 }}>
+            <Box>
+              <Group gap="xs">
+                <Title order={5}>{reservation.productName}</Title>
+                <StatusBadge status={reservation.status} />
+              </Group>
+              <Text size="sm" c="chatbox-tertiary">
+                {reservation.gpuModel} × {reservation.gpuCount}
+                {marketplace && reservation.deliveredAt
+                  ? ` · 商定使用时间 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`
+                  : marketplace
+                    ? ` · 交付截止 ${formatDate(reservation.deliveryDeadlineAt)}`
+                    : ` · 历史预订 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`}
+              </Text>
+            </Box>
+            <Text fw={700}>{formatCardHours(reservation.frozenCardHours)} 卡时</Text>
+          </Flex>
         </Flex>
         {view === 'supplier' && reservation.buyerEmail && <Text size="sm">买方：{reservation.buyerEmail}</Text>}
         {reservation.incidentReason && (
@@ -1680,6 +1712,26 @@ function ReservationCard({
   )
 }
 
+function OrderProductImage({ reservation }: { reservation: ComputeReservation }) {
+  if (!reservation.coverImageId) return null
+  return (
+    <Box
+      component="img"
+      src={getComputeProductImageUrl(reservation.productId, reservation.coverImageId)}
+      alt={`${reservation.productName} 商品图片`}
+      loading="lazy"
+      style={{
+        width: 180,
+        height: 112,
+        flex: '0 0 180px',
+        objectFit: 'cover',
+        borderRadius: 8,
+        border: '1px solid var(--mantine-color-default-border)',
+      }}
+    />
+  )
+}
+
 function TransfersPanel({
   account,
   busy,
@@ -1700,7 +1752,7 @@ function TransfersPanel({
     <Stack gap="md">
       <Paper withBorder p="md" radius="md">
         <Title order={5} mb="sm">
-          无偿转让卡时
+          创建定向转让
         </Title>
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
           <TextInput
@@ -2500,6 +2552,7 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
 
         <Tabs.Panel value="operations" pt="md">
           <Stack>
+            <CardHourAdminPanel busy={busy} run={run} />
             <AdminNodeOperations nodes={nodesQuery.data || []} busy={busy} run={run} />
             <AdminReservationOperations reservations={reservationsQuery.data || []} busy={busy} run={run} />
             <AdminSuspendedProxyKeys keys={suspendedKeysQuery.data || []} busy={busy} run={run} />
@@ -2738,18 +2791,21 @@ function AdminReservationOperations({
             return (
               <Paper key={item.id} withBorder p="md" radius="md">
                 <Stack gap="sm">
-                  <Flex justify="space-between" gap="md" wrap="wrap">
-                    <Box>
-                      <Group gap="xs">
-                        <Text fw={600}>{item.productName}</Text>
-                        <StatusBadge status={item.status} />
-                      </Group>
-                      <Text size="sm" c="chatbox-tertiary">
-                        买方 {item.buyerEmail} · 商家 {item.supplierEmail || '-'} · {formatDate(item.startTime)} 至{' '}
-                        {formatDate(item.endTime)}
-                      </Text>
-                    </Box>
-                    <Text fw={700}>冻结 {formatCardHours(item.frozenCardHours)} 卡时</Text>
+                  <Flex align="flex-start" gap="md" wrap="wrap">
+                    <OrderProductImage reservation={item} />
+                    <Flex justify="space-between" gap="md" wrap="wrap" style={{ flex: 1, minWidth: 0 }}>
+                      <Box>
+                        <Group gap="xs">
+                          <Text fw={600}>{item.productName}</Text>
+                          <StatusBadge status={item.status} />
+                        </Group>
+                        <Text size="sm" c="chatbox-tertiary">
+                          买方 {item.buyerEmail} · 商家 {item.supplierEmail || '-'} · {formatDate(item.startTime)} 至{' '}
+                          {formatDate(item.endTime)}
+                        </Text>
+                      </Box>
+                      <Text fw={700}>冻结 {formatCardHours(item.frozenCardHours)} 卡时</Text>
+                    </Flex>
                   </Flex>
                   {item.incidentReason && <Alert color="red">异常原因：{item.incidentReason}</Alert>}
                   {item.disputeEvidence && <Alert color="orange">买家证据：{item.disputeEvidence}</Alert>}

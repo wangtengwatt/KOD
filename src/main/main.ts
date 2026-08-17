@@ -38,6 +38,7 @@ import { AppUpdater } from './app-updater'
 import * as autoLauncher from './autoLauncher'
 import { findKodDeepLink, handleDeepLink } from './deeplinks'
 import { parseFile } from './file-parser'
+import { registerKaiIdentityHandlers } from './kai-identity'
 import Locale from './locales'
 import * as mcpIpc from './mcp/ipc-stdio-transport'
 import MenuBuilder from './menu'
@@ -1034,3 +1035,4 @@ ipcMain.handle('window:is-maximized', () => {
 registerSandboxHandlers()
 registerSkillsHandlers()
 registerOAuthHandlers()
+registerKaiIdentityHandlers()

@@ -56,6 +56,12 @@ function formatAmount(value: number | undefined, digits = 3) {
   return Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits })
 }
 
+const roleLabels = {
+  BUYER: { label: '购买方', color: 'blue' },
+  SUPPLIER: { label: '已认证供应方', color: 'teal' },
+  ADMIN: { label: '算力管理员', color: 'violet' },
+} as const
+
 function MobileMyPage() {
   const navigate = useNavigate()
   const language = useLanguage()
@@ -124,15 +130,26 @@ function MobileMyPage() {
         <Card withBorder radius="lg" padding="lg">
           <Stack gap="md">
             <Group justify="space-between" align="flex-start">
-              <Group>
+              <Group wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
                 <ThemeIcon size={44} radius="xl" variant="light">
                   <IconUserCircle size={26} />
                 </ThemeIcon>
-                <div>
-                  <Title order={4}>{displayEmail || (isLoggedIn ? '已登录 KOD' : '尚未登录 KOD')}</Title>
+                <div style={{ minWidth: 0 }}>
+                  <Title order={4} style={{ overflowWrap: 'anywhere' }}>
+                    {displayEmail || (isLoggedIn ? '已登录 KOD' : '尚未登录 KOD')}
+                  </Title>
                   <Text size="sm" c="kod-tertiary">
                     官网、安卓端和算力中心共用同一账户与人民币钱包
                   </Text>
+                  {account.data && (
+                    <Group gap={6} mt="xs">
+                      {account.data.roles.map((role) => (
+                        <Badge key={role} size="sm" color={roleLabels[role].color}>
+                          {roleLabels[role].label}
+                        </Badge>
+                      ))}
+                    </Group>
+                  )}
                 </div>
               </Group>
               <Badge color={isLoggedIn ? 'green' : 'gray'}>{isLoggedIn ? '已登录' : '未登录'}</Badge>
@@ -162,10 +179,28 @@ function MobileMyPage() {
           </Stack>
         </Card>
 
+        {isLoggedIn && account.isError && (
+          <Alert color="red" title="账户数据同步失败">
+            <Stack gap="xs">
+              <Text size="sm">
+                {account.error instanceof Error ? account.error.message : '暂时无法读取线上账户与算力资产。'}
+              </Text>
+              <Button size="compact-xs" variant="light" color="red" onClick={() => void account.refetch()}>
+                重新同步
+              </Button>
+            </Stack>
+          </Alert>
+        )}
+
         {account.data && (
           <Card withBorder radius="lg" padding="md">
             <Group justify="space-between" mb="sm">
-              <Text fw={700}>我的资产与收益</Text>
+              <div>
+                <Text fw={700}>我的资产与收益</Text>
+                <Text size="xs" c="kod-tertiary">
+                  已与桌面端共用线上 KOD 账户账本
+                </Text>
+              </div>
               <Button size="compact-xs" variant="subtle" onClick={() => void account.refetch()}>
                 刷新
               </Button>

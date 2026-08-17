@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { loginWithKod, sendKodEmailCode } from './remote'
+import { getKaiIdentityConfig, loginWithKaiIdentity, loginWithKod, sendKodEmailCode } from './remote'
 
 const KOD_ORIGIN = 'https://kod.kai.com'
 
@@ -104,5 +104,45 @@ describe('sendKodEmailCode', () => {
   it('throws default message when server message is empty', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ code: 1003, message: '' })))
     await expect(sendKodEmailCode('a@b.com')).rejects.toThrow('发送验证码失败')
+  })
+})
+
+describe('KAI Identity login', () => {
+  it('loads the public PKCE configuration from the KOD backend', async () => {
+    const config = {
+      enabled: true,
+      clientId: 'kod-desktop',
+      issuer: 'https://auth.kai.com/api/auth',
+      authorizationEndpoint: 'https://auth.kai.com/api/auth/oauth2/authorize',
+      tokenEndpoint: 'https://auth.kai.com/api/auth/oauth2/token',
+      redirectUri: 'http://127.0.0.1:1456/auth/callback',
+      scope: 'openid profile email',
+    }
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ code: 0, data: config }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(getKaiIdentityConfig()).resolves.toEqual(config)
+    expect(fetchMock.mock.calls[0][0]).toBe(`${KOD_ORIGIN}/api/auth/kai/config`)
+  })
+
+  it('exchanges the Identity access token for a normal KOD session', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        code: 0,
+        data: { token: 'kod-jwt', newUser: false, email: 'user@kai.com' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(loginWithKaiIdentity('identity-access-token')).resolves.toEqual({
+      accessToken: 'kod-jwt',
+      refreshToken: 'kod-jwt',
+      newUser: false,
+      email: 'user@kai.com',
+    })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe(`${KOD_ORIGIN}/api/auth/kai/exchange`)
+    expect(init.method).toBe('POST')
+    expect(readBody(init)).toEqual({ accessToken: 'identity-access-token' })
   })
 })
