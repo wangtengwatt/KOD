@@ -16,21 +16,28 @@ import {
   IconBook2,
   IconBrain,
   IconCpu,
+  IconLogout,
   IconRefresh,
   IconRobot,
   IconSettings,
   IconSparkles,
+  IconSwitch,
   IconUserCircle,
   IconWallet,
 } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { Modal } from '@/components/layout/Overlay'
 import Page from '@/components/layout/Page'
 import { isAndroidAgentAvailable } from '@/packages/android-agent/native'
 import { checkAndroidUpdate, openAndroidUpdate } from '@/packages/androidUpdate'
 import { getComputeAccount } from '@/packages/computeCenter'
-import { useAuthInfoStore } from '@/stores/authInfoStore'
+import { EmailCodeLoginModal } from '@/routes/settings/provider/kod-ai/-components/EmailCodeLoginModal'
+import type { AuthTokens } from '@/routes/settings/provider/kod-ai/-components/types'
+import { useAuthTokens } from '@/routes/settings/provider/kod-ai/-components/useAuthTokens'
+import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
+import { useLanguage } from '@/stores/settingsStore'
 
 export const Route = createFileRoute('/mobile-my')({ component: MobileMyPage })
 
@@ -51,16 +58,48 @@ function formatAmount(value: number | undefined, digits = 3) {
 
 function MobileMyPage() {
   const navigate = useNavigate()
+  const language = useLanguage()
+  const { clearAuthTokens, saveAuthTokens } = useAuthTokens()
   const email = useAuthInfoStore((state) => state.loginEmail)
   const accessToken = useAuthInfoStore((state) => state.accessToken)
+  const refreshToken = useAuthInfoStore((state) => state.refreshToken)
+  const isLoggedIn = Boolean(accessToken && refreshToken)
   const account = useQuery({
     queryKey: ['compute', 'mobile-account', email],
     queryFn: getComputeAccount,
-    enabled: Boolean(accessToken),
+    enabled: isLoggedIn,
     retry: 1,
   })
+  const accountEmail = account.data?.email?.trim().toLowerCase() || null
+  const displayEmail = email || accountEmail
+
+  useEffect(() => {
+    if (!email && accountEmail && accessToken && refreshToken) {
+      authInfoStore.getState().setTokens({ accessToken, refreshToken, email: accountEmail })
+    }
+  }, [accessToken, accountEmail, email, refreshToken])
   const [updateMessage, setUpdateMessage] = useState('')
   const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [switchAccountOpened, setSwitchAccountOpened] = useState(false)
+  const [logoutConfirmOpened, setLogoutConfirmOpened] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  const switchAccount = async (tokens: AuthTokens) => {
+    await clearAuthTokens({ preserveAccountData: true })
+    await saveAuthTokens(tokens)
+    setSwitchAccountOpened(false)
+  }
+
+  const logout = async () => {
+    if (loggingOut) return
+    setLoggingOut(true)
+    try {
+      await clearAuthTokens({ preserveAccountData: true })
+      setLogoutConfirmOpened(false)
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   const checkUpdate = async () => {
     setCheckingUpdate(true)
@@ -83,20 +122,44 @@ function MobileMyPage() {
     <Page title="我的">
       <Stack p="md" pb="calc(5.5rem + var(--mobile-safe-area-inset-bottom, 0px))" gap="md">
         <Card withBorder radius="lg" padding="lg">
-          <Group justify="space-between" align="flex-start">
-            <Group>
-              <ThemeIcon size={44} radius="xl" variant="light">
-                <IconUserCircle size={26} />
-              </ThemeIcon>
-              <div>
-                <Title order={4}>{email || '尚未登录 KOD'}</Title>
-                <Text size="sm" c="kod-tertiary">
-                  官网、安卓端和算力中心共用同一账户与人民币钱包
-                </Text>
-              </div>
+          <Stack gap="md">
+            <Group justify="space-between" align="flex-start">
+              <Group>
+                <ThemeIcon size={44} radius="xl" variant="light">
+                  <IconUserCircle size={26} />
+                </ThemeIcon>
+                <div>
+                  <Title order={4}>{displayEmail || (isLoggedIn ? '已登录 KOD' : '尚未登录 KOD')}</Title>
+                  <Text size="sm" c="kod-tertiary">
+                    官网、安卓端和算力中心共用同一账户与人民币钱包
+                  </Text>
+                </div>
+              </Group>
+              <Badge color={isLoggedIn ? 'green' : 'gray'}>{isLoggedIn ? '已登录' : '未登录'}</Badge>
             </Group>
-            <Badge color={email ? 'green' : 'gray'}>{email ? '已登录' : '未登录'}</Badge>
-          </Group>
+
+            {isLoggedIn && (
+              <Group justify="flex-end" gap="xs">
+                <Button
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconSwitch size={16} />}
+                  onClick={() => setSwitchAccountOpened(true)}
+                >
+                  切换账号
+                </Button>
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="red"
+                  leftSection={<IconLogout size={16} />}
+                  onClick={() => setLogoutConfirmOpened(true)}
+                >
+                  退出登录
+                </Button>
+              </Group>
+            )}
+          </Stack>
         </Card>
 
         {account.data && (
@@ -183,6 +246,38 @@ function MobileMyPage() {
           )}
         </Card>
       </Stack>
+
+      <EmailCodeLoginModal
+        opened={switchAccountOpened}
+        onClose={() => setSwitchAccountOpened(false)}
+        language={language}
+        defaultIsFirstLogin={false}
+        onLoginSuccess={switchAccount}
+      />
+
+      <Modal
+        opened={logoutConfirmOpened}
+        onClose={() => {
+          if (!loggingOut) setLogoutConfirmOpened(false)
+        }}
+        centered
+        title="确认退出登录"
+        closeOnClickOutside={!loggingOut}
+        closeOnEscape={!loggingOut}
+        withCloseButton={!loggingOut}
+      >
+        <Stack gap="md">
+          <Text size="sm">退出后需要重新登录才能使用账户钱包、零售站、节点与算力中心。</Text>
+          <Group justify="flex-end" gap="sm">
+            <Button variant="light" color="gray" disabled={loggingOut} onClick={() => setLogoutConfirmOpened(false)}>
+              取消
+            </Button>
+            <Button color="red" loading={loggingOut} onClick={() => void logout()}>
+              确认退出
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Page>
   )
 }

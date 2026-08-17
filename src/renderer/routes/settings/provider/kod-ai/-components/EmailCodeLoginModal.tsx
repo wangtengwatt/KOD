@@ -3,12 +3,14 @@ import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Modal } from '@/components/layout/Overlay'
 import { loginWithKod } from '@/packages/remote'
+import type { AuthTokens } from './types'
 
 interface EmailCodeLoginModalProps {
   opened: boolean
   onClose: () => void
   language: string
-  onLoginSuccess: (tokens: { accessToken: string; refreshToken: string }) => Promise<void>
+  onLoginSuccess: (tokens: AuthTokens) => Promise<void>
+  defaultIsFirstLogin?: boolean
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -18,12 +20,17 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
-export function EmailCodeLoginModal({ opened, onClose, onLoginSuccess }: EmailCodeLoginModalProps) {
+export function EmailCodeLoginModal({
+  opened,
+  onClose,
+  onLoginSuccess,
+  defaultIsFirstLogin = true,
+}: EmailCodeLoginModalProps) {
   const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [invitationCode, setInvitationCode] = useState('')
-  const [isFirstLogin, setIsFirstLogin] = useState(true)
+  const [isFirstLogin, setIsFirstLogin] = useState(defaultIsFirstLogin)
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -31,11 +38,11 @@ export function EmailCodeLoginModal({ opened, onClose, onLoginSuccess }: EmailCo
     setEmail('')
     setPassword('')
     setInvitationCode('')
-    setIsFirstLogin(true)
+    setIsFirstLogin(defaultIsFirstLogin)
     setError('')
     setIsSubmitting(false)
     onClose()
-  }, [onClose])
+  }, [defaultIsFirstLogin, onClose])
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) return

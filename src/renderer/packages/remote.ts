@@ -5,6 +5,7 @@ import platform from '@/platform'
 import { authInfoStore } from '@/stores/authInfoStore'
 import {
   CHATBOX_BUILD_CHANNEL,
+  KOD_API_ORIGIN as CONFIGURED_KOD_API_ORIGIN,
   USE_BETA_API,
   USE_BETA_CHATBOX,
   USE_LOCAL_API,
@@ -76,7 +77,7 @@ async function initAuthenticatedAfetch(): Promise<ReturnType<typeof createAuthen
       },
       refreshTokens: async (refreshToken: string) => {
         const result = await refreshAccessToken({ refreshToken })
-        authInfoStore.getState().setTokens(result)
+        authInfoStore.getState().setTokens(result, { preserveEmail: true })
         return result
       },
       clearTokens: async () => {
@@ -135,7 +136,7 @@ const getKodClientHeaders = async () => {
   }
 }
 
-export const KOD_API_ORIGIN = 'https://kod.kai.com'
+export const KOD_API_ORIGIN = CONFIGURED_KOD_API_ORIGIN
 
 export function getKodApiOrigin() {
   return KOD_API_ORIGIN
@@ -210,6 +211,7 @@ export async function loginWithKod(params: {
   return {
     accessToken: data.token,
     refreshToken: data.token,
+    email: params.email.trim().toLowerCase(),
     newUser: data.newUser,
   }
 }

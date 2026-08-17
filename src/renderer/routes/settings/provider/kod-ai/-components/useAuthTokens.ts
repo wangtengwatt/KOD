@@ -9,6 +9,10 @@ import queryClient from '@/stores/queryClient'
 import { settingsStore } from '@/stores/settingsStore'
 import type { AuthTokens } from './types'
 
+interface ClearAuthTokensOptions {
+  preserveAccountData?: boolean
+}
+
 export function useAuthTokens() {
   const accessToken = useAuthInfoStore((state) => state.accessToken)
   const refreshToken = useAuthInfoStore((state) => state.refreshToken)
@@ -29,7 +33,7 @@ export function useAuthTokens() {
     }
   }, [])
 
-  const clearAuthTokens = useCallback(async () => {
+  const clearAuthTokens = useCallback(async (options?: ClearAuthTokensOptions) => {
     try {
       const relayToken = authInfoStore.getState().accessToken
       if (relayToken) {
@@ -41,14 +45,16 @@ export function useAuthTokens() {
       }
       clearKodRelayLocalState()
 
-      // Purge local data for the current account BEFORE clearing tokens
-      // (needs loginEmail to identify the correct account database)
-      try {
-        const { purgeCurrentAccountData } = await import('@/stores/chatStore')
-        await purgeCurrentAccountData()
-      } catch (e) {
-        console.error('Failed to purge account data on logout:', e)
-        // Continue with logout even if purge fails
+      if (!options?.preserveAccountData) {
+        // Purge local data for the current account BEFORE clearing tokens
+        // (needs loginEmail to identify the correct account database)
+        try {
+          const { purgeCurrentAccountData } = await import('@/stores/chatStore')
+          await purgeCurrentAccountData()
+        } catch (e) {
+          console.error('Failed to purge account data on logout:', e)
+          // Continue with logout even if purge fails
+        }
       }
 
       const settings = settingsStore.getState()

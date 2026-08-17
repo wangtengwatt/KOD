@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type PersistedSettings = Record<string, unknown> | null
 
-async function loadSettingsStoreModule(persistedSettings: PersistedSettings = null) {
+async function loadSettingsStoreModule(
+  persistedSettings: PersistedSettings = null,
+  platformType: 'desktop' | 'mobile' = 'desktop'
+) {
   vi.resetModules()
 
   const mockStorage = {
@@ -18,7 +21,7 @@ async function loadSettingsStoreModule(persistedSettings: PersistedSettings = nu
 
   vi.doMock('@/platform', () => ({
     default: {
-      type: 'desktop',
+      type: platformType,
       ensureShortcutConfig: vi.fn(),
       ensureProxyConfig: vi.fn(),
       ensureAutoLaunch: vi.fn(),
@@ -80,7 +83,7 @@ describe('settingsStore persistence', () => {
           isCustom: true,
         },
       ],
-      __version: 5,
+      __version: 6,
     }
 
     const { initSettingsStore, settingsStore } = await loadSettingsStoreModule(persistedSettings)
@@ -145,7 +148,7 @@ describe('settingsStore persistence', () => {
           apiHost: 'https://api.openai.com',
         },
       },
-      __version: 5,
+      __version: 6,
     })
   })
 
@@ -162,6 +165,18 @@ describe('settingsStore persistence', () => {
     const hydrated = await initSettingsStore()
 
     expect(hydrated.language).toBe(expected)
+  })
+
+  it('migrates an existing mobile installation to Simplified Chinese once', async () => {
+    const { initSettingsStore } = await loadSettingsStoreModule(
+      { language: 'en', languageInited: true, __version: 5 },
+      'mobile'
+    )
+
+    const hydrated = await initSettingsStore()
+
+    expect(hydrated.language).toBe('zh-Hans')
+    expect(hydrated.languageInited).toBe(true)
   })
 
   it('backfills suanbao preferences when missing from persisted settings', async () => {

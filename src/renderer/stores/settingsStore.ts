@@ -62,7 +62,7 @@ export const settingsStore = createStore<Settings & Action>()(
           },
           removeItem: async (name) => await storage.removeItem(name),
         })),
-        version: 5,
+        version: 6,
         partialize: (state) => {
           try {
             return SettingsSchema.parse(state)
@@ -103,6 +103,13 @@ export const settingsStore = createStore<Settings & Action>()(
           }
 
           if (!hasExplicitLanguage) settings.language = 'zh-Hans'
+
+          // v6: 旧移动端曾跟随系统语言，导致英文系统上的 KOD 默认显示英文。
+          // 升级时只迁移一次；用户此后仍可在设置中主动切换语言。
+          if (platform.type === 'mobile') {
+            settings.language = 'zh-Hans'
+            settings.languageInited = true
+          }
 
           // Apply platform-specific default for documentParser if not set
           if (!settings.extension?.documentParser) {

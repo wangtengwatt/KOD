@@ -1,13 +1,13 @@
 {
   "name": "kod",
-  "productName": "Kod",
+  "productName": "KOD",
   "version": "0.1.0",
   "engines": {
     "node": ">=22.12.0 <25.0.0",
     "pnpm": ">=10.17.0"
   },
   "private": true,
-  "description": "Kod - A desktop client for multiple cutting-edge AI models",
+  "description": "KOD - A desktop client for multiple cutting-edge AI models",
   "main": "out/main/main.js",
   "scripts": {
     "generate:model-snapshot": "pnpm exec tsx scripts/generate-model-snapshot.ts",
@@ -71,7 +71,7 @@
   },
   "keywords": [],
   "author": {
-    "name": "Kod",
+    "name": "KOD",
     "email": "TODO_KOD_CONTACT_EMAIL"
   },
   "devDependencies": {

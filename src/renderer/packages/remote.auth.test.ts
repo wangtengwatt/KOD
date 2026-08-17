@@ -33,7 +33,7 @@ describe('loginWithKod', () => {
       emailCode: '123456',
     })
 
-    expect(result).toEqual({ accessToken: 'tok-1', refreshToken: 'tok-1', newUser: true })
+    expect(result).toEqual({ accessToken: 'tok-1', refreshToken: 'tok-1', email: 'a@b.com', newUser: true })
 
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe(`${KOD_ORIGIN}/api/auth/login`)
@@ -54,7 +54,12 @@ describe('loginWithKod', () => {
 
     const result = await loginWithKod({ email: 'user@example.com ', password: 'pw' })
 
-    expect(result).toEqual({ accessToken: 'tok-2', refreshToken: 'tok-2', newUser: false })
+    expect(result).toEqual({
+      accessToken: 'tok-2',
+      refreshToken: 'tok-2',
+      email: 'user@example.com',
+      newUser: false,
+    })
     const [, init] = fetchMock.mock.calls[0]
     const body = readBody(init)
     expect(body).toEqual({ email: 'user@example.com ', password: 'pw' })

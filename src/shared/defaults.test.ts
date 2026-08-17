@@ -9,7 +9,7 @@ describe('defaults', () => {
     const result: Settings = settings()
 
     expect(result.theme).toBe(Theme.System)
-    expect(result.language).toBe('en')
+    expect(result.language).toBe('zh-Hans')
     expect(result.fontSize).toBe(14)
     expect(result.spellCheck).toBe(true)
     expect(result.showWordCount).toBe(false)

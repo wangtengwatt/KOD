@@ -9,7 +9,9 @@ export function useSystemLanguageWhenInit() {
       ;(async () => {
         const { languageInited } = settingsStore.getState()
         if (!languageInited) {
-          let locale = await platform.getLocale()
+          // KOD 移动端产品默认使用简体中文，不跟随设备系统语言。
+          // 用户仍可在常规设置中主动切换语言，languageInited 会阻止后续启动再次覆盖。
+          let locale = platform.type === 'mobile' ? 'zh-Hans' : await platform.getLocale()
 
           // 网页版暂时不自动更改简体中文，防止网址封禁
           if (platform.type === 'web') {
