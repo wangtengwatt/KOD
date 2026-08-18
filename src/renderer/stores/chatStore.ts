@@ -33,8 +33,8 @@ import { uiStore } from './uiStore'
 const log = getLogger('chat-store')
 
 import { clearScrollPositionCache } from '@/components/chat/MessageList'
-import { authInfoStore } from './authInfoStore'
 import { cleanupSessionAtomCache } from './atoms/throttleWriteSessionAtom'
+import { authInfoStore } from './authInfoStore'
 import { lastUsedModelStore } from './lastUsedModelStore'
 import queryClient from './queryClient'
 import { getSessionMeta } from './sessionHelpers'
@@ -795,8 +795,15 @@ export async function recoverSessionList() {
  * account key is still available.
  * Returns the count of deleted sessions.
  */
-export async function purgeCurrentAccountData(): Promise<{ sessionCount: number }> {
-  const metaStorage = await getMetaStorage()
+export async function purgeCurrentAccountData(accountEmail?: string): Promise<{ sessionCount: number }> {
+  const accountKey = accountEmail ? deriveAccountKey(accountEmail) : (getAccountKeyForStorage() ?? null)
+  let metaStorage: SessionMetaStorage
+  if (accountKey === _currentMetaAccountKey && _metaStorage) {
+    metaStorage = _metaStorage
+  } else {
+    metaStorage = platform.getSessionMetaStorage(accountKey ?? undefined)
+    await metaStorage.initialize()
+  }
   const allMeta = await metaStorage.getAll()
 
   // Delete session content (messages, etc.) from the shared key-value store
@@ -808,7 +815,9 @@ export async function purgeCurrentAccountData(): Promise<{ sessionCount: number 
 
   // Delete the account-specific meta database
   await metaStorage.deleteDatabase()
-  resetMetaStorage()
+  if (accountKey === _currentMetaAccountKey) {
+    resetMetaStorage()
+  }
 
   // Clear session-related query caches
   queryClient.removeQueries({ queryKey: QueryKeys.ChatSessionsList })

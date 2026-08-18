@@ -19,7 +19,11 @@ export const USE_NEWDB_API = process.env.USE_NEWDB_API || ''
 export const USE_LOCAL_CHATBOX = process.env.USE_LOCAL_CHATBOX || ''
 export const USE_BETA_CHATBOX = process.env.USE_BETA_CHATBOX || ''
 
-// Kod Portal backend
+// KOD service identity and transport are build contracts, not runtime preferences.
+export const KOD_SERVICE_ENV = (process.env.KOD_SERVICE_ENV || 'production') as
+  | 'production'
+  | 'localtest'
+  | 'desktop-local'
 export const KOD_API_ORIGIN = process.env.KOD_API_ORIGIN || 'https://kod.kai.com'
 
 export const NODE_ENV = process.env.NODE_ENV || 'development'

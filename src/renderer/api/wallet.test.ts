@@ -230,6 +230,77 @@ describe('wallet contracts', () => {
     vi.stubGlobal('fetch', fetchMock)
     await expect(walletApi.getWallet()).resolves.toEqual({ balance: 12.5, historicalConsumption: 3 })
   })
+  it('refreshes once after a 401 and retries the wallet request with the shared session token', async () => {
+    authInfoStore.getState().setTokens({ accessToken: 'expired-access', refreshToken: 'refresh-a' })
+    const fetchMock = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url).includes('/api/auth/token_refresh')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: { result: 'ok' } }), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'x-kod-access-token': 'fresh-access',
+              'x-kod-refresh-token': 'refresh-b',
+            },
+          })
+        )
+      }
+      const bearer = new Headers(init?.headers).get('Authorization')
+      return Promise.resolve(
+        bearer === 'Bearer fresh-access'
+          ? ok({ balance: 12.5, historical_consumption: 3 })
+          : new Response('{}', { status: 401 })
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(walletApi.getWallet()).resolves.toEqual({ balance: 12.5, historicalConsumption: 3 })
+    expect(authInfoStore.getState().accessToken).toBe('fresh-access')
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/auth/token_refresh'))).toHaveLength(1)
+  })
+  it('logs out after a refreshed wallet request is still 401', async () => {
+    authInfoStore.getState().setTokens({ accessToken: 'expired-access', refreshToken: 'refresh-a' })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: RequestInfo | URL) => {
+        if (String(url).includes('/api/auth/token_refresh')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: { result: 'ok' } }), {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json',
+                'x-kod-access-token': 'fresh-access',
+                'x-kod-refresh-token': 'refresh-b',
+              },
+            })
+          )
+        }
+        return Promise.resolve(new Response('{}', { status: 401 }))
+      })
+    )
+
+    await expect(walletApi.getWallet()).rejects.toMatchObject({ kind: 'auth' })
+    expect(authInfoStore.getState().accessToken).toBeNull()
+  })
+  it('preserves a 403 business rejection without refreshing or logging the account out', async () => {
+    authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'refresh-a' })
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ code: 40301, message: 'public pool is unavailable', data: null }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(walletApi.getWallet()).rejects.toMatchObject({
+      kind: 'business',
+      message: 'public pool is unavailable',
+    })
+    expect(authInfoStore.getState().accessToken).toBe('secret')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
   it('sends amount and payment_method when paying', async () => {
     authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret' })
     const fetchMock = vi.fn((_url, init) => {

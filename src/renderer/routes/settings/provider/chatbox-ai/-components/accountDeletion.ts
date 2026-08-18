@@ -2,10 +2,10 @@ import { ModelProviderEnum } from '@shared/types'
 import { purgeSuanbaoPreferences } from '@/components/suanbao/suanbaoStore'
 import { clearKodRelayLocalState } from '@/hooks/useKodRelay'
 import { deleteKodAccount } from '@/packages/remote'
+import { accountSessionService } from '@/packages/session/accountSession'
 import { closeSuanbaoRepository, getSuanbaoRepository } from '@/packages/suanbao/repositories/createSuanbaoRepository'
 import { suanbaoRuntime } from '@/packages/suanbao/runtime'
 import { deriveAccountKey } from '@/storage/accountKey'
-import { authInfoStore } from '@/stores/authInfoStore'
 import { purgeCurrentAccountData, resetMetaStorage } from '@/stores/chatStore'
 import { purgeImageGenerationData, resetImageGenerationStorage } from '@/stores/imageGenerationStore'
 import queryClient from '@/stores/queryClient'
@@ -48,12 +48,13 @@ function clearAccountCaches() {
 }
 
 export async function deleteCurrentKodAccount(password: string): Promise<void> {
-  const auth = authInfoStore.getState()
-  if (!auth.accessToken || !auth.loginEmail) throw new Error('KOD 登录信息不可用，请重新登录后再试。')
-  const accountKey = deriveAccountKey(auth.loginEmail)
+  const tokens = accountSessionService.getTokens()
+  const email = accountSessionService.getSnapshot().account?.email || tokens?.email
+  if (!tokens?.accessToken || !email) throw new Error('KOD 登录信息不可用，请重新登录后再试。')
+  const accountKey = deriveAccountKey(email)
 
   await deleteKodAccount({
-    accessToken: auth.accessToken,
+    accessToken: tokens.accessToken,
     password,
     confirmation: SERVER_ACCOUNT_DELETE_CONFIRMATION,
   })
@@ -80,7 +81,7 @@ export async function deleteCurrentKodAccount(password: string): Promise<void> {
   await cleanup(() => purgeSuanbaoPreferences(accountKey))
   await cleanup(clearAccountCaches)
 
-  authInfoStore.getState().clearTokens()
+  accountSessionService.logout()
   resetMetaStorage()
   resetTaskSessionStorage()
   resetImageGenerationStorage()

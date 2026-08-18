@@ -16,85 +16,96 @@ type AuthState = {
   accessToken: string | null
   refreshToken: string | null
   getTokens: () => { accessToken: string; refreshToken: string } | null
+  clearTokens: () => void
 }
 
-const { remoteMocks, mcpMocks, stateControls, authControls, authSubscribers } = vi.hoisted(() => {
-  type MockSettingsState = {
-    licenseKey?: string
-    licenseActivationMethod?: 'login' | 'manual'
-    licenseInstances?: Record<string, string>
-    licenseDetail?: unknown
-    licensePlanName?: string
-    hasExpiredLicense?: boolean
-    mcp: {
-      enabledBuiltinServers: string[]
+const { remoteMocks, mcpMocks, sessionMocks, legacyAuthMocks, stateControls, authControls, authSubscribers } =
+  vi.hoisted(() => {
+    type MockSettingsState = {
+      licenseKey?: string
+      licenseActivationMethod?: 'login' | 'manual'
+      licenseInstances?: Record<string, string>
+      licenseDetail?: unknown
+      licensePlanName?: string
+      hasExpiredLicense?: boolean
+      mcp: {
+        enabledBuiltinServers: string[]
+      }
     }
-  }
-  type MockAuthState = {
-    accessToken: string | null
-    refreshToken: string | null
-    getTokens: () => { accessToken: string; refreshToken: string } | null
-  }
-  type AuthSubscriber = {
-    selector: (state: MockAuthState) => 'signed-in' | 'signed-out'
-    listener: (value: 'signed-in' | 'signed-out') => void
-    current: 'signed-in' | 'signed-out'
-  }
+    type MockAuthState = {
+      accessToken: string | null
+      refreshToken: string | null
+      getTokens: () => { accessToken: string; refreshToken: string } | null
+      clearTokens: () => void
+    }
+    type AuthSubscriber = {
+      selector: (state: MockAuthState) => 'signed-in' | 'signed-out'
+      listener: (value: 'signed-in' | 'signed-out') => void
+      current: 'signed-in' | 'signed-out'
+    }
 
-  const settings = {
-    current: {
-      licenseKey: undefined,
-      licenseActivationMethod: undefined,
-      licenseInstances: undefined,
-      licenseDetail: undefined,
-      licensePlanName: undefined,
-      hasExpiredLicense: undefined,
-      mcp: { enabledBuiltinServers: [] },
-    } as MockSettingsState,
-  }
-  const auth: { current: MockAuthState } = {
-    current: {
-      accessToken: null,
-      refreshToken: null,
-      getTokens() {
-        if (auth.current.accessToken && auth.current.refreshToken) {
-          return {
-            accessToken: auth.current.accessToken,
-            refreshToken: auth.current.refreshToken,
+    const settings = {
+      current: {
+        licenseKey: undefined,
+        licenseActivationMethod: undefined,
+        licenseInstances: undefined,
+        licenseDetail: undefined,
+        licensePlanName: undefined,
+        hasExpiredLicense: undefined,
+        mcp: { enabledBuiltinServers: [] },
+      } as MockSettingsState,
+    }
+    const auth: { current: MockAuthState } = {
+      current: {
+        accessToken: null,
+        refreshToken: null,
+        getTokens() {
+          if (auth.current.accessToken && auth.current.refreshToken) {
+            return {
+              accessToken: auth.current.accessToken,
+              refreshToken: auth.current.refreshToken,
+            }
           }
-        }
-        return null
-      },
-    } as MockAuthState,
-  }
-  const subscribers: AuthSubscriber[] = []
+          return null
+        },
+        clearTokens: vi.fn(),
+      } as MockAuthState,
+    }
+    const subscribers: AuthSubscriber[] = []
 
-  return {
-    remoteMocks: {
-      invalidateSessionRagConfigCache: vi.fn(),
-    },
-    mcpMocks: {
-      stopServer: vi.fn(() => Promise.resolve()),
-    },
-    stateControls: {
-      get current() {
-        return settings.current
+    return {
+      remoteMocks: {
+        invalidateSessionRagConfigCache: vi.fn(),
+        activateLicense: vi.fn(() => Promise.resolve({ valid: false, error: 'rejected' })),
       },
-      set current(next: MockSettingsState) {
-        settings.current = next
+      mcpMocks: {
+        stopServer: vi.fn(() => Promise.resolve()),
       },
-    },
-    authControls: {
-      get current() {
-        return auth.current
+      sessionMocks: {
+        logout: vi.fn(),
       },
-      set current(next: MockAuthState) {
-        auth.current = next
+      legacyAuthMocks: {
+        clearTokens: auth.current.clearTokens,
       },
-    },
-    authSubscribers: subscribers,
-  }
-})
+      stateControls: {
+        get current() {
+          return settings.current
+        },
+        set current(next: MockSettingsState) {
+          settings.current = next
+        },
+      },
+      authControls: {
+        get current() {
+          return auth.current
+        },
+        set current(next: MockAuthState) {
+          auth.current = next
+        },
+      },
+      authSubscribers: subscribers,
+    }
+  })
 
 vi.mock('@sentry/react', () => ({ captureException: vi.fn() }))
 vi.mock('@/analytics/jk', () => ({ trackJkClickEvent: vi.fn() }))
@@ -106,11 +117,17 @@ vi.mock('@/packages/mcp/controller', () => ({
 }))
 vi.mock('../packages/remote', () => ({
   invalidateSessionRagConfigCache: remoteMocks.invalidateSessionRagConfigCache,
+  activateLicense: remoteMocks.activateLicense,
 }))
 vi.mock('../platform', () => ({
   default: {
     getInstanceName: vi.fn(() => Promise.resolve('test-instance')),
     appLog: vi.fn(() => Promise.resolve()),
+  },
+}))
+vi.mock('@/packages/session/accountSession', () => ({
+  accountSessionService: {
+    logout: sessionMocks.logout,
   },
 }))
 vi.mock('./settingsStore', () => ({
@@ -149,7 +166,7 @@ vi.mock('./authInfoStore', () => ({
   },
 }))
 
-import { initLoginLicenseStateReconciliation, reconcileLoginLicenseState } from './premiumActions'
+import { activate, deactivate, initLoginLicenseStateReconciliation, reconcileLoginLicenseState } from './premiumActions'
 
 function resetSettings(overrides: Partial<TestSettingsState>) {
   stateControls.current = {
@@ -174,6 +191,7 @@ function setAuthTokens(accessToken: string | null, refreshToken: string | null) 
       }
       return null
     },
+    clearTokens: legacyAuthMocks.clearTokens,
   }
   for (const subscriber of authSubscribers) {
     const next = subscriber.selector(authControls.current)
@@ -266,5 +284,28 @@ describe('login license state reconciliation', () => {
     expect(stateControls.current.licenseKey).toBe('')
     expect(stateControls.current.licenseActivationMethod).toBeUndefined()
     unsubscribe()
+  })
+
+  it('logs out through the canonical account session when a login license is deactivated', async () => {
+    setAuthTokens('access-token', 'refresh-token')
+    resetSettings({
+      licenseActivationMethod: 'login',
+      mcp: { enabledBuiltinServers: [] },
+    })
+
+    await deactivate()
+
+    expect(sessionMocks.logout).toHaveBeenCalledOnce()
+    expect(legacyAuthMocks.clearTokens).not.toHaveBeenCalled()
+  })
+
+  it('logs out through the canonical account session before manual license activation', async () => {
+    setAuthTokens('access-token', 'refresh-token')
+    resetSettings({ mcp: { enabledBuiltinServers: [] } })
+
+    await activate('manual-key', 'manual')
+
+    expect(sessionMocks.logout).toHaveBeenCalledOnce()
+    expect(legacyAuthMocks.clearTokens).not.toHaveBeenCalled()
   })
 })

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { resolveKodServiceOrigin } from './src/shared/kod-service-origin'
 
 /** Replaces dvh units with vh units (copied from electron.vite.config.ts) */
 function dvhToVh() {
@@ -21,6 +22,9 @@ function dvhToVh() {
     },
   }
 }
+
+const kodServiceEnvironment = 'production' as const
+const kodApiOrigin = resolveKodServiceOrigin(kodServiceEnvironment, 'https://kod.kai.com')
 
 export default defineConfig({
   root: path.resolve(__dirname, 'src/renderer'),
@@ -97,6 +101,8 @@ export default defineConfig({
     'process.env.USE_NEWDB_API': JSON.stringify(''),
     'process.env.USE_LOCAL_CHATBOX': JSON.stringify(''),
     'process.env.USE_BETA_CHATBOX': JSON.stringify(''),
+    'process.env.KOD_SERVICE_ENV': JSON.stringify(kodServiceEnvironment),
+    'process.env.KOD_API_ORIGIN': JSON.stringify(kodApiOrigin),
   },
   optimizeDeps: {
     // Disabled to avoid esbuild OOM on this machine — the pre-bundling step

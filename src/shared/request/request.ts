@@ -192,12 +192,20 @@ interface AuthTokens {
 interface AuthenticatedAfetchConfig {
   platformInfo: PlatformInfo
   getTokens: () => Promise<AuthTokens | null>
+  getSessionVersion: () => number
   refreshTokens: (refreshToken: string) => Promise<AuthTokens>
   clearTokens: () => Promise<void>
 }
 
+export class AuthenticatedRequestSessionChangedError extends ApiError {
+  constructor() {
+    super('Account session changed while the request was in flight')
+    this.name = 'AuthenticatedRequestSessionChangedError'
+  }
+}
+
 export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
-  const { platformInfo, getTokens, refreshTokens, clearTokens } = config
+  const { platformInfo, getTokens, getSessionVersion, refreshTokens, clearTokens } = config
 
   // 用于防止并发刷新 token
   let refreshPromise: Promise<AuthTokens> | null = null
@@ -211,10 +219,15 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
     } = {}
   ) {
     // 获取当前 tokens
+    const sessionVersion = getSessionVersion()
     const tokens = await getTokens()
     if (!tokens) {
       throw new ApiError('No authentication tokens available')
     }
+    const assertCurrentSession = () => {
+      if (getSessionVersion() !== sessionVersion) throw new AuthenticatedRequestSessionChangedError()
+    }
+    assertCurrentSession()
 
     // 构建包含 token 的 headers 的辅助函数
     function buildHeaders(accessToken: string) {
@@ -246,10 +259,13 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
 
     for (let i = 0; i < retry + 1; i++) {
       try {
+        assertCurrentSession()
         const res = await fetch(url, init)
+        assertCurrentSession()
 
         // 检查 401 Unauthorized
         if (res.status === 401) {
+          assertCurrentSession()
           console.debug('🔄 Access token expired, refreshing...')
 
           // 防止并发刷新：如果已有刷新请求，等待它完成
@@ -260,6 +276,10 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
                 if (!currentTokens) {
                   throw new ApiError('No refresh token available')
                 }
+                assertCurrentSession()
+                if (currentTokens.accessToken !== tokens.accessToken) {
+                  return currentTokens
+                }
 
                 console.debug('🔑 Refreshing access token with refresh token...')
                 const newTokens = await refreshTokens(currentTokens.refreshToken)
@@ -267,6 +287,8 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
                 return newTokens
               } catch (error) {
                 console.error('❌ Failed to refresh token:', error)
+                if (error instanceof AuthenticatedRequestSessionChangedError) throw error
+                if (getSessionVersion() !== sessionVersion) throw new AuthenticatedRequestSessionChangedError()
                 // 刷新失败，清除所有 tokens
                 await clearTokens()
                 throw new ApiError('Token refresh failed, please login again')
@@ -278,6 +300,7 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
 
           // 等待刷新完成
           const newTokens = await refreshPromise
+          assertCurrentSession()
 
           // 使用新 token 重试请求
           init = {
@@ -287,12 +310,18 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
 
           console.debug('🔄 Retrying request with new token...')
           const retryRes = await fetch(url, init)
+          assertCurrentSession()
+          if (retryRes.status === 401) {
+            await clearTokens()
+            throw new AuthenticatedRequestSessionChangedError()
+          }
 
           if (!retryRes.ok) {
             const response = await retryRes.text().catch((e: unknown) => {
               console.error('[authenticatedAfetch] Failed to read retry error response body:', e)
               return ''
             })
+            assertCurrentSession()
             const requestId = getChatboxRequestId(response, retryRes.headers)
             if (options.parseChatboxRemoteError) {
               const errorCodeName = getChatboxErrorCode(response)
@@ -318,6 +347,7 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
             console.error('[authenticatedAfetch] Failed to read error response body:', e)
             return ''
           })
+          assertCurrentSession()
           const requestId = getChatboxRequestId(response, res.headers)
           if (options.parseChatboxRemoteError) {
             const errorCodeName = getChatboxErrorCode(response)
@@ -336,6 +366,8 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
 
         return res
       } catch (e) {
+        if (e instanceof AuthenticatedRequestSessionChangedError) throw e
+        assertCurrentSession()
         if (isAbortError(e, init?.signal)) {
           throw e
         }

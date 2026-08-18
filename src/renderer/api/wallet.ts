@@ -1,6 +1,7 @@
 import { ofetch } from 'ofetch'
 import { z } from 'zod'
-import { authInfoStore } from '@/stores/authInfoStore'
+import { accountSessionService } from '@/packages/session/accountSession'
+import { AccountSessionChangedError } from '@/packages/session/AccountSessionService'
 import { KOD_API_ORIGIN } from '@/variables'
 
 const nullableString = z.string().nullish()
@@ -151,7 +152,7 @@ export class WalletApiError extends Error {
   }
 }
 function accessToken() {
-  const token = authInfoStore.getState().accessToken
+  const token = accountSessionService.getTokens()?.accessToken
   if (!token) throw new WalletApiError('请先登录 Kod 账户', 'auth')
   return token
 }
@@ -166,18 +167,28 @@ async function request<T extends z.ZodType>(
   options: { method?: 'GET' | 'POST'; body?: unknown; retry?: number } = {}
 ): Promise<z.infer<T>> {
   try {
-    const response = await ofetch.raw(new URL(path, KOD_API_ORIGIN).toString(), {
-      method: options.method ?? 'GET',
-      body: options.body as Record<string, unknown> | undefined,
-      retry: options.retry ?? 1,
-      ignoreResponseError: true,
-      headers: {
-        Authorization: `Bearer ${accessToken()}`,
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      },
-    })
-    if (response.status === 401 || response.status === 403)
-      throw new WalletApiError('登录状态已失效，请重新登录', 'auth')
+    accessToken()
+    const response = await accountSessionService.executeAuthenticated(
+      (currentAccessToken) =>
+        ofetch.raw(new URL(path, KOD_API_ORIGIN).toString(), {
+          method: options.method ?? 'GET',
+          body: options.body as Record<string, unknown> | undefined,
+          retry: options.retry ?? 1,
+          ignoreResponseError: true,
+          headers: {
+            Authorization: `Bearer ${currentAccessToken}`,
+            ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+          },
+        }),
+      (result) => result.status === 401
+    )
+    if (response.status === 403) {
+      const forbidden = ResultEnvelopeSchema.safeParse(response._data)
+      if (forbidden.success && forbidden.data.code !== 0) {
+        throw new WalletApiError(forbidden.data.message || '钱包服务拒绝了该操作', 'business')
+      }
+      throw new WalletApiError('钱包服务拒绝了该操作（HTTP 403）', 'http')
+    }
     if (response.status < 200 || response.status >= 300)
       throw new WalletApiError(`钱包服务请求失败（HTTP ${response.status}）`, 'http')
     const envelope = ResultEnvelopeSchema.safeParse(response._data)
@@ -190,6 +201,9 @@ async function request<T extends z.ZodType>(
     return data.data
   } catch (error) {
     if (error instanceof WalletApiError) throw error
+    if (!accountSessionService.getTokens() || error instanceof AccountSessionChangedError) {
+      throw new WalletApiError('登录状态已失效，请重新登录', 'auth')
+    }
     throw new WalletApiError(error instanceof Error ? error.message : '网络请求失败，请检查网络后重试', 'network')
   }
 }

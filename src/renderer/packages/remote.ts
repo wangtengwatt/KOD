@@ -1,12 +1,11 @@
 import { ofetch } from 'ofetch'
 import { z } from 'zod'
 import { getLogger } from '@/lib/utils'
+import { accountSessionService } from '@/packages/session/accountSession'
 import platform from '@/platform'
-import { authInfoStore } from '@/stores/authInfoStore'
 import {
   CHATBOX_BUILD_CHANNEL,
   KOD_API_ORIGIN,
-  NODE_ENV,
   USE_BETA_API,
   USE_BETA_CHATBOX,
   USE_LOCAL_API,
@@ -72,17 +71,12 @@ async function initAuthenticatedAfetch(): Promise<ReturnType<typeof createAuthen
         os: getOS(),
         version: await platform.getVersion(),
       },
-      getTokens: async () => {
-        const tokens = authInfoStore.getState().getTokens()
-        return tokens
-      },
-      refreshTokens: async (refreshToken: string) => {
-        const result = await refreshAccessToken({ refreshToken })
-        authInfoStore.getState().setTokens(result, { preserveEmail: true })
-        return result
-      },
-      clearTokens: async () => {
-        authInfoStore.getState().clearTokens()
+      getTokens: () => Promise.resolve(accountSessionService.getTokens()),
+      getSessionVersion: accountSessionService.getSessionVersion,
+      refreshTokens: (refreshToken) => accountSessionService.refreshAccessToken(refreshToken),
+      clearTokens: () => {
+        accountSessionService.logout()
+        return Promise.resolve()
       },
     })
     return _authenticatedAfetch
@@ -126,7 +120,7 @@ export function getChatboxOrigin() {
 }
 
 export function getKodApiOrigin() {
-  return USE_LOCAL_API || NODE_ENV === 'development' ? 'http://localhost:8080' : KOD_API_ORIGIN
+  return KOD_API_ORIGIN
 }
 
 export const KOD_AUTH_REQUEST_TIMEOUT_MS = 12_000

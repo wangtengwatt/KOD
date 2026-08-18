@@ -13,9 +13,9 @@ import { ScalableIcon } from '@/components/common/ScalableIcon'
 import { navigateToSettings } from '@/modals/Settings'
 import { openLinkWithAuth } from '@/packages/openLinkWithAuth'
 import { buildChatboxUrl } from '@/packages/remote'
+import { accountSessionService } from '@/packages/session/accountSession'
 import { EmailCodeLoginModal } from '@/routes/settings/provider/chatbox-ai/-components/EmailCodeLoginModal'
 import type { AuthTokens } from '@/routes/settings/provider/chatbox-ai/-components/types'
-import { authInfoStore } from '@/stores/authInfoStore'
 import { settingsStore, useLanguage } from '@/stores/settingsStore'
 
 interface LoginButtonProps {
@@ -36,7 +36,7 @@ export function LoginButton({ onLoginSuccess }: LoginButtonProps) {
 
   const handleLoginSuccessInternal = useCallback(
     async (tokens: AuthTokens) => {
-      authInfoStore.getState().setTokens(tokens)
+      await accountSessionService.login(tokens)
       setHasSucceeded(true)
       await onLoginSuccess()
     },

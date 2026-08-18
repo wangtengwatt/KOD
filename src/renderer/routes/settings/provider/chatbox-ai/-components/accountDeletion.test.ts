@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
   closeSuanbaoRepository: vi.fn(),
   getSuanbaoRepository: vi.fn(),
   suanbaoRuntimeClose: vi.fn(),
-  getAuthState: vi.fn(),
+  getTokens: vi.fn(),
+  getSessionSnapshot: vi.fn(),
   purgeCurrentAccountData: vi.fn(),
   resetMetaStorage: vi.fn(),
   purgeImageGenerationData: vi.fn(),
@@ -22,12 +23,18 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/hooks/useKodRelay', () => ({ clearKodRelayLocalState: mocks.clearKodRelayLocalState }))
 vi.mock('@/packages/remote', () => ({ deleteKodAccount: mocks.deleteKodAccount }))
+vi.mock('@/packages/session/accountSession', () => ({
+  accountSessionService: {
+    getTokens: mocks.getTokens,
+    getSnapshot: mocks.getSessionSnapshot,
+    logout: mocks.clearTokens,
+  },
+}))
 vi.mock('@/packages/suanbao/repositories/createSuanbaoRepository', () => ({
   getSuanbaoRepository: mocks.getSuanbaoRepository,
   closeSuanbaoRepository: mocks.closeSuanbaoRepository,
 }))
 vi.mock('@/packages/suanbao/runtime', () => ({ suanbaoRuntime: { close: mocks.suanbaoRuntimeClose } }))
-vi.mock('@/stores/authInfoStore', () => ({ authInfoStore: { getState: mocks.getAuthState } }))
 vi.mock('@/stores/chatStore', () => ({
   purgeCurrentAccountData: mocks.purgeCurrentAccountData,
   resetMetaStorage: mocks.resetMetaStorage,
@@ -60,10 +67,14 @@ const expectNoLocalCleanup = () => {
 describe('account deletion', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.getAuthState.mockReturnValue({
+    mocks.getTokens.mockReturnValue({
       accessToken: 'access-token',
-      loginEmail: 'user@example.com',
-      clearTokens: mocks.clearTokens,
+      refreshToken: 'refresh-token',
+      email: 'user@example.com',
+    })
+    mocks.getSessionSnapshot.mockReturnValue({
+      authenticated: true,
+      account: { email: 'user@example.com' },
     })
     mocks.getSuanbaoRepository.mockReturnValue({ deleteDatabase: mocks.repositoryDeleteDatabase })
     mocks.deleteKodAccount.mockResolvedValue(undefined)

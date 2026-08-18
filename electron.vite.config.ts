@@ -6,6 +6,7 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import { visualizer } from 'rollup-plugin-visualizer'
 import type { Plugin } from 'vite'
 import packageJson from './release/app/package.json'
+import { type KodServiceEnvironment, resolveKodServiceOrigin } from './src/shared/kod-service-origin'
 /**
  * Vite plugin to inject <base href="/"> for web builds
  * This ensures relative paths resolve correctly for SPA routes like /session/xxx
@@ -123,6 +124,11 @@ export default defineConfig(({ mode }) => {
   const isWeb = process.env.CHATBOX_BUILD_PLATFORM === 'web'
   const isMobile = process.env.CHATBOX_BUILD_TARGET === 'mobile_app'
   const isDesktop = !isWeb && !isMobile
+  const kodServiceEnvironment = (process.env.KOD_SERVICE_ENV || 'production') as KodServiceEnvironment
+  const kodApiOrigin = resolveKodServiceOrigin(
+    kodServiceEnvironment,
+    process.env.KOD_API_ORIGIN || 'https://kod.kai.com'
+  )
 
   return {
     main: {
@@ -186,7 +192,8 @@ export default defineConfig(({ mode }) => {
         'process.env.USE_NEWDB_API': JSON.stringify(process.env.USE_NEWDB_API || ''),
         'process.env.USE_LOCAL_CHATBOX': JSON.stringify(process.env.USE_LOCAL_CHATBOX || ''),
         'process.env.USE_BETA_CHATBOX': JSON.stringify(process.env.USE_BETA_CHATBOX || ''),
-        'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
+        'process.env.KOD_SERVICE_ENV': JSON.stringify(kodServiceEnvironment),
+        'process.env.KOD_API_ORIGIN': JSON.stringify(kodApiOrigin),
         'process.env.KOD_PAYMENT_HOSTS': JSON.stringify(process.env.KOD_PAYMENT_HOSTS || 'kod.kai.com,mzf.mapay.cc'),
         'process.env.KOD_VIDEO_API_HOST': JSON.stringify(process.env.KOD_VIDEO_API_HOST || ''),
         'process.env.KOD_VIDEO_API_KEY': JSON.stringify(process.env.KOD_VIDEO_API_KEY || ''),
@@ -342,7 +349,8 @@ export default defineConfig(({ mode }) => {
         'process.env.USE_NEWDB_API': JSON.stringify(process.env.USE_NEWDB_API || ''),
         'process.env.USE_LOCAL_CHATBOX': JSON.stringify(process.env.USE_LOCAL_CHATBOX || ''),
         'process.env.USE_BETA_CHATBOX': JSON.stringify(process.env.USE_BETA_CHATBOX || ''),
-        'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
+        'process.env.KOD_SERVICE_ENV': JSON.stringify(kodServiceEnvironment),
+        'process.env.KOD_API_ORIGIN': JSON.stringify(kodApiOrigin),
         'process.env.KOD_PAYMENT_HOSTS': JSON.stringify(process.env.KOD_PAYMENT_HOSTS || 'kod.kai.com,mzf.mapay.cc'),
         'process.env.KOD_VIDEO_API_HOST': JSON.stringify(process.env.KOD_VIDEO_API_HOST || ''),
         'process.env.KOD_VIDEO_API_KEY': JSON.stringify(process.env.KOD_VIDEO_API_KEY || ''),

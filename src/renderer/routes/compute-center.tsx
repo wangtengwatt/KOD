@@ -82,6 +82,7 @@ import {
   type ComputeWithdrawal,
   cancelComputeReservation,
   cancelComputeTransfer,
+  computeAccountQueryKey,
   configureAdminProductUpstream,
   confirmComputeReservation,
   createAdminApiProduct,
@@ -146,8 +147,8 @@ import {
 } from '@/packages/computeCenter'
 import { addHoursToLocalDateTime, resolvePackageDurationHours } from '@/packages/computeDeliveryTime'
 import { copyToClipboard } from '@/packages/navigator'
+import { useAccountSessionSnapshot } from '@/packages/session/accountSession'
 import platform from '@/platform'
-import { useAuthInfoStore } from '@/stores/authInfoStore'
 
 const computeSearchSchema = z.object({
   invite: z.string().max(64).optional(),
@@ -192,7 +193,8 @@ function ComputeCenterPage() {
   const isSmallScreen = useIsSmallScreen()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const isLoggedIn = useAuthInfoStore((state) => Boolean(state.accessToken))
+  const session = useAccountSessionSnapshot()
+  const isLoggedIn = session.authenticated
   const [activeTab, setActiveTab] = useState('market')
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<FeedbackMessage | null>(null)
@@ -202,7 +204,7 @@ function ComputeCenterPage() {
   const configQuery = useQuery({ queryKey: ['compute', 'config'], queryFn: getComputeConfig })
   const productsQuery = useQuery({ queryKey: ['compute', 'products'], queryFn: () => listComputeProducts() })
   const accountQuery = useQuery({
-    queryKey: ['compute', 'account'],
+    queryKey: computeAccountQueryKey,
     queryFn: getComputeAccount,
     enabled: isLoggedIn,
   })

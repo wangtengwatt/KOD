@@ -118,8 +118,8 @@ export async function deactivate(clearLoginState = true) {
 
   // 如果是login方式激活的，同时清除登录状态（除非是在切换license）
   if (clearLoginState && settings.licenseActivationMethod === 'login') {
-    const { authInfoStore } = await import('./authInfoStore')
-    authInfoStore.getState().clearTokens()
+    const { accountSessionService } = await import('@/packages/session/accountSession')
+    accountSessionService.logout()
   }
 
   // 更新本地状态
@@ -167,8 +167,8 @@ export async function activate(
 
   // 互斥逻辑：manual方式激活时，清除login状态
   if (method === 'manual') {
-    const { authInfoStore } = await import('./authInfoStore')
-    authInfoStore.getState().clearTokens()
+    const { accountSessionService } = await import('@/packages/session/accountSession')
+    accountSessionService.logout()
     log.info('🔓 Cleared login tokens due to manual license activation')
   }
 

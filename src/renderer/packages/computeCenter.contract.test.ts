@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getComputeConfig, reviewAdminIdentity } from './computeCenter'
 
-const ofetchMock = vi.hoisted(() => vi.fn())
+const ofetchMock = vi.hoisted(() => ({ raw: vi.fn() }))
 
 vi.mock('ofetch', () => ({ ofetch: ofetchMock }))
 
@@ -11,13 +11,20 @@ vi.mock('@/packages/remote', () => ({
 
 vi.mock('@/stores/authInfoStore', () => ({
   authInfoStore: {
-    getState: () => ({ accessToken: 'test-access-token' }),
+    getState: () => ({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      loginEmail: 'buyer@example.com',
+      getTokens: () => ({ accessToken: 'test-access-token', refreshToken: 'test-refresh-token' }),
+      setTokens: vi.fn(),
+      clearTokens: vi.fn(),
+    }),
   },
 }))
 
 describe('compute center API contracts', () => {
   beforeEach(() => {
-    ofetchMock.mockReset()
+    ofetchMock.raw.mockReset()
   })
 
   it('reads public compute configuration without a bearer token', async () => {
@@ -28,10 +35,10 @@ describe('compute center API contracts', () => {
       unitName: 'card hour',
       currency: 'CNY',
     }
-    ofetchMock.mockResolvedValue({ code: 0, message: '', data: config })
+    ofetchMock.raw.mockResolvedValue({ status: 200, _data: { code: 0, message: '', data: config } })
 
     await expect(getComputeConfig()).resolves.toEqual(config)
-    expect(ofetchMock).toHaveBeenCalledWith(
+    expect(ofetchMock.raw).toHaveBeenCalledWith(
       'https://kod.example/api/compute/config',
       expect.objectContaining({ headers: {}, ignoreResponseError: true })
     )
@@ -39,10 +46,10 @@ describe('compute center API contracts', () => {
 
   it('submits an authenticated administrator identity review contract', async () => {
     const identity = { id: 17, status: 'APPROVED' }
-    ofetchMock.mockResolvedValue({ code: 0, message: '', data: identity })
+    ofetchMock.raw.mockResolvedValue({ status: 200, _data: { code: 0, message: '', data: identity } })
 
     await expect(reviewAdminIdentity(17, true, 'verified')).resolves.toEqual(identity)
-    expect(ofetchMock).toHaveBeenCalledWith(
+    expect(ofetchMock.raw).toHaveBeenCalledWith(
       'https://kod.example/api/compute/admin/identities/17/review',
       expect.objectContaining({
         method: 'POST',

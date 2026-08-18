@@ -53,8 +53,10 @@ import { RelayCapabilityRecommendation } from '@/components/RelayCapabilityRecom
 import SuanbaoPet from '@/components/suanbao/SuanbaoPet'
 import { SuanbaoRuntimeHost } from '@/components/suanbao/SuanbaoRuntimeHost'
 import SettingsModal, { navigateToSettings } from '@/modals/Settings'
+import { computeAccountQueryKey, getComputeAccount } from '@/packages/computeCenter'
 import { prefetchModelRegistry } from '@/packages/model-registry'
 import { getOS } from '@/packages/navigator'
+import { accountSessionService, useAccountSessionSnapshot } from '@/packages/session/accountSession'
 import PictureDialog from '@/pages/PictureDialog'
 import RemoteDialogWindow from '@/pages/RemoteDialogWindow'
 import SearchDialog from '@/pages/SearchDialog'
@@ -66,6 +68,7 @@ import * as atoms from '@/stores/atoms'
 import { getSession, useSession } from '@/stores/chatStore'
 import { initOnboardingStore, onboardingStore } from '@/stores/onboardingStore'
 import * as premiumActions from '@/stores/premiumActions'
+import queryClient from '@/stores/queryClient'
 import * as settingActions from '@/stores/settingActions'
 import { initSettingsStore, settingsStore, useLanguage, useSettingsStore, useTheme } from '@/stores/settingsStore'
 import { getTaskSession } from '@/stores/taskSessionStore'
@@ -174,7 +177,15 @@ function Root() {
   const spellCheck = useSettingsStore((state) => state.spellCheck)
   const language = useLanguage()
   const initialized = useRef(false)
+  const accountSession = useAccountSessionSnapshot()
   useInertFallback()
+
+  useEffect(() => {
+    if (!accountSession.authenticated) return
+    void accountSessionService
+      .refreshIdentity(() => queryClient.fetchQuery({ queryKey: computeAccountQueryKey, queryFn: getComputeAccount }))
+      .catch((error) => console.warn('[KOD session] Unable to refresh account identity', error))
+  }, [accountSession.authenticated])
 
   const setOpenAboutDialog = useUIStore((s) => s.setOpenAboutDialog)
 

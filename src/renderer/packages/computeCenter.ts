@@ -6,7 +6,7 @@ import {
   prepareComputeImageUpload,
 } from '@/packages/computeImageUpload'
 import { getKodApiOrigin } from '@/packages/remote'
-import { authInfoStore } from '@/stores/authInfoStore'
+import { accountSessionService } from '@/packages/session/accountSession'
 
 export type ProductType = 'API' | 'GPU'
 export type ProductStatus = 'DRAFT' | 'PENDING' | 'PUBLISHED' | 'PAUSED' | 'REJECTED' | 'OFFLINE'
@@ -642,18 +642,22 @@ export class ComputeCenterApiError extends Error {
 }
 
 async function request<T>(path: string, options?: FetchOptions<'json'>, authenticated = true): Promise<T> {
-  const token = authInfoStore.getState().accessToken
-  if (authenticated && !token) {
-    throw new Error('请先登录 KOD 账号')
+  const execute = (token?: string) =>
+    ofetch.raw<KodResult<T>>(`${getKodApiOrigin()}${path}`, {
+      ...options,
+      headers: {
+        ...(options?.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      ignoreResponseError: true,
+    })
+  const response = authenticated
+    ? await accountSessionService.executeAuthenticated(execute, (result) => result.status === 401)
+    : await execute()
+  const json = response._data
+  if (!json) {
+    throw new Error('算力中心响应缺少数据')
   }
-  const json = await ofetch<KodResult<T>>(`${getKodApiOrigin()}${path}`, {
-    ...options,
-    headers: {
-      ...(options?.headers || {}),
-      ...(authenticated && token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ignoreResponseError: true,
-  })
   if (json.code !== 0) {
     throw new ComputeCenterApiError(json.code, json.message || '算力中心请求失败', json.data)
   }
@@ -695,8 +699,10 @@ export function getComputeProductImageUrl(productId: number, imageId: number) {
 }
 
 export function getComputeAccount() {
-  return request<ComputeAccount>('/api/compute/account')
+  return accountSessionService.refreshIdentity(() => request<ComputeAccount>('/api/compute/account'))
 }
+
+export const computeAccountQueryKey = ['compute', 'account'] as const
 
 export function purchaseCardHours(cardHours: number) {
   return request<ComputeAccount>('/api/compute/account/purchase', {
@@ -1219,11 +1225,13 @@ export function getAdminIdentity(identityId: number) {
 }
 
 export async function getAdminIdentityDocument(identityId: number, side: 'front' | 'back') {
-  const token = authInfoStore.getState().accessToken
-  if (!token) throw new Error('请先登录 KOD 账号')
-  const response = await fetch(`${getKodApiOrigin()}/api/compute/admin/identities/${identityId}/document/${side}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  const response = await accountSessionService.executeAuthenticated(
+    (token) =>
+      fetch(`${getKodApiOrigin()}/api/compute/admin/identities/${identityId}/document/${side}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    (result) => result.status === 401
+  )
   if (!response.ok) throw new Error('证件材料读取失败')
   return response.blob()
 }
@@ -1240,11 +1248,13 @@ export function listAdminNodes() {
 }
 
 export async function getAdminNodeProof(nodeId: number) {
-  const token = authInfoStore.getState().accessToken
-  if (!token) throw new Error('请先登录 KOD 账号')
-  const response = await fetch(`${getKodApiOrigin()}/api/compute/admin/nodes/${nodeId}/proof`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  const response = await accountSessionService.executeAuthenticated(
+    (token) =>
+      fetch(`${getKodApiOrigin()}/api/compute/admin/nodes/${nodeId}/proof`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    (result) => result.status === 401
+  )
   if (!response.ok) throw new Error('资源证明读取失败')
   return response.blob()
 }

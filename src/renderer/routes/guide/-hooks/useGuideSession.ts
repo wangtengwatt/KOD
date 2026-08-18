@@ -8,8 +8,8 @@ import { useTranslation } from 'react-i18next'
 import { trackJkClickEvent } from '@/analytics/jk'
 import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
 import { cancelConfetti, confetti } from '@/components/Confetti'
+import { accountSessionService, useAccountSessionSnapshot } from '@/packages/session/accountSession'
 import platform from '@/platform'
-import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
 import { onboardingStore, useOnboardingStore } from '@/stores/onboardingStore'
 import * as premiumActions from '@/stores/premiumActions'
 import { settingsStore, useSettingsStore } from '@/stores/settingsStore'
@@ -139,9 +139,8 @@ export function useGuideSession(): UseGuideSessionReturn {
   const onboardingCompleted = useOnboardingStore((s) => s.completed)
   const language = useSettingsStore((s) => s.language)
   const languageInited = useSettingsStore((s) => s.languageInited)
-  const accessToken = useAuthInfoStore((s) => s.accessToken)
-  const refreshToken = useAuthInfoStore((s) => s.refreshToken)
-  const isLoggedIn = Boolean(accessToken && refreshToken)
+  const accountSession = useAccountSessionSnapshot()
+  const isLoggedIn = accountSession.authenticated
 
   const isLanguageReady = useMemo(
     () => isGuideLanguageReady(languageInited, language, i18n.language),
@@ -760,7 +759,7 @@ export function useGuideSession(): UseGuideSessionReturn {
    */
   const debugResetGuide = useCallback(() => {
     // Also reset auth/config to simulate a real new-user state.
-    authInfoStore.getState().clearTokens()
+    accountSessionService.logout()
     settingsStore.getState().setSettings((draft) => {
       draft.licenseKey = ''
       draft.licenseDetail = undefined

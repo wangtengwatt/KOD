@@ -3,7 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const { ofetchMock } = vi.hoisted(() => ({ ofetchMock: vi.fn() }))
 vi.mock('ofetch', () => ({ ofetch: ofetchMock }))
 vi.mock('@/platform', () => ({ default: { type: 'desktop' } }))
-vi.mock('@/stores/authInfoStore', () => ({ authInfoStore: { getState: vi.fn() } }))
+vi.mock('@/stores/authInfoStore', () => ({
+  authInfoStore: {
+    getState: () => ({
+      accessToken: null,
+      refreshToken: null,
+      loginEmail: null,
+      getTokens: () => null,
+      setTokens: vi.fn(),
+      clearTokens: vi.fn(),
+    }),
+  },
+}))
 vi.mock('../../shared/request/chatboxai_pool', () => ({ getChatboxAPIOrigin: () => 'https://legacy.invalid' }))
 vi.mock('../../shared/request/request', () => ({
   createAfetch: vi.fn(),
