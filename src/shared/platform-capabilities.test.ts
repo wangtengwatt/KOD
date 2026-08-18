@@ -65,6 +65,52 @@ describe('validateFeatureParity', () => {
     )
   })
 
+  it('rejects an absolute entrypoint path', () => {
+    const manifest = createCompleteManifest()
+    manifest[0] = { ...manifest[0], entrypoints: ['C:/outside-repository.ts'] }
+
+    expect(() => validateFeatureParity(manifest, { fileExists: () => true })).toThrow(
+      'Feature account.session must use a repository-relative entrypoint path: C:/outside-repository.ts'
+    )
+  })
+
+  it('rejects traversal in a test path', () => {
+    const manifest = createCompleteManifest()
+    manifest[0] = { ...manifest[0], tests: ['src/shared/../outside.test.ts'] }
+
+    expect(() => validateFeatureParity(manifest, { fileExists: () => true })).toThrow(
+      'Feature account.session must use a repository-relative test path: src/shared/../outside.test.ts'
+    )
+  })
+
+  it('rejects an entrypoint outside source roots or with a non-source extension', () => {
+    const manifest = createCompleteManifest()
+    manifest[0] = { ...manifest[0], entrypoints: ['docs/entrypoint.ts'] }
+
+    expect(() => validateFeatureParity(manifest, { fileExists: () => true })).toThrow(
+      'Feature account.session must reference a source entrypoint: docs/entrypoint.ts'
+    )
+
+    manifest[0] = { ...manifest[0], entrypoints: ['src/renderer/entrypoint.json'] }
+    expect(() => validateFeatureParity(manifest, { fileExists: () => true })).toThrow(
+      'Feature account.session must reference a source entrypoint: src/renderer/entrypoint.json'
+    )
+  })
+
+  it('rejects a test outside test roots or without a test filename', () => {
+    const manifest = createCompleteManifest()
+    manifest[0] = { ...manifest[0], tests: ['docs/entrypoint.test.ts'] }
+
+    expect(() => validateFeatureParity(manifest, { fileExists: () => true })).toThrow(
+      'Feature account.session must reference a test file: docs/entrypoint.test.ts'
+    )
+
+    manifest[0] = { ...manifest[0], tests: ['src/renderer/entrypoint.ts'] }
+    expect(() => validateFeatureParity(manifest, { fileExists: () => true })).toThrow(
+      'Feature account.session must reference a test file: src/renderer/entrypoint.ts'
+    )
+  })
+
   it('rejects a feature without automated tests', () => {
     const manifest = createCompleteManifest()
     manifest[0] = { ...manifest[0], tests: [] }

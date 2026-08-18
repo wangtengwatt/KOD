@@ -40,6 +40,24 @@ function isFeatureImplementation(value: unknown): value is FeatureImplementation
   return typeof value === 'string' && featureImplementations.has(value as FeatureImplementation)
 }
 
+function isRepositoryRelativePath(path: string): boolean {
+  return (
+    !path.startsWith('/') &&
+    !path.startsWith('\\') &&
+    !/^[a-zA-Z]:[\\/]/.test(path) &&
+    !path.includes('\\') &&
+    path.split('/').every((segment) => segment.length > 0 && segment !== '.' && segment !== '..')
+  )
+}
+
+function isSourceEntrypointPath(path: string): boolean {
+  return path.startsWith('src/') && /\.(ts|tsx)$/.test(path) && !/\.(test|spec)\.(ts|tsx)$/.test(path)
+}
+
+function isTestPath(path: string): boolean {
+  return (path.startsWith('src/') || path.startsWith('test/')) && /\.(test|spec)\.(ts|tsx)$/.test(path)
+}
+
 function validateFileList(
   featureId: string,
   field: 'entrypoints' | 'tests',
@@ -56,8 +74,20 @@ function validateFileList(
       throw new Error(`Feature ${featureId} has an invalid ${field} path`)
     }
 
+    const label = field === 'tests' ? 'test' : 'entrypoint'
+    if (!isRepositoryRelativePath(path)) {
+      throw new Error(`Feature ${featureId} must use a repository-relative ${label} path: ${path}`)
+    }
+
+    if (field === 'entrypoints' && !isSourceEntrypointPath(path)) {
+      throw new Error(`Feature ${featureId} must reference a source entrypoint: ${path}`)
+    }
+
+    if (field === 'tests' && !isTestPath(path)) {
+      throw new Error(`Feature ${featureId} must reference a test file: ${path}`)
+    }
+
     if (!fileExists(path)) {
-      const label = field === 'tests' ? 'test' : 'entrypoint'
       throw new Error(`Feature ${featureId} references missing ${label}: ${path}`)
     }
   }
