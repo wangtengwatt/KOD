@@ -13,7 +13,7 @@ import { SQLiteSessionMetaStorage } from '@/storage/SQLiteSessionMetaStorage'
 import { IndexedDBTaskSessionStorage, type TaskSessionStorage } from '@/storage/TaskSessionStorage'
 import { CHATBOX_BUILD_PLATFORM } from '@/variables'
 import { getBrowser, getOS } from '../packages/navigator'
-import type { Platform, PlatformType } from './interfaces'
+import type { Platform, PlatformCapabilities, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import MobileExporter from './mobile_exporter'
 import mobileLogger from './mobile_logger'
@@ -22,6 +22,16 @@ import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-cont
 import type { SuanbaoPlatformController } from './suanbao/interface'
 import { MobileSQLiteStorage } from './storages'
 import { parseTextFileLocally } from './web_platform_utils'
+
+const capabilities: Readonly<PlatformCapabilities> = Object.freeze({
+  runtime: 'android',
+  localFiles: true,
+  mobilePermissions: true,
+  localSandbox: false,
+  cloudSandbox: true,
+  sqlite: true,
+  externalBrowser: true,
+})
 
 export default class MobilePlatform extends MobileSQLiteStorage implements Platform {
   public type: PlatformType = 'mobile'
@@ -43,6 +53,10 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
       console.debug('App URL opened:', event.url)
       this.handleDeepLink(event.url)
     })
+  }
+
+  public async getCapabilities(): Promise<PlatformCapabilities> {
+    return capabilities
   }
 
   // 处理深度链接

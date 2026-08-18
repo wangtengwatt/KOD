@@ -1,5 +1,7 @@
 import type { SuanbaoBootstrap, SuanbaoHostRequest, SuanbaoViewModel } from '@shared/types/suanbao'
-import { useEffect, useMemo, useRef } from 'react'
+import type { ElectronIPC } from '@shared/electron-types'
+import { useEffect, useRef, useState } from 'react'
+import platform from '@/platform'
 import { createSuanbaoHostBridge, type SuanbaoHostBridge } from '@/packages/suanbao/host-bridge'
 
 export interface SuanbaoDesktopBridgeHostProps {
@@ -21,14 +23,28 @@ export function SuanbaoDesktopBridgeHost({
   onIntegrationError,
   bridge: suppliedBridge,
 }: SuanbaoDesktopBridgeHostProps) {
-  const bridge = useMemo(
-    () => suppliedBridge ?? createSuanbaoHostBridge(typeof window === 'undefined' ? undefined : window.electronAPI),
-    [suppliedBridge]
-  )
+  const [bridge, setBridge] = useState<SuanbaoHostBridge | null>(() => suppliedBridge ?? null)
   const commandHandler = useRef(onCommand)
   const errorHandler = useRef(onIntegrationError)
   commandHandler.current = onCommand
   errorHandler.current = onIntegrationError
+
+  useEffect(() => {
+    if (suppliedBridge) {
+      setBridge(suppliedBridge)
+      return
+    }
+
+    let active = true
+    void platform.getCapabilities().then((capabilities) => {
+      if (!active) return
+      const ipc = capabilities.runtime === 'desktop' ? (platform as typeof platform & { ipc?: ElectronIPC }).ipc : undefined
+      setBridge(createSuanbaoHostBridge(ipc))
+    })
+    return () => {
+      active = false
+    }
+  }, [suppliedBridge])
 
   useEffect(() => {
     if (!bridge) return

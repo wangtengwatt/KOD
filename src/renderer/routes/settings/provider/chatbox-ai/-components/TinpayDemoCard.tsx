@@ -1,4 +1,5 @@
 import { Button, Paper, Stack, Text } from '@mantine/core'
+import type { ElectronIPC } from '@shared/electron-types'
 import { tinpaySessionIdSchema } from '@shared/tinpay'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createTinpaySession, getTinpaySession, type TinpayStatus } from '@/packages/tinpay'
@@ -15,7 +16,6 @@ const PENDING: ReadonlySet<TinpayStatus['status']> = new Set([
 const isPending = (value: TinpayStatus['status'] | 'idle'): value is TinpayStatus['status'] =>
   value !== 'idle' && PENDING.has(value)
 const STORAGE_KEY = 'kod.tinpay.demo.active'
-const isWindowsElectron = platform.type === 'desktop' && navigator.userAgent.toLowerCase().includes('windows')
 type Session = {
   sessionId: string
   checkoutUrl: string
@@ -32,6 +32,7 @@ function loadSession(): Session | null {
   }
 }
 export function TinpayDemoCard() {
+  const [isWindowsDesktop, setIsWindowsDesktop] = useState(false)
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [status, setStatus] = useState<TinpayStatus['status'] | 'idle'>(() => loadSession()?.status || 'idle')
   const [loading, setLoading] = useState(false)
@@ -39,6 +40,20 @@ export function TinpayDemoCard() {
   const request = useRef<Promise<void> | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const abort = useRef<AbortController | null>(null)
+  const getTinpayApi = () => (platform as typeof platform & { ipc?: ElectronIPC }).ipc?.tinpay
+
+  useEffect(() => {
+    let active = true
+    void platform.getCapabilities().then((capabilities) => {
+      if (active) {
+        setIsWindowsDesktop(capabilities.runtime === 'desktop' && navigator.userAgent.toLowerCase().includes('windows'))
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
   const check = useCallback((id: string): Promise<void> => {
     if (request.current) return request.current
     request.current = getTinpaySession(id, abort.current?.signal)
@@ -81,7 +96,9 @@ export function TinpayDemoCard() {
       setSession(result)
       setStatus(result.status || 'CREATED')
       localStorage.setItem(STORAGE_KEY, JSON.stringify(result))
-      await window.electronAPI.tinpay.open(result)
+      const tinpay = getTinpayApi()
+      if (!tinpay) throw new Error('Tinpay demo is unavailable on this platform')
+      await tinpay.open(result)
       void check(result.sessionId)
     } catch {
       setError(true)
@@ -90,12 +107,14 @@ export function TinpayDemoCard() {
     }
   }
   useEffect(() => {
-    if (!isWindowsElectron) return
+    if (!isWindowsDesktop) return
+    const tinpay = getTinpayApi()
+    if (!tinpay) return
     abort.current = new AbortController()
     const refresh = (id = session?.sessionId) => {
       if (id && isPending(status)) void check(id)
     }
-    const offNotification = window.electronAPI.tinpay.onNotification((n) => {
+    const offNotification = tinpay.onNotification((n) => {
       if (n.sessionId === session?.sessionId) refresh(n.sessionId)
     })
     const offFocus = platform.onWindowFocused(() => refresh())
@@ -108,8 +127,8 @@ export function TinpayDemoCard() {
       abort.current?.abort()
       if (timer.current) clearTimeout(timer.current)
     }
-  }, [check, session, status])
-  if (!isWindowsElectron) return null
+  }, [check, isWindowsDesktop, session, status])
+  if (!isWindowsDesktop) return null
   const active = !!session && isPending(status) && Date.parse(session.expiresAt) > Date.now()
   const completed = status === 'COMPLETED' && session?.demoOnly === true
   return (
@@ -123,7 +142,11 @@ export function TinpayDemoCard() {
         <Button
           loading={loading}
           disabled={loading || (session !== null && !active)}
-          onClick={() => (active && session ? void window.electronAPI.tinpay.open(session) : void start())}
+          onClick={() => {
+            const tinpay = getTinpayApi()
+            if (active && session && tinpay) void tinpay.open(session)
+            else void start()
+          }}
         >
           {active ? '重新打开演示' : '开始演示'}
         </Button>
@@ -132,7 +155,7 @@ export function TinpayDemoCard() {
             variant="subtle"
             disabled={!active}
             onClick={() =>
-              void window.electronAPI.tinpay.openExternal({ sessionId: tinpaySessionIdSchema.parse(session.sessionId) })
+              void getTinpayApi()?.openExternal({ sessionId: tinpaySessionIdSchema.parse(session.sessionId) })
             }
           >
             在浏览器中打开

@@ -9,6 +9,16 @@ import type { SuanbaoPlatformController } from './suanbao/interface'
 
 export type PlatformType = 'web' | 'desktop' | 'mobile'
 
+export interface PlatformCapabilities {
+  runtime: 'desktop' | 'android' | 'web' | 'test'
+  localFiles: boolean
+  mobilePermissions: boolean
+  localSandbox: boolean
+  cloudSandbox: boolean
+  sqlite: boolean
+  externalBrowser: boolean
+}
+
 export interface Storage {
   getStorageType(): string
   setStoreValue(key: string, value: any): Promise<void>
@@ -21,6 +31,8 @@ export interface Storage {
 
 export interface Platform extends Storage {
   type: PlatformType
+
+  getCapabilities(): Promise<PlatformCapabilities>
 
   exporter: Exporter
 

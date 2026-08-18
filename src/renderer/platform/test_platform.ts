@@ -13,11 +13,21 @@ import { v4 as uuidv4 } from 'uuid'
 import { type ImageGenerationStorage, IndexedDBImageGenerationStorage } from '@/storage/ImageGenerationStorage'
 import { IndexedDBSessionMetaStorage, type SessionMetaStorage } from '@/storage/SessionMetaStorage'
 import { IndexedDBTaskSessionStorage, type TaskSessionStorage } from '@/storage/TaskSessionStorage'
-import type { Exporter, Platform, PlatformType, Storage } from './interfaces'
+import type { Exporter, Platform, PlatformCapabilities, PlatformType, Storage } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
 import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
 import type { SuanbaoPlatformController } from './suanbao/interface'
+
+const capabilities: Readonly<PlatformCapabilities> = Object.freeze({
+  runtime: 'test',
+  localFiles: false,
+  mobilePermissions: false,
+  localSandbox: false,
+  cloudSandbox: false,
+  sqlite: false,
+  externalBrowser: false,
+})
 
 /**
  * 内存存储类，用于测试环境
@@ -133,6 +143,10 @@ export default class TestPlatform implements Platform {
     // 初始化默认配置
     this.configs = defaults.newConfigs()
     this.settings = defaults.settings()
+  }
+
+  public async getCapabilities(): Promise<PlatformCapabilities> {
+    return capabilities
   }
 
   // ============ Storage 接口实现 ============

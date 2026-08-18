@@ -7,7 +7,7 @@ import { type ImageGenerationStorage, IndexedDBImageGenerationStorage } from '@/
 import { IndexedDBSessionMetaStorage, type SessionMetaStorage } from '@/storage/SessionMetaStorage'
 import { IndexedDBTaskSessionStorage, type TaskSessionStorage } from '@/storage/TaskSessionStorage'
 import { getBrowser, getOS } from '../packages/navigator'
-import type { Platform, PlatformType } from './interfaces'
+import type { Platform, PlatformCapabilities, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
 import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
@@ -16,6 +16,16 @@ import { IndexedDBStorage } from './storages'
 import WebExporter from './web_exporter'
 import webLogger from './web_logger'
 import { parseTextFileLocally } from './web_platform_utils'
+
+const capabilities: Readonly<PlatformCapabilities> = Object.freeze({
+  runtime: 'web',
+  localFiles: false,
+  mobilePermissions: false,
+  localSandbox: false,
+  cloudSandbox: false,
+  sqlite: false,
+  externalBrowser: false,
+})
 
 export default class WebPlatform extends IndexedDBStorage implements Platform {
   public type: PlatformType = 'web'
@@ -31,6 +41,10 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
   constructor() {
     super()
     webLogger.init().catch((e) => console.error('Failed to init web logger:', e))
+  }
+
+  public async getCapabilities(): Promise<PlatformCapabilities> {
+    return capabilities
   }
 
   public async getVersion(): Promise<string> {

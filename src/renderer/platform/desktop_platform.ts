@@ -12,7 +12,7 @@ import { IndexedDBSessionMetaStorage, type SessionMetaStorage } from '@/storage/
 import { IndexedDBTaskSessionStorage, type TaskSessionStorage } from '@/storage/TaskSessionStorage'
 import { rememberFileNativePath } from '@/utils/file-native-path'
 import { getOS } from '../packages/navigator'
-import type { Platform, PlatformType } from './interfaces'
+import type { Platform, PlatformCapabilities, PlatformType } from './interfaces'
 import DesktopKnowledgeBaseController from './knowledge-base/desktop-controller'
 import DesktopSessionAttachmentRagController from './session-attachment-rag/desktop-controller'
 import { DesktopSuanbaoPlatformController } from './suanbao/desktop-controller'
@@ -23,6 +23,16 @@ import { parseTextFileLocally } from './web_platform_utils'
 const log = getLogger('desktop-platform')
 
 const store = localforage.createInstance({ name: 'chatboxstore' })
+
+const capabilities: Readonly<PlatformCapabilities> = Object.freeze({
+  runtime: 'desktop',
+  localFiles: true,
+  mobilePermissions: false,
+  localSandbox: true,
+  cloudSandbox: false,
+  sqlite: false,
+  externalBrowser: true,
+})
 
 export default class DesktopPlatform implements Platform {
   public type: PlatformType = 'desktop'
@@ -41,6 +51,10 @@ export default class DesktopPlatform implements Platform {
   public ipc: ElectronIPC
   constructor(ipc: ElectronIPC) {
     this.ipc = ipc
+  }
+
+  public async getCapabilities(): Promise<PlatformCapabilities> {
+    return capabilities
   }
 
   public getStorageType(): string {
