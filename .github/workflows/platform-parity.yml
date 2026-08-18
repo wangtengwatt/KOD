@@ -29,8 +29,12 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
 
+      - name: Install pinned Android SDK components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
+      - name: Verify CI toolchain versions
+        run: pnpm run verify:ci-toolchain
       - name: Verify platform parity manifest
         run: pnpm run check:platform-parity
       - name: Type-check

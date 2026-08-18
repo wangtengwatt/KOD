@@ -10,7 +10,9 @@ platform-parity:
     KOD_NODE_BINARY: node
   script:
     - corepack enable
+    - sdkmanager "platforms;android-35" "build-tools;35.0.0"
     - pnpm install --frozen-lockfile
+    - pnpm run verify:ci-toolchain
     - pnpm run check:platform-parity
     - pnpm run check
     - pnpm run test
@@ -21,7 +23,7 @@ platform-parity:
     - pnpm run mobile:sync:android:production
     - pnpm run verify:production-endpoints
   artifacts:
-    when: always
+    when: on_success
     expire_in: 14 days
     paths:
       - android/app/build/outputs/apk/debug/app-debug.apk

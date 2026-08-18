@@ -56,6 +56,7 @@
     "check:ci": "biome ci",
     "check:platform-parity": "tsx scripts/check-platform-parity.ts",
     "verify:production-endpoints": "node --no-warnings --experimental-strip-types scripts/verify-production-endpoints.ts release/app/dist/renderer android/app/src/main/assets",
+    "verify:ci-toolchain": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-ci-toolchain.ps1",
     "verify:android-build:localtest": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-android-build.ps1 -Environment localtest",
     "verify:android-build:production": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-android-build.ps1 -Environment production",
     "mobile:sync": "pnpm run mobile:sync:ios && pnpm run mobile:sync:android",
