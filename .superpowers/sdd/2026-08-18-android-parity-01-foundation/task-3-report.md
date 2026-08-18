@@ -6,7 +6,7 @@ Date: 2026-08-18
 
 Task 3 migrated the Android/mobile shell into the canonical repository without replacing the canonical compute, wallet, relay, authentication, or persistence implementations. The mobile shell now exposes the required five top-level destinations in this order: `对话`, `生图`, `视频`, `算力`, `我的`. The existing conversation routes retain exactly one canonical `RelayStationSelector` before their single `InputBox`.
 
-The Android production identity is `com.kod.app`. Debug/local-test APKs use Gradle's `.localtest` application ID suffix and therefore install as `com.kod.app.localtest`. Production Capacitor configuration keeps HTTPS and cleartext/mixed content disabled; setting `KOD_ANDROID_LOCAL_TEST=1` enables the explicit local-test transport mode without changing the application ID source.
+The Android production identity is `com.kod.app`. Debug/local-test APKs use Gradle's `.localtest` application ID suffix and therefore install as `com.kod.app.localtest`. Fix round 1 replaced the former independent local-test toggle with the strict `KOD_ANDROID_ENV=production|localtest` contract described below.
 
 ## Changed files
 
@@ -28,7 +28,7 @@ The Android production identity is `com.kod.app`. Debug/local-test APKs use Grad
 | --- | --- |
 | `D:/watt/kod-android/src/renderer/components/mobile/MobileBottomNavigation.tsx` | Adapted into the new canonical navigation component, but routes were bound to the canonical route tree and no source business logic was copied. |
 | `D:/watt/kod-android/src/renderer/routes/mobile-my.tsx` | Reduced to a minimal canonical account/settings page. It uses `useAuthInfoStore`, `useSettingsStore`, `useAuthTokens`, and the current `settings/provider/chatbox-ai` login modal instead of the source repository's stale `kod-ai` business implementation. |
-| `D:/watt/kod-android/src/renderer/setup/mobile_safe_area.ts` | Compared with the canonical file. The canonical implementation already matched the required native safe-area behavior, so it was retained unchanged. |
+| `D:/watt/kod-android/src/renderer/setup/mobile_safe_area.ts` | Refactored the canonical module into an idempotent initializer and added Android plus iOS runtime startup coverage. |
 | `D:/watt/kod-android/android/app/build.gradle` and Android resources/`MainActivity.java` | Identity, debug suffix, label, namespace, and native startup package were migrated while retaining the canonical generated Capacitor project structure and SDK settings. |
 | Canonical `src/renderer/routes/index.tsx` and `src/renderer/routes/session/$sessionId.tsx` | Preserved. Their shared `RelayStationSelector` and `InputBox` integration already met the required single-selector contract. |
 | Canonical language defaults/persistence | Preserved. The canonical default and persisted migration already select `zh-Hans`; the new navigation makes the five required labels exact under that language. |
@@ -95,10 +95,85 @@ Result: `BUILD SUCCESSFUL` (274 tasks). AAPT inspection of `android/app/build/ou
 - No KOD-owned production endpoint or generated Capacitor configuration points at `localhost`.
 - The bundled third-party/runtime JavaScript still contains generic `localhost` literals used by URL parsing, router fallback origins, local-host detection, file URL validation, Sentry Spotlight defaults, and SSRF rejection logic. Removing or rewriting those dependency guard strings would alter vendor semantics and is outside Task 3. A Task 5 artifact policy should distinguish configured/reachable product endpoints from inert dependency validation/fallback strings if it performs a raw literal scan.
 - The sandboxed unshimmed sync initially failed while loading `electron-vite` because Node's `os.userInfo()` returned `uv_os_get_passwd ENOMEM`. The exact same unshimmed sync succeeded with the full host token, confirming a sandbox-host issue. The shim was never used for product build, sync, or Gradle.
-- Native debug build retains the canonical minimum SDK 23 and target SDK 35; this task did not broaden scope to alter the canonical SDK compatibility policy.
+- Native builds use minimum SDK 26 and target SDK 35, matching the Android 8+ matrix and the migrated native APIs.
 
 ## Commit
 
 Commit message: `feat(android): migrate mobile shell into canonical source`
 
-Commit hash: this report is included in the Task 3 commit itself, so its immutable self-hash cannot be embedded without changing that hash. Resolve it as `git rev-parse HEAD`; the exact resulting hash is recorded in the controller handoff immediately after commit creation.
+Original Task 3 commit: `13f54a4cafa8529e5b6ae8a16a9bf3f17da8d22c`.
+
+## Review fix round 1/5
+
+### Findings addressed
+
+- Android and iOS mobile builds now call `initializeMobileRuntime`, which dynamically loads and initializes the native safe-area bridge; desktop builds neither load it nor invoke its hooks.
+- `Root` conditionally mounts `MobileBottomNavigation` only for `platform.type === 'mobile'`. Component-level suppression remains as defense in depth.
+- The navigation contract covers all active states, and AST tests require exactly one `RelayStationSelector` group to be immediately adjacent above exactly one `InputBox` in both conversation composers.
+- `/mobile-my` tests exercise the canonical login modal, account switch modal, token replacement ordering, logout confirmation, and canonical auth/settings store wiring. No renderer business implementation was copied from the reference repository.
+- `KOD_ANDROID_ENV` is one strict enum. Production sync emits `com.kod.app`, `KOD`, HTTPS, no server URL, cleartext disabled, and mixed content disabled. Local-test sync emits `com.kod.app.localtest`, `KOD 本地测试`, the sole configured URL `http://10.0.2.2:8080`, and debug-only cleartext/mixed-content support.
+- Sync writes an ignored `kod-build-environment.json` marker. Gradle checks both that marker and `capacitor.config.json`: debug requires `localtest`, release requires `production`, and either mismatch stops before packaging.
+- Native startup displays a deterministic top banner containing the packaged environment for three seconds, then removes it automatically. It requests no permission.
+- `MainActivity` registers `AndroidAgentPlugin` and `KodFilePlugin` before `super.onCreate`. The migrated accessibility and overlay services remain `exported=false`; permissions are only declared and native APIs remain user-triggered/default-off.
+- Production verified HTTPS app links live only in the release manifest. Debug uses the distinct `kod-localtest` custom scheme and a network-security policy limited to the emulator/loopback hosts. FileProvider paths are limited to `shared/` under app cache/files.
+- The instrumentation assertion moved to `com.kod.app` and derives the expected target identity from the debug/release build behavior.
+
+### Additional changed-file and source mapping
+
+| Read-only source reference | Canonical target and treatment |
+| --- | --- |
+| `android/app/src/main/java/com/kod/app/agent/*.java` | Migrated as native platform adapters only: policy, Capacitor agent/file plugins, accessibility service, short-lived file tokens, overlay geometry/preferences/service. |
+| `android/app/src/main/java/com/kod/app/MainActivity.java` | Preserved plugin registration order and added the environment banner after Capacitor startup. |
+| `android/app/src/main/AndroidManifest.xml` and resources | Migrated minimum permissions, private services, accessibility metadata, narrow FileProvider paths, and Suanbao native PNG assets. Production app links were isolated in `src/release`; debug transport policy in `src/debug`. |
+| `android/app/src/test/java/com/kod/app/agent/*.java` | Migrated the native unit contracts and added a repository-level native/environment contract test. |
+| `capacitor.config.ts`, `scripts/verify-android-environment.mjs`, `scripts/write-android-environment-marker.mjs` | Added strict identity/transport resolution, reproducible marker production, and variant verification. |
+
+Generated Capacitor web assets, generated plugin files, the generated environment marker, local SDK paths, and signing configuration are not tracked.
+
+### Fix-round TDD evidence
+
+RED was captured before implementation with the five focused files. Four files failed, with 13 failed and 11 passed tests. The failures were feature-specific: missing Android runtime initialization, missing root-only mobile condition, missing exact selector/input adjacency, missing exported `/mobile-my` workflow surface, and missing strict environment/verifier behavior. The native RED attempt also showed the declared JUnit dependency was not cached offline; the full-host Gradle run later resolved it and exercised the native tests.
+
+Focused GREEN:
+
+```text
+Test Files  5 passed (5)
+Tests       24 passed (24)
+```
+
+Final full GREEN, using Node 22 and the approved test-only ENOMEM preload:
+
+```text
+Test Files  142 passed | 2 skipped (144)
+Tests       1341 passed | 54 skipped (1395)
+```
+
+Final TypeScript check (`tsc --noEmit`) exited 0. `git diff --check` exited 0.
+
+### Environment sync, Gradle, and artifact evidence
+
+- Unshimmed, full-host `pnpm run mobile:sync:android` passed and synchronized all 12 plugins with a production marker.
+- `:app:assembleRelease --offline` passed `verifyProductionEnvironment` (`Android release environment contract passed`) and completed 525 tasks.
+- With production assets present, `:app:verifyLocalTestEnvironment --offline` failed as intended: `debug builds require the localtest synchronized environment marker`.
+- Unshimmed, full-host `pnpm run mobile:sync:android:localtest` passed and emitted the local-test marker.
+- `:app:testDebugUnitTest --offline` passed the local-test guard and native unit/static contracts (`BUILD SUCCESSFUL`, 206 tasks).
+- `:app:assembleDebug --offline` passed the local-test guard and built the APK (`BUILD SUCCESSFUL`, 290 tasks).
+- `:app:assembleDebugAndroidTest` resolved the AndroidX test dependencies and compiled the updated instrumentation APK (`BUILD SUCCESSFUL`, 300 tasks).
+- With local-test assets present, `:app:verifyProductionEnvironment --offline` failed as intended: `release builds require the production synchronized environment marker`.
+
+AAPT and direct ZIP-entry inspection established the packaged artifacts:
+
+| Artifact | Identity and transport evidence |
+| --- | --- |
+| Release APK | Package `com.kod.app`, label `KOD`, min SDK 26, `usesCleartextTraffic=false`, verified `https://kod.kai.com` links, marker `production`, Capacitor HTTPS/no URL/no mixed content. |
+| Debug APK | Package `com.kod.app.localtest`, label `KOD 本地测试`, min SDK 26, `usesCleartextTraffic=true` constrained by the debug network policy, marker `localtest`, Capacitor URL exactly `http://10.0.2.2:8080`. |
+
+The inspected release Capacitor config and marker contain neither `localhost` nor `10.0.2.2`. Scanning should continue to target configured endpoints rather than inert third-party validation literals.
+
+### Task 5 integration contract and concerns
+
+Task 5 must treat sync as a variant transition: run `mobile:sync:android:localtest` immediately before debug tests/build, then run `mobile:sync:android:production` immediately before release build and production endpoint/artifact inspection. Running the opposite Gradle variant without the matching sync is intentionally rejected. Product sync/build commands never use the ENOMEM shim.
+
+The environment banner has deterministic native/static coverage and is compiled into both variants; no emulator/device was available for an on-device instrumentation execution. The instrumentation APK itself compiled successfully.
+
+Fix-round commit: this report is part of the follow-up commit, so embedding its immutable self-hash would change that hash. Resolve it as `git rev-parse HEAD`; the exact hash is included in the controller handoff.

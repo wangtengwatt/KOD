@@ -1,4 +1,4 @@
-package com.getcapacitor.myapp;
+package com.kod.app;
 
 import static org.junit.Assert.*;
 
@@ -17,10 +17,11 @@ import org.junit.runner.RunWith;
 public class ExampleInstrumentedTest {
 
     @Test
-    public void useAppContext() throws Exception {
-        // Context of the app under test.
+    public void packageIdentityMatchesTheSelectedVariant() {
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String expected = BuildConfig.DEBUG ? "com.kod.app.localtest" : "com.kod.app";
 
-        assertEquals("com.getcapacitor.app", appContext.getPackageName());
+        assertEquals(expected, BuildConfig.APPLICATION_ID);
+        assertEquals(BuildConfig.APPLICATION_ID, appContext.getPackageName());
     }
 }

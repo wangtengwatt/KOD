@@ -377,7 +377,7 @@ function Root() {
           </ErrorBoundary>
         </Box>
       </Grid>
-      <MobileBottomNavigation />
+      {platform.type === 'mobile' && <MobileBottomNavigation />}
       {/* 对话设置 */}
       {/* <AppStoreRatingDialog /> */}
       {/* 代码预览 */}

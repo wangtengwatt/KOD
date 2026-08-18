@@ -3,6 +3,9 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.kod.app"
     compileSdk rootProject.ext.compileSdkVersion
+    buildFeatures {
+        buildConfig true
+    }
     defaultConfig {
         applicationId "com.kod.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -10,6 +13,7 @@ android {
         versionCode 1
         versionName "0.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders = [usesCleartextTraffic: "false"]
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -22,11 +26,41 @@ android {
             versionNameSuffix "-localtest"
             resValue "string", "app_name", "KOD 本地测试"
             resValue "string", "title_activity_main", "KOD 本地测试"
+            resValue "string", "custom_url_scheme", "kod-localtest"
+            resValue "string", "build_environment_label", "本地测试环境"
+            buildConfigField "String", "KOD_ANDROID_ENV", '"localtest"'
+            manifestPlaceholders = [usesCleartextTraffic: "true"]
         }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            buildConfigField "String", "KOD_ANDROID_ENV", '"production"'
+            manifestPlaceholders = [usesCleartextTraffic: "false"]
         }
+    }
+}
+
+def capacitorConfigFile = file('src/main/assets/capacitor.config.json')
+def environmentMarkerFile = file('src/main/assets/kod-build-environment.json')
+def environmentVerifier = rootProject.file('../scripts/verify-android-environment.mjs')
+def nodeBinary = System.getenv('KOD_NODE_BINARY') ?: 'node'
+
+tasks.register('verifyLocalTestEnvironment', Exec) {
+    workingDir rootProject.projectDir.parentFile
+    commandLine nodeBinary, environmentVerifier.absolutePath, 'debug', capacitorConfigFile.absolutePath, environmentMarkerFile.absolutePath
+}
+
+tasks.register('verifyProductionEnvironment', Exec) {
+    workingDir rootProject.projectDir.parentFile
+    commandLine nodeBinary, environmentVerifier.absolutePath, 'release', capacitorConfigFile.absolutePath, environmentMarkerFile.absolutePath
+}
+
+afterEvaluate {
+    tasks.named('preDebugBuild').configure {
+        dependsOn tasks.named('verifyLocalTestEnvironment')
+    }
+    tasks.named('preReleaseBuild').configure {
+        dependsOn tasks.named('verifyProductionEnvironment')
     }
 }
 

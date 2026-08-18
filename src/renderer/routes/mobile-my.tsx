@@ -14,7 +14,7 @@ import { useLanguage, useSettingsStore } from '@/stores/settingsStore'
 
 export const Route = createFileRoute('/mobile-my')({ component: MobileMyPage })
 
-function MobileMyPage() {
+export function MobileMyPage() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const language = useLanguage()

@@ -2,15 +2,16 @@
 
 import { MantineProvider } from '@mantine/core'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const navigate = vi.fn()
+const shellState = vi.hoisted(() => ({ pathname: '/', platformType: 'mobile' as 'mobile' | 'desktop' }))
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-router')>()
   return {
     ...actual,
-    useLocation: () => ({ pathname: '/' }),
+    useLocation: () => ({ pathname: shellState.pathname }),
     useNavigate: () => navigate,
   }
 })
@@ -20,7 +21,11 @@ vi.mock('react-i18next', () => ({
 }))
 
 vi.mock('@/platform', () => ({
-  default: { type: 'mobile' },
+  default: {
+    get type() {
+      return shellState.platformType
+    },
+  },
 }))
 
 describe('MobileBottomNavigation', () => {
@@ -40,7 +45,13 @@ describe('MobileBottomNavigation', () => {
     })
   })
 
-  beforeEach(() => navigate.mockClear())
+  beforeEach(() => {
+    navigate.mockClear()
+    shellState.pathname = '/'
+    shellState.platformType = 'mobile'
+  })
+
+  afterEach(() => document.body.replaceChildren())
 
   it('exposes the five mobile top-level entries in product order', async () => {
     const mobileNavigation = await vi
@@ -73,5 +84,43 @@ describe('MobileBottomNavigation', () => {
       fireEvent.click(screen.getByRole('button', { name: label }))
       expect(navigate).toHaveBeenLastCalledWith({ to })
     }
+  })
+
+  it.each([
+    ['/', '对话'],
+    ['/session/active-session', '对话'],
+    ['/image-creator', '生图'],
+    ['/video-creator', '视频'],
+    ['/compute-center', '算力'],
+    ['/mobile-my', '我的'],
+    ['/settings', '我的'],
+  ])('marks only %s destination active', async (pathname, activeLabel) => {
+    shellState.pathname = pathname
+    const { MobileBottomNavigation } = await import('./MobileBottomNavigation')
+
+    render(
+      <MantineProvider>
+        <MobileBottomNavigation />
+      </MantineProvider>
+    )
+
+    const activeEntries = screen
+      .getAllByRole('button')
+      .filter((button) => button.getAttribute('aria-current') === 'page')
+    expect(activeEntries).toHaveLength(1)
+    expect(activeEntries[0]?.getAttribute('aria-label')).toBe(activeLabel)
+  })
+
+  it('suppresses the navigation on non-mobile platforms', async () => {
+    shellState.platformType = 'desktop'
+    const { MobileBottomNavigation } = await import('./MobileBottomNavigation')
+
+    render(
+      <MantineProvider>
+        <MobileBottomNavigation />
+      </MantineProvider>
+    )
+
+    expect(screen.queryByRole('navigation')).toBeNull()
   })
 })

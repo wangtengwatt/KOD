@@ -3,37 +3,37 @@
 // 通过这些变量，可以在css中设置安全区域的padding，margin等，来规避异形屏的显示问题
 // 为了达到最好的效果，在 html 的 meta 标签中设置 viewport-fit=cover
 
-import { SafeArea } from 'capacitor-plugin-safe-area'
 import { Keyboard } from '@capacitor/keyboard'
+import { SafeArea } from 'capacitor-plugin-safe-area'
 
-SafeArea.getSafeAreaInsets().then(({ insets }) => {
-  for (const [key, value] of Object.entries(insets)) {
+let initialization: Promise<void> | undefined
+type SafeAreaInsets = Awaited<ReturnType<typeof SafeArea.getSafeAreaInsets>>['insets']
+
+function applyInsets(insets: SafeAreaInsets) {
+  for (const [key, value] of Object.entries(insets) as Array<[keyof SafeAreaInsets, number]>) {
     document.documentElement.style.setProperty(`--mobile-safe-area-inset-${key}`, `${value}px`)
   }
-})
+}
 
-SafeArea.getStatusBarHeight().then(({ statusBarHeight }) => {
-  // console.log(statusBarHeight, 'statusbarHeight');
-})
-;(async () => {
-  // when safe-area changed
-  const eventListener = await SafeArea.addListener('safeAreaChanged', (data) => {
-    const { insets } = data
-    for (const [key, value] of Object.entries(insets)) {
-      document.documentElement.style.setProperty(`--mobile-safe-area-inset-${key}`, `${value}px`)
-    }
-  })
-  // eventListener.remove();
-})()
+export function initializeMobileSafeArea() {
+  if (initialization) return initialization
 
-Keyboard.addListener('keyboardWillShow', async (info) => {
-  document.documentElement.style.setProperty(`--mobile-safe-area-inset-bottom`, `0px`)
-})
+  initialization = (async () => {
+    const { insets } = await SafeArea.getSafeAreaInsets()
+    applyInsets(insets)
+    await SafeArea.getStatusBarHeight()
 
-Keyboard.addListener('keyboardWillHide', () => {
-  SafeArea.getSafeAreaInsets().then(({ insets }) => {
-    for (const [key, value] of Object.entries(insets)) {
-      document.documentElement.style.setProperty(`--mobile-safe-area-inset-${key}`, `${value}px`)
-    }
-  })
-})
+    await Promise.all([
+      SafeArea.addListener('safeAreaChanged', ({ insets: changedInsets }) => applyInsets(changedInsets)),
+      Keyboard.addListener('keyboardWillShow', () => {
+        document.documentElement.style.setProperty('--mobile-safe-area-inset-bottom', '0px')
+      }),
+      Keyboard.addListener('keyboardWillHide', async () => {
+        const { insets: restoredInsets } = await SafeArea.getSafeAreaInsets()
+        applyInsets(restoredInsets)
+      }),
+    ])
+  })()
+
+  return initialization
+}
