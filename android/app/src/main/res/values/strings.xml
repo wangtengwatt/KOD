@@ -1,7 +1,7 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">KOD蒜粒</string>
-    <string name="title_activity_main">KOD蒜粒</string>
-    <string name="package_name">com.kai.kod</string>
-    <string name="custom_url_scheme">com.kai.kod</string>
+    <string name="app_name">KOD</string>
+    <string name="title_activity_main">KOD</string>
+    <string name="package_name">com.kod.app</string>
+    <string name="custom_url_scheme">kod</string>
 </resources>

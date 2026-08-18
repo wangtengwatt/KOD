@@ -48,6 +48,7 @@ import { useAtomValue } from 'jotai'
 import { useEffect, useMemo, useRef } from 'react'
 import { trackJkViewEvent } from '@/analytics/jk'
 import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
+import { MobileBottomNavigation } from '@/components/mobile/MobileBottomNavigation'
 import { RelayCapabilityRecommendation } from '@/components/RelayCapabilityRecommendation'
 import SuanbaoPet from '@/components/suanbao/SuanbaoPet'
 import { SuanbaoRuntimeHost } from '@/components/suanbao/SuanbaoRuntimeHost'
@@ -363,6 +364,7 @@ function Root() {
           className="h-full w-full"
           sx={{
             flexGrow: 1,
+            paddingBottom: platform.type === 'mobile' ? 'calc(4rem + var(--mobile-safe-area-inset-bottom, 0px))' : 0,
             ...(showSidebar
               ? language === 'ar'
                 ? { paddingRight: { sm: `${sidebarWidth}px` } }
@@ -375,6 +377,7 @@ function Root() {
           </ErrorBoundary>
         </Box>
       </Grid>
+      <MobileBottomNavigation />
       {/* 对话设置 */}
       {/* <AppStoreRatingDialog /> */}
       {/* 代码预览 */}

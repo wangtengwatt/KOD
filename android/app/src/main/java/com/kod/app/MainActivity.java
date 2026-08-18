@@ -1,4 +1,4 @@
-package com.kai.kod;
+package com.kod.app;
 
 import com.getcapacitor.BridgeActivity;
 
