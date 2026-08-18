@@ -177,3 +177,47 @@ Task 5 must treat sync as a variant transition: run `mobile:sync:android:localte
 The environment banner has deterministic native/static coverage and is compiled into both variants; no emulator/device was available for an on-device instrumentation execution. The instrumentation APK itself compiled successfully.
 
 Fix-round commit: this report is part of the follow-up commit, so embedding its immutable self-hash would change that hash. Resolve it as `git rev-parse HEAD`; the exact hash is included in the controller handoff.
+
+## Review fix round 2/5
+
+### Findings addressed
+
+- The minSdk 26 native source no longer calls `InputStream.readAllBytes`, `Set.of`, `List.of`, or `String.isBlank`. Startup marker input uses a buffered `ByteArrayOutputStream`; immutable policy sets use Android-8-compatible collection construction; empty lists and blank checks use compatible implementations.
+- An executable Android JVM contract now walks all production Java sources and rejects those four unavailable convenience APIs, so the compatibility promise is enforced independently from the Gradle minSdk literal. Android lint also completed successfully for the debug/minSdk-26 variant.
+- `ShortLivedFileTokenStore` now receives a deterministic clock and removal callback. Expiration, explicit revoke, and plugin teardown invoke that callback exactly once per stored entry. The plugin callback releases persisted read-URI permission when one exists and deletes the entry's cached copy.
+- Cache deletion now targets `shared/<entry.cacheName()>`; it no longer generates a fresh random filename. The focused test creates the stored cache file plus an unrelated sibling, then proves only the stored entry is removed.
+- Android 11+ package visibility is declared with exactly two `<queries>` packages: `com.tencent.mm` and `com.tencent.mobileqq`. The contract parses the query block, compares the exact package set, and continues to reject `QUERY_ALL_PACKAGES`.
+
+### TDD evidence
+
+The first RED failed compilation only because the lifecycle tests required the absent deterministic clock/removal callback, context-free token insertion, and cache-directory-plus-entry deletion API (five expected compiler errors). After implementing that single lifecycle group, the same native run compiled and executed 12 tests: the three new expiry/revoke/cache tests passed, while exactly two tests remained RED:
+
+```text
+AndroidNativeContractTest > productionJavaAvoidsConvenienceApisUnavailableOnAndroidEight FAILED
+AndroidNativeContractTest > packageVisibilityIsLimitedToTheTwoAllowedAgentTargets FAILED
+12 tests completed, 2 failed
+```
+
+After the API-26 replacements and narrow query declaration, the same focused command passed all 12 tests:
+
+```text
+:app:testDebugUnitTest --tests com.kod.app.AndroidNativeContractTest \
+  --tests com.kod.app.agent.KodFilePluginTest --offline
+BUILD SUCCESSFUL
+```
+
+### Verification and build evidence
+
+- Focused renderer contracts: 5 files and 24 tests passed.
+- Exact `pnpm run check` with Node 22 in the full host environment: exit 0.
+- Full Vitest with the approved test-only ENOMEM preload: 142 files passed/2 skipped; 1341 tests passed/54 skipped.
+- Unshimmed full-host production sync: passed; all 12 Capacitor plugins synchronized and the production marker was emitted.
+- Production `:app:assembleRelease --offline`: `Android release environment contract passed`; `BUILD SUCCESSFUL`, 525 tasks.
+- Unshimmed full-host local-test sync: passed; all 12 Capacitor plugins synchronized and the local-test marker was emitted.
+- Local-test `:app:testDebugUnitTest :app:assembleDebug --offline`: `Android debug environment contract passed`; `BUILD SUCCESSFUL`, 295 tasks.
+- Additional `:app:lintDebug`: the offline attempt stopped only because Capacitor's lint-only Android-test coroutines dependency was not cached. The full-host online retry resolved it and completed `BUILD SUCCESSFUL`, 534 tasks, with no API-level source violation.
+- `git diff --check`: passed.
+
+Product sync/build commands remained unshimmed. This round changed only Android native source, manifest, native tests, and this report; renderer business logic was untouched.
+
+Round-2 follow-up commit: this report is included in that commit, so its exact immutable hash is recorded in the controller handoff after commit creation.

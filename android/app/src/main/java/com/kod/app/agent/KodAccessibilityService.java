@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,7 +41,7 @@ public class KodAccessibilityService extends AccessibilityService {
 
     public UiSnapshot readVisibleNodes(String expectedPackage, int limit) {
         AccessibilityNodeInfo root = requireSafeRoot(expectedPackage);
-        if (root == null) return new UiSnapshot(false, "FOREGROUND_CHANGED", "Active root is unavailable or changed", null, -1, List.of());
+        if (root == null) return new UiSnapshot(false, "FOREGROUND_CHANGED", "Active root is unavailable or changed", null, -1, Collections.emptyList());
         String snapshotId = UUID.randomUUID().toString();
         int windowId = root.getWindowId();
         latestSnapshot = new SnapshotBinding(snapshotId, expectedPackage, windowId);
@@ -159,7 +160,7 @@ public class KodAccessibilityService extends AccessibilityService {
     }
 
     private int snapshotWindowId() { SnapshotBinding binding = latestSnapshot; return binding == null ? -1 : binding.windowId(); }
-    private static boolean blank(String value) { return value == null || value.isBlank(); }
+    private static boolean blank(String value) { return value == null || value.trim().isEmpty(); }
     private static ActionResult result(boolean success, String code, String message, int count) { return new ActionResult(success, code, message, count); }
     private static void addChildren(AccessibilityNodeInfo node, ArrayDeque<AccessibilityNodeInfo> queue) {
         for (int i = 0; i < node.getChildCount(); i++) { AccessibilityNodeInfo child = node.getChild(i); if (child != null) queue.addLast(child); }

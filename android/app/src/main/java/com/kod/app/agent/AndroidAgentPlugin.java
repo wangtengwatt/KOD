@@ -413,7 +413,7 @@ public class AndroidAgentPlugin extends Plugin {
     }
 
     static boolean isMutatingAction(String action) { return "click".equals(action) || "input".equals(action) || "scroll".equals(action) || "back".equals(action); }
-    private static boolean isBlank(String value) { return value == null || value.isBlank(); }
+    private static boolean isBlank(String value) { return value == null || value.trim().isEmpty(); }
     private static void reject(PluginCall call, String code, String message) { call.reject(code + ": " + message, code); }
 
     private enum TaskState {

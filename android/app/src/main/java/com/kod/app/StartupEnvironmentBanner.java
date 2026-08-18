@@ -10,6 +10,7 @@ import android.widget.TextView;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
@@ -46,7 +47,7 @@ final class StartupEnvironmentBanner {
 
     private static EnvironmentMarker readMarker(Activity activity, String expectedEnvironment) {
         try (InputStream input = activity.getAssets().open("kod-build-environment.json")) {
-            String json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            String json = readUtf8(input);
             JSONObject marker = new JSONObject(json);
             String environment = marker.getString("environment");
             String displayName = marker.getString("displayName");
@@ -58,6 +59,14 @@ final class StartupEnvironmentBanner {
             String fallback = "localtest".equals(expectedEnvironment) ? "KOD 本地测试" : "KOD 生产环境";
             return new EnvironmentMarker(expectedEnvironment, fallback);
         }
+    }
+
+    private static String readUtf8(InputStream input) throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int count;
+        while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+        return new String(output.toByteArray(), StandardCharsets.UTF_8);
     }
 
     private static final class EnvironmentMarker {

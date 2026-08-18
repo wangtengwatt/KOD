@@ -23,12 +23,12 @@ public class KodFilePlugin extends Plugin {
     static final int MAX_FILES = 1;
     static final long MAX_BYTES = 25L * 1024L * 1024L;
     private static final String[] ALLOWED_TYPES = {"image/*", "application/pdf", "text/plain", "text/csv"};
-    private final ShortLivedFileTokenStore tokens = new ShortLivedFileTokenStore();
+    private ShortLivedFileTokenStore tokens;
     private PluginCall pendingPicker;
 
     @Override
     protected void handleOnDestroy() {
-        tokens.clear(getContext().getContentResolver());
+        if (tokens != null) tokens.clear();
         pendingPicker = null;
         super.handleOnDestroy();
     }
@@ -61,21 +61,21 @@ public class KodFilePlugin extends Plugin {
         Uri uri = result.getData().getData();
         if (uri == null) { reject(call, "FILE_URI_REQUIRED", "Only content URIs are supported"); return; }
         if (!"content".equalsIgnoreCase(uri.getScheme())) { reject(call, "FILE_URI_REQUIRED", "Only content URIs are supported"); return; }
-        try {
-            getContext().getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        } catch (SecurityException ignored) { }
         FileInfo info = inspect(uri);
         if (info == null) { reject(call, "FILE_UNREADABLE", "The selected file cannot be inspected"); return; }
         if (info.size < 0 || info.size > MAX_BYTES) { reject(call, "FILE_TOO_LARGE", "File exceeds the 25 MiB limit"); return; }
         if (!isAllowedMime(info.mimeType)) { reject(call, "FILE_TYPE_BLOCKED", "This file type is not supported"); return; }
-        String token = tokens.put(getContext(), uri, info.name, info.mimeType, info.size);
+        try {
+            getContext().getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) { }
+        String token = tokenStore().put(uri, info.name, info.mimeType, info.size);
         JSObject file = new JSObject(); file.put("token", token); file.put("name", info.name); file.put("mimeType", info.mimeType); file.put("size", info.size);
         JSObject response = new JSObject(); response.put("cancelled", false); response.put("files", new JSArray().put(file)); call.resolve(response);
     }
 
     @PluginMethod
     public void shareFile(PluginCall call) {
-        ShortLivedFileTokenStore.Entry entry = tokens.consumeForShare(call.getString("token"));
+        ShortLivedFileTokenStore.Entry entry = tokenStore().consumeForShare(call.getString("token"));
         if (entry == null) { reject(call, "TOKEN_INVALID", "File token is expired, invalid, or already shared"); return; }
         Uri shareUri;
         try { shareUri = androidx.core.content.FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", copyToCache(entry)); }
@@ -93,11 +93,7 @@ public class KodFilePlugin extends Plugin {
 
     @PluginMethod
     public void revokeFile(PluginCall call) {
-        ShortLivedFileTokenStore.Entry entry = tokens.revoke(call.getString("token"));
-        if (entry != null) {
-            tokens.release(getContext().getContentResolver(), entry.uri());
-            deleteCachedCopy(entry);
-        }
+        ShortLivedFileTokenStore.Entry entry = tokenStore().revoke(call.getString("token"));
         call.resolve(new JSObject().put("revoked", entry != null));
     }
 
@@ -119,17 +115,26 @@ public class KodFilePlugin extends Plugin {
     }
 
     static boolean isAllowedMime(String mime) { if (mime == null) return false; for (String allowed : ALLOWED_TYPES) if (allowed.endsWith("/*") ? mime.startsWith(allowed.substring(0, allowed.length() - 1)) : allowed.equalsIgnoreCase(mime)) return true; return false; }
-    private java.io.File cachedCopy(ShortLivedFileTokenStore.Entry entry) {
-        java.io.File dir = new java.io.File(getContext().getCacheDir(), "shared");
-        String extension = ".bin";
-        if ("application/pdf".equals(entry.mimeType())) extension = ".pdf";
-        else if ("text/plain".equals(entry.mimeType())) extension = ".txt";
-        else if ("text/csv".equals(entry.mimeType())) extension = ".csv";
-        else if (entry.mimeType().startsWith("image/")) extension = ".img";
-        return new java.io.File(dir, "kod-" + java.util.UUID.randomUUID() + extension);
+    private ShortLivedFileTokenStore tokenStore() {
+        if (tokens == null) {
+            tokens = new ShortLivedFileTokenStore(System::currentTimeMillis, this::cleanupEntry);
+        }
+        return tokens;
     }
+
+    private void cleanupEntry(ShortLivedFileTokenStore.Entry entry) {
+        try {
+            getContext().getContentResolver().releasePersistableUriPermission(
+                    entry.uri(), Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) { }
+        deleteCachedCopy(entry);
+    }
+
     private void deleteCachedCopy(ShortLivedFileTokenStore.Entry entry) {
-        java.io.File cached = cachedCopy(entry);
+        deleteCachedCopy(getContext().getCacheDir(), entry);
+    }
+    static void deleteCachedCopy(java.io.File cacheDir, ShortLivedFileTokenStore.Entry entry) {
+        java.io.File cached = new java.io.File(new java.io.File(cacheDir, "shared"), entry.cacheName());
         if (cached.exists()) cached.delete();
     }
     private java.io.File copyToCache(ShortLivedFileTokenStore.Entry entry) throws Exception {

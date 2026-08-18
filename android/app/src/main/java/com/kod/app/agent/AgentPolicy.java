@@ -1,6 +1,8 @@
 package com.kod.app.agent;
 
 import java.util.Collections;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -11,11 +13,11 @@ public final class AgentPolicy {
     public static final String QQ = "qq";
 
     private static final Map<String, String> ALLOWED_APPS;
-    private static final Set<String> SENSITIVE_TERMS = Set.of(
+    private static final Set<String> SENSITIVE_TERMS = immutableSet(
         "支付", "付款", "收款", "转账", "红包", "提现", "银行卡", "验证码", "密码", "口令", "指纹",
         "payment", "pay now", "transfer", "bank card", "verification code", "otp", "password", "passcode"
     );
-    private static final Set<String> PASSWORD_HINTS = Set.of("password", "passcode", "pin", "密码", "口令");
+    private static final Set<String> PASSWORD_HINTS = immutableSet("password", "passcode", "pin", "密码", "口令");
 
     static {
         Map<String, String> apps = new LinkedHashMap<>();
@@ -65,5 +67,9 @@ public final class AgentPolicy {
 
     private static String safe(CharSequence value) {
         return value == null ? "" : value.toString();
+    }
+
+    private static Set<String> immutableSet(String... values) {
+        return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(values)));
     }
 }
