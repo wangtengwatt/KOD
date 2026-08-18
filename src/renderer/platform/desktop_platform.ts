@@ -101,10 +101,12 @@ export default class DesktopPlatform implements Platform {
     return this.ipc.invoke('openLink', url)
   }
   public async openPaymentUrl(url: string): Promise<void> {
+    // 与参考实现一致：校验支付链接后交给主进程 shell.openExternal
     const { assertPaymentUrl, parsePaymentHosts } = await import('@shared/payment-url')
-    const { KOD_API_ORIGIN, KOD_PAYMENT_HOSTS } = await import('@/variables')
-    assertPaymentUrl(url, parsePaymentHosts(KOD_PAYMENT_HOSTS, KOD_API_ORIGIN))
-    return this.ipc.openPaymentUrl(url)
+    const { KOD_API_ORIGIN } = await import('@/packages/remote')
+    const { KOD_PAYMENT_HOSTS } = await import('@/variables')
+    const parsed = assertPaymentUrl(url, parsePaymentHosts(KOD_PAYMENT_HOSTS, KOD_API_ORIGIN))
+    return this.openLink(parsed.toString())
   }
   public async getDeviceName(): Promise<string> {
     const deviceName = await cache('ipc:getDeviceName', () => this.ipc.invoke('getDeviceName'), {

@@ -1,4 +1,4 @@
-﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect } from 'react'
 import { walletApi } from '@/api/wallet'
 import platform from '@/platform'
@@ -17,9 +17,13 @@ export const walletKeys = {
   account: (identity: WalletIdentity) => ['wallet', identity] as const,
   info: (identity: WalletIdentity) => ['wallet', identity, 'topup-info'] as const,
   balance: (identity: WalletIdentity) => ['wallet', identity, 'balance'] as const,
+  cardTimeAccount: (identity: WalletIdentity) => ['wallet', identity, 'card-time-account'] as const,
   historyRoot: (identity: WalletIdentity) => ['wallet', identity, 'history'] as const,
   history: (identity: WalletIdentity, page: number, pageSize: number) =>
     ['wallet', identity, 'history', page, pageSize] as const,
+  consumeHistoryRoot: (identity: WalletIdentity) => ['wallet', identity, 'consume-history'] as const,
+  consumeHistory: (identity: WalletIdentity, page: number, pageSize: number) =>
+    ['wallet', identity, 'consume-history', page, pageSize] as const,
 }
 
 export async function clearWalletCache() {
@@ -54,6 +58,12 @@ export function useWallet(page: number, pageSize: number) {
     enabled,
     retry: 1,
   })
+  const cardTimeAccount = useQuery({
+    queryKey: walletKeys.cardTimeAccount(identity ?? 'signed-out'),
+    queryFn: walletApi.getCardTimeAccount,
+    enabled,
+    retry: 1,
+  })
   const history = useQuery({
     queryKey: walletKeys.history(identity ?? 'signed-out', page, pageSize),
     queryFn: () => walletApi.getTopupHistory(page, pageSize),
@@ -66,6 +76,7 @@ export function useWallet(page: number, pageSize: number) {
         ? Promise.all([
             queryClient.invalidateQueries({ queryKey: walletKeys.balance(identity) }),
             queryClient.invalidateQueries({ queryKey: walletKeys.historyRoot(identity) }),
+            queryClient.invalidateQueries({ queryKey: walletKeys.consumeHistoryRoot(identity) }),
           ])
         : Promise.resolve([]),
     [identity, queryClient]
@@ -86,5 +97,15 @@ export function useWallet(page: number, pageSize: number) {
     mutationFn: ({ amount, paymentMethod }: { amount: number; paymentMethod: string }) =>
       walletApi.pay(amount, paymentMethod),
   })
-  return { identity, apiHost: new URL(KOD_API_ORIGIN).host, info, balance, history, amount, pay, refresh }
+  return {
+    identity,
+    apiHost: new URL(KOD_API_ORIGIN).host,
+    info,
+    balance,
+    cardTimeAccount,
+    history,
+    amount,
+    pay,
+    refresh,
+  }
 }

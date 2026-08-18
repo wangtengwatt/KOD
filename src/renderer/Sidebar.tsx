@@ -153,9 +153,7 @@ export default function Sidebar() {
         },
       }}
       SlideProps={language === 'ar' ? { direction: 'left' } : undefined}
-      PaperProps={
-        language === 'ar' ? { sx: { direction: 'rtl', overflowY: 'auto' } } : { sx: { overflowY: 'auto' } }
-      }
+      PaperProps={language === 'ar' ? { sx: { direction: 'rtl', overflowY: 'auto' } } : { sx: { overflowY: 'auto' } }}
       disableSwipeToOpen={CHATBOX_BUILD_PLATFORM !== 'ios'} // 只在iOS设备上启用SwipeToOpen
     >
       <Stack
@@ -183,7 +181,12 @@ export default function Sidebar() {
           </Flex>
 
           <Tooltip label={t('Collapse')} openDelay={1000} withArrow>
-            <ActionIcon variant="subtle" color="kod-tertiary" size={isSmallScreen ? 'lg' : 20} onClick={() => setShowSidebar(false)}>
+            <ActionIcon
+              variant="subtle"
+              color="kod-tertiary"
+              size={isSmallScreen ? 'lg' : 20}
+              onClick={() => setShowSidebar(false)}
+            >
               <IconLayoutSidebarLeftCollapse />
             </ActionIcon>
           </Tooltip>
@@ -267,8 +270,8 @@ export default function Sidebar() {
                 <NavLink
                   c="kod-secondary"
                   className="rounded"
-                  label="蒜宝助手"
-                  description="桌宠与手机任务控制"
+                  label={t('Suanbao Assistant')}
+                  description={t('Desktop pet and phone task control')}
                   leftSection={<ScalableIcon icon={IconDeviceMobile} size={22} />}
                   onClick={() => {
                     navigate({ to: '/android-agent' })
@@ -281,8 +284,8 @@ export default function Sidebar() {
               <NavLink
                 c="kod-secondary"
                 className="rounded"
-                label="算力中心"
-                leftSection={<ScalableIcon icon={IconCpu} size={22} />}
+                label={t('Compute Center')}
+                leftSection={<ScalableIcon icon={IconCpu} size={20} />}
                 onClick={() => {
                   navigate({ to: '/compute-center' })
                   setShowSidebar(false)
@@ -341,7 +344,7 @@ export default function Sidebar() {
                 <NavLink
                   c="kod-secondary"
                   className="rounded"
-                  label="蒜宝助手"
+                  label={t('Suanbao Assistant')}
                   leftSection={<ScalableIcon icon={IconDeviceMobile} size={20} />}
                   onClick={() => {
                     navigate({ to: '/android-agent' })
@@ -354,9 +357,12 @@ export default function Sidebar() {
               <NavLink
                 c="kod-secondary"
                 className="rounded"
-                label="算力中心"
+                label={t('Compute Center')}
                 leftSection={<ScalableIcon icon={IconCpu} size={20} />}
-                onClick={() => navigate({ to: '/compute-center' })}
+                onClick={() => {
+                  navigate({ to: '/compute-center' })
+                  if (isSmallScreen) setShowSidebar(false)
+                }}
                 variant="light"
                 p="xs"
               />

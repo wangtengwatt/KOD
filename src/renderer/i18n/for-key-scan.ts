@@ -137,6 +137,9 @@ function _errorI18nKeys(t: (key: string) => string) {
 
 function _otherI18nKeys(t: (key: string) => string) {
   // src/renderer/routes/settings/route.tsx
+  t('KOD AI')
+  t('Wallet')
+  t('Suanbao')
   t('Model Provider')
   t('Default Models')
   t('Web Search')

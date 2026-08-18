@@ -16,8 +16,8 @@ import { IndexedDBTaskSessionStorage, type TaskSessionStorage } from '@/storage/
 import type { Exporter, Platform, PlatformType, Storage } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
-import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
 import type { SuanbaoPlatformController } from './suanbao/interface'
+import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
 
 /**
  * 内存存储类，用于测试环境
@@ -217,11 +217,11 @@ export default class TestPlatform implements Platform {
     return () => {}
   }
 
-  public async openPaymentUrl(url: string): Promise<void> {
-    throw new Error('安全支付链接仅支持桌面客户端')
+  public async openLink(url: string): Promise<void> {
+    // no-op in test
   }
 
-  public async openLink(url: string): Promise<void> {
+  public async openPaymentUrl(url: string): Promise<void> {
     // no-op in test
   }
 

@@ -18,3 +18,8 @@ export const languageNameMap: Record<Language, string> = {
 }
 
 export const languages = Array.from(Object.keys(languageNameMap)) as Language[]
+
+// 移动端提供完整翻译维护的语言：简体中文 / English / 繁體中文。
+// 其余语言保留在 languageNameMap 中（系统语言检测仍可用），但不在切换列表展示，
+// 避免出现部分文本回退成中文的混杂体验。
+export const availableLanguages: Language[] = ['zh-Hans', 'en', 'zh-Hant']

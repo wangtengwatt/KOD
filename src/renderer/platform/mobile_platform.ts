@@ -144,9 +144,13 @@ export default class MobilePlatform extends MobileSQLiteStorage implements Platf
     return () => null
   }
   public async openPaymentUrl(url: string): Promise<void> {
-    await this.openLink(url)
+    // 与桌面端一致：先校验支付链接（HTTPS / 白名单域名），再在应用内浏览器标签打开
+    const { assertPaymentUrl, parsePaymentHosts } = await import('@shared/payment-url')
+    const { KOD_API_ORIGIN } = await import('@/packages/remote')
+    const { KOD_PAYMENT_HOSTS } = await import('@/variables')
+    const parsed = assertPaymentUrl(url, parsePaymentHosts(KOD_PAYMENT_HOSTS, KOD_API_ORIGIN))
+    await this.openLink(parsed.toString())
   }
-
   public async openLink(url: string): Promise<void> {
     try {
       // 使用 Browser.open 打开

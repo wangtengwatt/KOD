@@ -1,6 +1,7 @@
 import { Loader, Select, Text } from '@mantine/core'
 import { IconKey, IconServer } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   KOD_STATIONS_STORAGE_KEY,
   type KodRelayKey,
@@ -40,6 +41,7 @@ export function RelayStationSelector({
   selectedApiKeyId,
   loading = false,
 }: RelayStationSelectorProps) {
+  const { t } = useTranslation()
   const [stations, setStations] = useState<KodRelayStation[]>(readCachedStations)
   const [keys, setKeys] = useState<DisplayKey[]>([])
   const [pendingStationId, setPendingStationId] = useState<number | null>(selectedStationId || null)
@@ -136,7 +138,7 @@ export function RelayStationSelector({
   return (
     <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:flex-nowrap">
       <Select
-        placeholder="切换零售站"
+        placeholder={t('Switch Relay Station') || undefined}
         leftSection={loadingStations ? <Loader size={14} /> : <IconServer size={16} />}
         data={stationOptions}
         value={pendingStationId ? String(pendingStationId) : null}
@@ -148,11 +150,11 @@ export function RelayStationSelector({
         className="min-w-[180px] flex-1 sm:flex-none"
       />
       <Select
-        placeholder="切换节点"
+        placeholder={t('Switch Node') || undefined}
         leftSection={loadingKeys || loading ? <Loader size={14} /> : <IconKey size={16} />}
         data={keys.map((key) => ({
           value: String(key.id),
-          label: `节点${key.displayIndex}`,
+          label: `${t('Node')}${key.displayIndex}`,
           disabled: key.status === 1 && key.id !== selectedApiKeyId,
         }))}
         value={pendingKeyId ? String(pendingKeyId) : null}
@@ -172,9 +174,10 @@ export function RelayStationSelector({
                 style={{ backgroundColor: key?.status === 0 ? '#22c55e' : '#ef4444' }}
               />
               <Text size="xs">
-                节点{key?.displayIndex}
-                {selected && <span className="ml-1 font-semibold text-indigo-600">已选择</span>}
-                {occupied && <span className="ml-1 text-gray-500">占用中</span>}
+                {t('Node')}
+                {key?.displayIndex}
+                {selected && <span className="ml-1 font-semibold text-indigo-600">{t('Selected')}</span>}
+                {occupied && <span className="ml-1 text-gray-500">{t('Occupied')}</span>}
               </Text>
             </div>
           )

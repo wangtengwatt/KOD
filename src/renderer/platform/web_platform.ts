@@ -10,9 +10,9 @@ import { getBrowser, getOS } from '../packages/navigator'
 import type { Platform, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
 import type { SessionAttachmentRagController } from './session-attachment-rag/interface'
-import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
-import type { SuanbaoPlatformController } from './suanbao/interface'
 import { IndexedDBStorage } from './storages'
+import type { SuanbaoPlatformController } from './suanbao/interface'
+import { UnsupportedSuanbaoPlatformController } from './suanbao/unsupported-controller'
 import WebExporter from './web_exporter'
 import webLogger from './web_logger'
 import { parseTextFileLocally } from './web_platform_utils'
@@ -60,12 +60,16 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
   public onUpdateDownloaded(callback: () => void): () => void {
     return () => null
   }
-  public async openPaymentUrl(url: string): Promise<void> {
-    throw new Error('安全支付链接仅支持桌面客户端')
-  }
-
   public async openLink(url: string): Promise<void> {
     window.open(url)
+  }
+  public async openPaymentUrl(url: string): Promise<void> {
+    // Web 平台复用与桌面端一致的支付链接校验，校验通过后在新标签打开
+    const { assertPaymentUrl, parsePaymentHosts } = await import('@shared/payment-url')
+    const { KOD_API_ORIGIN } = await import('@/packages/remote')
+    const { KOD_PAYMENT_HOSTS } = await import('@/variables')
+    const parsed = assertPaymentUrl(url, parsePaymentHosts(KOD_PAYMENT_HOSTS, KOD_API_ORIGIN))
+    window.open(parsed.toString())
   }
   public async getDeviceName(): Promise<string> {
     // Web 平台返回浏览器名称

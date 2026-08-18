@@ -69,28 +69,6 @@ export const WalletSchema = WalletWireSchema.transform((value) => ({
   balance: decimalNumber.parse(value.balance),
   historicalConsumption: decimalNumber.parse(value.historical_consumption),
 }))
-export const VideoConsumeReportSchema = z
-  .object({
-    duplicated: z.boolean().default(false),
-    amount: decimalWire.pipe(nonnegativeNumber),
-    balance: decimalWire,
-  })
-  .transform((value) => ({
-    duplicated: value.duplicated,
-    amount: Number(value.amount),
-    balance: Number(value.balance),
-  }))
-
-export interface VideoConsumeReportInput {
-  requestId: string
-  model: string
-  tokens: number
-  upstreamTaskId?: string
-  duration?: number
-  resolution?: string
-  hasVideoInput?: boolean
-  hasAudio?: boolean
-}
 export const TopupRecordWireSchema = z.object({
   id: longIdWire,
   user_id: longIdWire,
@@ -140,6 +118,151 @@ const ResultEnvelopeSchema = z.object({
   message: z.string().default(''),
   data: z.unknown().optional(),
 })
+
+export const CardTimeProductWireSchema = z.object({
+  id: longIdWire,
+  name: z.string(),
+  category: z.string().default('other'),
+  brand: z.string().default(''),
+  spec: z.string().default(''),
+  rmb_price: decimalWire,
+  card_time_price: decimalWire,
+  stock: decimalWire.pipe(z.number().int()),
+  image_url: nullableString,
+  status: z.string().default('active'),
+})
+export const CardTimeProductSchema = CardTimeProductWireSchema.transform((v) => ({
+  id: String(v.id),
+  name: v.name,
+  category: v.category,
+  brand: v.brand,
+  spec: v.spec,
+  rmbPrice: decimalNumber.parse(v.rmb_price),
+  cardTimePrice: decimalNumber.parse(v.card_time_price),
+  stock: v.stock,
+  imageUrl: v.image_url ?? null,
+  status: v.status,
+}))
+export type CardTimeProduct = z.infer<typeof CardTimeProductSchema>
+
+export const CardTimeAccountWireSchema = z.object({
+  available_card_hours: decimalWire,
+})
+export const CardTimeAccountSchema = CardTimeAccountWireSchema.transform((v) => ({
+  availableCardHours: nonnegativeNumber.parse(v.available_card_hours),
+}))
+export type CardTimeAccount = z.infer<typeof CardTimeAccountSchema>
+
+export const ExchangeOrderWireSchema = z.object({
+  id: longIdWire,
+  order_no: z.string(),
+  user_id: longIdWire,
+  product_id: longIdWire,
+  product_name: z.string(),
+  product_spec: z.string().default(''),
+  rmb_price: decimalWire,
+  card_time_cost: decimalWire,
+  status: z.string().default('pending'),
+  shipping_address: nullableString,
+  tracking_no: nullableString,
+  remark: nullableString,
+  create_time: decimalWire.pipe(nonnegativeInteger),
+  update_time: decimalWire.pipe(nonnegativeInteger),
+})
+export const ExchangeOrderSchema = ExchangeOrderWireSchema.transform((v) => ({
+  id: String(v.id),
+  orderNo: v.order_no,
+  userId: String(v.user_id),
+  productId: String(v.product_id),
+  productName: v.product_name,
+  productSpec: v.product_spec,
+  rmbPrice: decimalNumber.parse(v.rmb_price),
+  cardTimeCost: decimalNumber.parse(v.card_time_cost),
+  status: v.status,
+  shippingAddress: v.shipping_address ?? null,
+  trackingNo: v.tracking_no ?? null,
+  remark: v.remark ?? null,
+  createTime: nonnegativeInteger.parse(v.create_time),
+  updateTime: nonnegativeInteger.parse(v.update_time),
+}))
+export type ExchangeOrder = z.infer<typeof ExchangeOrderSchema>
+
+export const ExchangeOrderListSchema = z
+  .object({
+    items: z.array(ExchangeOrderWireSchema),
+    total: decimalWire.pipe(nonnegativeInteger),
+    page: decimalWire.pipe(z.number().int().positive()),
+    pageSize: decimalWire.pipe(z.number().int().positive()),
+  })
+  .transform((v) => ({
+    items: v.items.map((i) => ExchangeOrderSchema.parse(ExchangeOrderWireSchema.parse(i))),
+    total: v.total,
+    page: v.page,
+    pageSize: v.pageSize,
+  }))
+
+export const VideoConsumeReportWireSchema = z.object({
+  duplicated: z.boolean().default(false),
+  amount: decimalWire.pipe(nonnegativeNumber),
+  balance: decimalWire.pipe(z.number()),
+})
+export const VideoConsumeReportSchema = VideoConsumeReportWireSchema.transform((v) => ({
+  duplicated: v.duplicated,
+  amount: v.amount,
+  balance: v.balance,
+}))
+export type VideoConsumeReport = z.infer<typeof VideoConsumeReportSchema>
+
+export interface VideoConsumeReportInput {
+  requestId: string
+  model: string
+  tokens: number
+  upstreamTaskId?: string
+  duration?: number
+  resolution?: string
+  hasVideoInput?: boolean
+  hasAudio?: boolean
+}
+
+export const ConsumeRecordWireSchema = z.object({
+  id: longIdWire,
+  biz_type: nullableString,
+  model_name: nullableString,
+  tokens: z.union([z.number().int().nonnegative(), z.null(), z.undefined()]),
+  unit_price: z.union([decimalWire, z.null(), z.undefined()]),
+  amount: decimalWire.pipe(nonnegativeNumber),
+  balance_after: z.union([decimalWire, z.null(), z.undefined()]),
+  duration: z.union([z.number().int().nonnegative(), z.null(), z.undefined()]),
+  resolution: nullableString,
+  create_time: decimalWire.pipe(nonnegativeInteger),
+})
+export const ConsumeRecordSchema = ConsumeRecordWireSchema.transform((v) => ({
+  id: String(v.id),
+  bizType: v.biz_type ?? null,
+  modelName: v.model_name ?? null,
+  tokens: v.tokens ?? null,
+  unitPrice: v.unit_price == null ? null : decimalNumber.parse(v.unit_price),
+  amount: v.amount,
+  balanceAfter: v.balance_after == null ? null : decimalNumber.parse(v.balance_after),
+  duration: v.duration ?? null,
+  resolution: v.resolution ?? null,
+  createTime: v.create_time,
+}))
+export type ConsumeRecord = z.infer<typeof ConsumeRecordSchema>
+
+export const ConsumeHistoryWireSchema = z.object({
+  items: z.array(ConsumeRecordWireSchema),
+  total: decimalWire.pipe(nonnegativeInteger),
+  page: decimalWire.pipe(positiveIntegerInput),
+  pageSize: decimalWire.pipe(positiveIntegerInput),
+})
+export const ConsumeHistorySchema = ConsumeHistoryWireSchema.transform((v) => ({
+  items: v.items.map((item) => ConsumeRecordSchema.parse(item)),
+  total: v.total,
+  page: v.page,
+  pageSize: v.pageSize,
+}))
+export type ConsumeHistory = z.infer<typeof ConsumeHistorySchema>
 
 export class WalletApiError extends Error {
   constructor(
@@ -199,6 +322,22 @@ function historyParams(page: number, pageSize: number) {
 export const walletApi = {
   getTopupInfo: () => request('/api/user/topup/info', TopupInfoSchema),
   getWallet: () => request('/api/user/wallet', WalletSchema),
+  getCardTimeAccount: () => request('/api/user/compute/account', CardTimeAccountSchema),
+  getCardTimeProducts: () =>
+    request(
+      '/api/user/compute/products',
+      z.array(CardTimeProductWireSchema).transform((arr) => arr.map((i) => CardTimeProductSchema.parse(i)))
+    ),
+  createExchangeOrder: (productId: string) =>
+    request('/api/user/compute/exchange', ExchangeOrderWireSchema, {
+      method: 'POST',
+      body: { product_id: productId },
+      retry: 0,
+    }),
+  getExchangeOrders: async (page: number, pageSize: number) => {
+    const search = new URLSearchParams({ p: String(page), pageSize: String(pageSize) })
+    return request(`/api/user/compute/exchange/orders?${search.toString()}`, ExchangeOrderListSchema)
+  },
   calculateAmount: (amount: number) => request('/api/user/amount', AmountSchema, { method: 'POST', body: { amount } }),
   pay: (amount: number, paymentMethod: string) =>
     request('/api/user/pay', PaymentSchema, {
@@ -222,6 +361,7 @@ export const walletApi = {
     }
     return history
   },
+  // 视频消费上报：retry 0，客户端以 requestId 幂等，网络重试由调用方按记录状态驱动
   reportVideoConsumption: (input: VideoConsumeReportInput) =>
     request('/api/user/consume/video', VideoConsumeReportSchema, {
       method: 'POST',
@@ -237,6 +377,22 @@ export const walletApi = {
       },
       retry: 0,
     }),
+  getConsumeHistory: async (page: number, pageSize: number) => {
+    const input = historyParams(page, pageSize)
+    const search = new URLSearchParams({ p: String(input.page), pageSize: String(input.pageSize) })
+    const history = await request(`/api/user/consume/self?${search.toString()}`, ConsumeHistorySchema)
+    if (history.page !== input.page || history.pageSize !== input.pageSize) {
+      throw schemaFailure('/api/user/consume/self', [
+        {
+          code: 'custom',
+          path: [history.page !== input.page ? 'page' : 'pageSize'],
+          message: 'pagination response does not match request',
+          input: history.page !== input.page ? history.page : history.pageSize,
+        },
+      ])
+    }
+    return history
+  },
 }
 export type PayMethod = z.infer<typeof PayMethodSchema>
 export type TopupInfo = z.infer<typeof TopupInfoSchema>

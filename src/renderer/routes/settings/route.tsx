@@ -13,9 +13,9 @@ import {
   IconMessages,
   IconPlant,
   IconSparkles,
+  IconWallet,
   IconWand,
   IconWorldWww,
-  IconWallet,
 } from '@tabler/icons-react'
 import { createFileRoute, Link, Outlet, useCanGoBack, useRouter, useRouterState } from '@tanstack/react-router'
 import clsx from 'clsx'
@@ -211,12 +211,7 @@ export function SettingsRoot() {
                 <Box component="span" flex="0 0 auto" w={20} h={20} mr="xs">
                   {item.icon}
                 </Box>
-                <Text
-                  flex={1}
-                  lineClamp={1}
-                  span={true}
-                  className={`!text-inherit`}
-                >
+                <Text flex={1} lineClamp={1} span={true} className={`!text-inherit`}>
                   {t(item.label)}
                 </Text>
                 {item.key === 'kod-ai' && isChatboxAIActivated && (
