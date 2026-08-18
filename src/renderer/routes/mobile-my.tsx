@@ -71,9 +71,11 @@ function MobileMyPage() {
   const refreshToken = useAuthInfoStore((state) => state.refreshToken)
   const isLoggedIn = Boolean(accessToken && refreshToken)
   const account = useQuery({
-    queryKey: ['compute', 'mobile-account', email],
+    queryKey: ['compute', 'account'],
     queryFn: getComputeAccount,
     enabled: isLoggedIn,
+    networkMode: 'always',
+    refetchOnMount: 'always',
     retry: 1,
   })
   const accountEmail = account.data?.email?.trim().toLowerCase() || null
@@ -189,6 +191,12 @@ function MobileMyPage() {
                 重新同步
               </Button>
             </Stack>
+          </Alert>
+        )}
+
+        {isLoggedIn && account.isPending && (
+          <Alert color="blue" title="正在同步账户数据">
+            正在从同一 KOD 线上账本读取角色、人民币余额、卡时、收益与 GPU 状态。
           </Alert>
         )}
 

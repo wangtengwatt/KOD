@@ -75,11 +75,11 @@ describe('account deletion', () => {
     mocks.repositoryDeleteDatabase.mockResolvedValue(undefined)
   })
 
-  it('requires password, exact DELETE text and acknowledgement', () => {
-    expect(canDeleteAccount('', 'DELETE', true)).toBe(false)
-    expect(canDeleteAccount('password', 'delete', true)).toBe(false)
-    expect(canDeleteAccount('password', 'DELETE', false)).toBe(false)
-    expect(canDeleteAccount('password', 'DELETE', true)).toBe(true)
+  it('requires password, exact Chinese confirmation text and acknowledgement', () => {
+    expect(canDeleteAccount('', '确认删除', true)).toBe(false)
+    expect(canDeleteAccount('password', 'DELETE', true)).toBe(false)
+    expect(canDeleteAccount('password', '确认删除', false)).toBe(false)
+    expect(canDeleteAccount('password', '确认删除', true)).toBe(true)
   })
 
   it('never starts local cleanup when server deletion fails', async () => {

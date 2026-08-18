@@ -32,28 +32,28 @@ import { getSettingsParentPath } from './-settings-navigation'
 
 const ITEMS = [
   {
-    key: 'chatbox-ai',
+    key: 'kod-ai',
     label: 'KOD AI',
     icon: <IconSparkles className="w-full h-full" />,
   },
   {
     key: 'wallet',
-    label: 'Wallet',
+    label: '钱包',
     icon: <IconWallet className="w-full h-full" />,
   },
   {
     key: 'provider',
-    label: 'Model Provider',
+    label: '模型提供方',
     icon: <IconCategory className="w-full h-full" />,
   },
   {
     key: 'default-models',
-    label: 'Default Models',
+    label: '默认模型',
     icon: <IconBox className="w-full h-full" />,
   },
   {
     key: 'web-search',
-    label: 'Web Search',
+    label: '联网搜索',
     icon: <IconWorldWww className="w-full h-full" />,
   },
   ...(featureFlags.mcp
@@ -69,7 +69,7 @@ const ITEMS = [
     ? [
         {
           key: 'knowledge-base',
-          label: 'Knowledge Base',
+          label: '知识库',
           icon: <IconBook className="w-full h-full" />,
         },
       ]
@@ -78,19 +78,19 @@ const ITEMS = [
     ? [
         {
           key: 'skills',
-          label: 'Skills',
+          label: '技能',
           icon: <IconWand className="w-full h-full" />,
         },
       ]
     : []),
   {
     key: 'document-parser',
-    label: 'Document Parser',
+    label: '文档解析器',
     icon: <IconFileText className="w-full h-full" />,
   },
   {
     key: 'chat',
-    label: 'Chat Settings',
+    label: '对话设置',
     icon: <IconMessages className="w-full h-full" />,
   },
   ...(platform.type === 'mobile'
@@ -98,18 +98,18 @@ const ITEMS = [
     : [
         {
           key: 'hotkeys',
-          label: 'Keyboard Shortcuts',
+          label: '键盘快捷键',
           icon: <IconKeyboard className="w-full h-full" />,
         },
       ]),
   {
     key: 'suanbao',
-    label: 'Suanbao',
+    label: '蒜宝',
     icon: <IconPlant className="w-full h-full" />,
   },
   {
     key: 'general',
-    label: 'General Settings',
+    label: '常规设置',
     icon: <IconAdjustmentsHorizontal className="w-full h-full" />,
   },
 ]
@@ -219,7 +219,7 @@ export function SettingsRoot() {
                 >
                   {t(item.label)}
                 </Text>
-                {item.key === 'chatbox-ai' && isChatboxAIActivated && (
+                {item.key === 'kod-ai' && isChatboxAIActivated && (
                   <Indicator size={8} color="kod-success" className="ml-auto" />
                 )}
                 {isSmallScreen && (

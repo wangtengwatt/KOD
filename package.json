@@ -57,6 +57,7 @@
     "mobile:sync": "pnpm run mobile:sync:ios && pnpm run mobile:sync:android",
     "mobile:sync:ios": "cross-env CHATBOX_BUILD_TARGET=mobile_app CHATBOX_BUILD_PLATFORM=ios electron-vite build && pnpm run delete-sourcemaps && npx cap sync ios",
     "mobile:sync:android": "cross-env CHATBOX_BUILD_TARGET=mobile_app CHATBOX_BUILD_PLATFORM=android electron-vite build && pnpm run delete-sourcemaps && npx cap sync android",
+    "mobile:sync:android:local": "cross-env KOD_ANDROID_LOCAL_TEST=1 KOD_API_ORIGIN=http://10.0.2.2:8080 CHATBOX_BUILD_TARGET=mobile_app CHATBOX_BUILD_PLATFORM=android electron-vite build && pnpm run delete-sourcemaps && cross-env KOD_ANDROID_LOCAL_TEST=1 npx cap sync android",
     "mobile:ios": "pnpm run mobile:sync:ios && npx cap open ios",
     "mobile:android": "pnpm run mobile:sync:android && npx cap open android",
     "mobile:assets": "npx capacitor-assets generate --ios --android",

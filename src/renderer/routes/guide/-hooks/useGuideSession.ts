@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next'
 import { trackJkClickEvent } from '@/analytics/jk'
 import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
 import { cancelConfetti, confetti } from '@/components/Confetti'
-import { buildChatboxUrl } from '@/packages/remote'
 import platform from '@/platform'
 import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
 import { onboardingStore, useOnboardingStore } from '@/stores/onboardingStore'
@@ -49,6 +48,70 @@ function createTrackedDelay(ms: number, pendingTimeouts: Set<ReturnType<typeof s
     }, ms)
     pendingTimeouts.add(timeoutId)
   })
+}
+
+function isChineseGuide(language: string) {
+  return language.startsWith('zh')
+}
+
+function getKodGreeting(language: string) {
+  if (isChineseGuide(language)) {
+    return `## 👋 你好！我是 KOD 新手助手
+
+KOD 是集 **AI 对话、生图、视频生成、零售站切换与算力交易** 于一体的客户端。
+
+### 核心功能
+- 💬 **AI 对话、生图与视频** — 使用 KAI 公司零售站提供的模型能力
+- 🔄 **零售站与节点切换** — 保留手动选择零售站和节点的灵活流程
+- 🖥️ **KOD 算力中心** — 购买 Token 套餐、预订 GPU，也可认证后发布闲置算力
+- 📚 **知识库与文档解析** — 在手机端导入文件并管理个人知识
+- 🔐 **本地优先** — 会话和个人配置优先保存在本机
+
+### 常用入口
+- [KOD 官网控制台](https://kod.kai.com/console)
+- [人民币钱包与充值](https://kod.kai.com/console/wallet)
+
+---
+
+**现在开始配置 KOD。** 请先选择你的使用方式：`
+  }
+
+  return `## 👋 Hi! I'm the KOD onboarding assistant
+
+KOD brings together **AI chat, image and video generation, retail-station switching, and compute trading** in one client.
+
+### Core features
+- 💬 **AI chat, image generation, and video generation** powered by KAI retail stations
+- 🔄 **Manual retail-station and node switching**
+- 🖥️ **KOD Compute Center** for Token packages, GPU reservations, and verified compute suppliers
+- 📚 **Knowledge base and document parsing**
+- 🔐 **Local-first storage** for conversations and personal settings
+
+### Useful links
+- [KOD Console](https://kod.kai.com/console)
+- [Wallet and top-up](https://kod.kai.com/console/wallet)
+
+---
+
+**Let's set up KOD.** First, choose how you want to continue:`
+}
+
+function getKodCompletedMessage(language: string) {
+  return isChineseGuide(language)
+    ? '你已完成 KOD 初始化，可以正常使用对话、生图、视频和算力中心。如果还有问题，可以继续在这里提问。'
+    : 'KOD setup is complete. You can now use chat, image and video generation, and the Compute Center.'
+}
+
+function getKodLoginIntroduction(language: string) {
+  return isChineseGuide(language)
+    ? '很好！登录 KOD 后即可同步人民币钱包、卡时、零售站配置和算力中心资产。\n\n点击下方登录按钮，输入邮箱和密码；只有首次注册新账号时才需要邀请码和邮箱验证码。'
+    : 'Sign in to KOD to access your wallet, card-hours, retail-station configuration, and Compute Center assets. An invitation code and verification code are only required when registering a new account.'
+}
+
+function getKodCelebrationMessage(language: string) {
+  return isChineseGuide(language)
+    ? '登录成功，KOD 已准备就绪！你可以点击下方的**新对话**开始聊天，也可以进入 **KOD 算力中心**查看钱包、卡时、Token 套餐和 GPU 订单。'
+    : 'Sign-in succeeded and KOD is ready. Start with **New Chat**, or open the **KOD Compute Center**.'
 }
 
 export function useGuideSession(): UseGuideSessionReturn {
@@ -165,9 +228,7 @@ export function useGuideSession(): UseGuideSessionReturn {
 
     if (enterCompleted) {
       // User already has valid config, show completion message
-      const configCompleteMsg = String(t(
-        "You've already completed the setup and can use Chatbox normally.\n\nIf you have any questions about Chatbox AI, feel free to ask me here."
-      ))
+      const configCompleteMsg = getKodCompletedMessage(language)
       setMessages([
         {
           id: generateMessageId(),
@@ -191,10 +252,10 @@ export function useGuideSession(): UseGuideSessionReturn {
       }
       // Show initial greeting with cards using fast streaming
       const isChinese = language.startsWith('zh')
-      const guideUrl = buildChatboxUrl('/redirect_app/guide')
-      const helpCenterUrl = buildChatboxUrl('/redirect_app/help_center')
+      const guideUrl = 'https://kod.kai.com/console'
+      const helpCenterUrl = 'https://kod.kai.com'
 
-      const greeting = isChinese
+      const legacyGreeting = isChinese
         ? [
             t(`## 👋 Hey! I'm Boxy, your setup guide assistant.
 
@@ -244,6 +305,9 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
 
 **Now, let me help you get set up!** First, tell me about your AI experience:`),
           ].join('')
+
+      void legacyGreeting
+      const greeting = getKodGreeting(language)
 
       // Stream greeting with fast speed
       const messageId = generateMessageId()
@@ -428,12 +492,10 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
       // Get the response content
       const responseContent =
         type === 'novice'
-          ? t(
-              'Great! Chatbox AI is our all-in-one service designed for new users - it works out of the box with no complex setup required.\n\nClick the login button below, then enter your email and verification code in the popup to sign in.'
-            )
-          : t(
-              "Excellent! You're all set to explore on your own.\n\nClick the **Settings** icon in the sidebar, then go to **Model Providers** to configure your API key. If you need help later, just click the Help button in the bottom left corner. Enjoy!"
-            )
+          ? getKodLoginIntroduction(language)
+          : isChineseGuide(language)
+            ? '你可以直接开始使用。需要调整模型时，请打开“设置 → 模型提供方”；需要购买 Token 套餐或 GPU 时，请进入 KOD 算力中心。'
+            : 'You can start now. Configure models under Settings → Model Providers, or open the KOD Compute Center for Token packages and GPU products.'
 
       // Create appropriate tool parts based on selection
       let toolParts: GuideToolPart[] = []
@@ -483,11 +545,7 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
     setOnboardingStep('completed')
     const baseTimestamp = Date.now()
 
-    await streamFixedMessage(
-      t(
-        "Awesome, you're all set! You can now start using Chatbox.\n\nClick **New Chat** below to start chatting, or **View License Details** to check your subscription info. If you have more questions, feel free to click the Help button in the bottom left corner anytime. Enjoy!"
-      ),
-      [
+    await streamFixedMessage(getKodCelebrationMessage(language), [
         createNewChatButtonToolPart(`new-chat-btn-${baseTimestamp}`),
         {
           type: 'tool-show_view_license_button',
@@ -503,15 +561,14 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
           state: 'result',
           result: { displayed: true },
         },
-      ]
-    )
+    ])
 
     const timeoutId = setTimeout(() => {
       pendingTimeoutsRef.current.delete(timeoutId)
       confetti()
     }, 200)
     pendingTimeoutsRef.current.add(timeoutId)
-  }, [streamFixedMessage, t])
+  }, [language, streamFixedMessage])
 
   /**
    * Mark the guide flow as completed.
@@ -540,26 +597,8 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
     setHasValidConfig(true)
     onboardingStore.getState().markCompleted()
 
-    const hasLicense = Boolean(settingsStore.getState().licenseKey)
-    if (hasLicense) {
-      await renderCelebration()
-    } else {
-      await streamFixedMessage(
-        t(
-          "You're logged in! Claim your **free plan** below to unlock Chatbox AI features. If you have any questions, feel free to click the Help button in the bottom left corner anytime."
-        ),
-        [
-          {
-            type: 'tool-show_free_trial_link',
-            toolCallId: `free-trial-link-${Date.now()}`,
-            toolName: 'show_free_trial_link',
-            state: 'result',
-            result: { displayed: true },
-          },
-        ]
-      )
-    }
-  }, [streamFixedMessage, t, renderCelebration])
+    await renderCelebration()
+  }, [renderCelebration])
 
   /**
    * Triggered by FreeTrialLink after the claim page successfully opens. Streams the awaiting card
@@ -569,7 +608,7 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
     if (claimWaitingShownRef.current) return
     claimWaitingShownRef.current = true
 
-    await streamFixedMessage(t("We're waiting for you to finish on chatboxai.app..."), [
+    await streamFixedMessage(isChineseGuide(language) ? '请在 KOD 官网完成操作，完成后客户端会自动更新状态。' : 'Complete the action on the KOD website. The client will update automatically.', [
       {
         type: 'tool-show_claim_waiting',
         toolCallId: `claim-waiting-${Date.now()}`,
@@ -578,7 +617,7 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
         result: { displayed: true },
       },
     ])
-  }, [streamFixedMessage, t])
+  }, [language, streamFixedMessage])
 
   /**
    * Triggered by useClaimPolling when a license appears in the user's account. Activates locally
@@ -611,19 +650,14 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
       setHasValidConfig(true)
       onboardingStore.getState().markCompleted()
       setOnboardingStep('completed')
-      appendFixedMessage(
-        t(
-          "You've already completed the setup and can use Chatbox normally.\n\nIf you have any questions about Chatbox AI, feel free to ask me here."
-        ),
-        [
+      appendFixedMessage(getKodCompletedMessage(language), [
           createNewChatButtonToolPart(`new-chat-btn-${Date.now()}`, {
             label: String(t('Click here to start a new chat')),
           }),
           createSuggestedQuestionsToolPart(`suggested-${Date.now()}`),
-        ]
-      )
+      ])
     }
-  }, [hasValidConfig, appendFixedMessage, t])
+  }, [hasValidConfig, appendFixedMessage, language, t])
 
   /**
    * Send a free-form message to the backend API
@@ -817,9 +851,7 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
     completionTriggeredRef.current = true
 
     // Add the success message
-    const successText = t(
-      "Awesome, you're all set! You can now start using Chatbox.\n\nClick **New Chat** below to start chatting, or **View License Details** to check your subscription info. If you have any questions, feel free to click the Help button in the bottom left corner anytime. Enjoy!"
-    )
+    const successText = getKodCelebrationMessage(language)
     const successMessage: GuideUIMessage = {
       id: generateMessageId(),
       role: 'assistant',
@@ -851,7 +883,7 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
     }
 
     setMessages([successMessage])
-  }, [t])
+  }, [language])
 
   /**
    * Debug: Set state to just before round limit
@@ -869,8 +901,8 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
     fakeMessages.push({
       id: generateMessageId(),
       role: 'assistant',
-      content: t('Welcome to Chatbox!'),
-      parts: [{ type: 'text', text: t('Welcome to Chatbox!') }],
+      content: isChineseGuide(language) ? '欢迎使用 KOD！' : 'Welcome to KOD!',
+      parts: [{ type: 'text', text: isChineseGuide(language) ? '欢迎使用 KOD！' : 'Welcome to KOD!' }],
     })
 
     // Add maxRounds - 1 user messages, so next send triggers limit message
@@ -892,7 +924,7 @@ Chatbox is an **all-in-one AI chat client** that supports 30+ mainstream models 
     setMessages(fakeMessages)
     setUserTypeSelected('novice')
     setOnboardingStep('login_flow')
-  }, [t])
+  }, [language])
 
   return {
     messages,

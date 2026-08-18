@@ -28,9 +28,11 @@ import {
 import {
   IconBell,
   IconBuildingStore,
+  IconChartLine,
   IconCopy,
   IconCpu,
   IconDatabaseDollar,
+  IconExternalLink,
   IconGauge,
   IconGift,
   IconReceipt,
@@ -60,6 +62,7 @@ import {
   type ComputeGpuNode,
   type ComputeIdentity,
   type ComputeLedgerEntry,
+  type ComputeMarketPriceQuote,
   type ComputeNodeInput,
   type ComputeNotification,
   type ComputeOrder,
@@ -94,6 +97,8 @@ import {
   getComputeAdminOverview,
   getComputeConfig,
   getComputeIdentity,
+  getComputeMarketPriceHistory,
+  getComputeMarketPrices,
   getComputePackageCredential,
   getComputeProductImageUrl,
   getComputeReferralProfile,
@@ -198,6 +203,9 @@ function ComputeCenterPage() {
     queryKey: ['compute', 'account'],
     queryFn: getComputeAccount,
     enabled: isLoggedIn,
+    networkMode: 'always',
+    staleTime: 30_000,
+    retry: 1,
   })
   const referralPreviewQuery = useQuery({
     queryKey: ['compute', 'referral-preview', search.invite],
@@ -320,6 +328,19 @@ function ComputeCenterPage() {
             </Alert>
           )}
 
+          {isLoggedIn && accountQuery.isError && !accountQuery.data && (
+            <Alert color="red" title="账户与权限同步失败">
+              <Flex align="center" justify="space-between" gap="sm" wrap="wrap">
+                <Text size="sm">
+                  {accountQuery.error instanceof Error ? accountQuery.error.message : '暂时无法读取账户资产与角色权限。'}
+                </Text>
+                <Button size="xs" variant="light" color="red" onClick={() => void accountQuery.refetch()}>
+                  重新同步
+                </Button>
+              </Flex>
+            </Alert>
+          )}
+
           <FeedbackToast message={message} onClose={closeMessage} />
           <CardHourTopUpModal prompt={cardHourPrompt} />
           <ReferralInviteModal
@@ -366,6 +387,9 @@ function ComputeCenterPage() {
               <Tabs defaultValue="resources" keepMounted={false}>
                 <Tabs.List>
                   <Tabs.Tab value="resources">GPU 与 API 商品</Tabs.Tab>
+                  <Tabs.Tab value="live-prices" leftSection={<IconChartLine size={15} />}>
+                    实时行情
+                  </Tabs.Tab>
                   <Tabs.Tab value="card-hour-market">卡时现货与询价</Tabs.Tab>
                 </Tabs.List>
                 <Tabs.Panel value="resources" pt="md">
@@ -376,6 +400,9 @@ function ComputeCenterPage() {
                     busy={busy}
                     runCardHourAction={runCardHourAction}
                   />
+                </Tabs.Panel>
+                <Tabs.Panel value="live-prices" pt="md">
+                  <MarketPricePanel />
                 </Tabs.Panel>
                 <Tabs.Panel value="card-hour-market" pt="md">
                   <CardHourMarketplace
@@ -1024,6 +1051,195 @@ function ProductCard({
       </Stack>
     </Card>
   )
+}
+
+type MarketPriceRange = '1h' | '6h' | '24h' | '7d'
+
+function MarketPricePanel() {
+  const [gpuModel, setGpuModel] = useState('H100')
+  const [range, setRange] = useState<MarketPriceRange>('24h')
+  const latestQuery = useQuery({
+    queryKey: ['compute', 'market-prices', 'latest'],
+    queryFn: getComputeMarketPrices,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  })
+  const historyQuery = useQuery({
+    queryKey: ['compute', 'market-prices', 'history', gpuModel, range],
+    queryFn: () => getComputeMarketPriceHistory(gpuModel, range),
+    refetchInterval: 5000,
+    refetchIntervalInBackground: false,
+  })
+  const snapshot = latestQuery.data
+  const quotes = (snapshot?.quotes || []).filter((quote) => quote.gpuModel === gpuModel)
+  const history = (historyQuery.data?.points || []).slice(-30).reverse()
+
+  return (
+    <Stack gap="md">
+      <Paper withBorder radius="lg" p="lg" bg="blue.0">
+        <Flex justify="space-between" align="flex-start" gap="md" wrap="wrap">
+          <Box>
+            <Group gap="xs">
+              <ThemeIcon variant="light" color="blue" radius="xl">
+                <IconChartLine size={18} />
+              </ThemeIcon>
+              <Title order={3}>全球 GPU 参考行情</Title>
+            </Group>
+            <Text size="sm" c="chatbox-tertiary" mt={6} maw={760}>
+              展示第三方公开或已验证可租资源的参考小时价，仅供比价，不能在 KOD 直接向第三方下单。
+            </Text>
+          </Box>
+          <Badge color={latestQuery.isError ? 'red' : latestQuery.isFetching ? 'blue' : 'green'} variant="light">
+            {latestQuery.isError ? '刷新失败' : latestQuery.isFetching ? '正在刷新' : '每 5 秒刷新'}
+          </Badge>
+        </Flex>
+      </Paper>
+
+      {latestQuery.isError && (
+        <Alert color="red" title="行情暂不可用">
+          {latestQuery.error instanceof Error ? latestQuery.error.message : '无法读取行情服务。'}
+        </Alert>
+      )}
+
+      <Flex justify="space-between" align="end" gap="sm" wrap="wrap">
+        <Group align="end" gap="sm" wrap="wrap">
+          <Select
+            label="GPU 型号"
+            data={snapshot?.trackedModels || ['H100', 'H200', 'A100', 'RTX 4090']}
+            value={gpuModel}
+            onChange={(value) => value && setGpuModel(value)}
+            searchable
+            w={220}
+          />
+          <Select
+            label="时间范围"
+            data={[
+              { value: '1h', label: '近 1 小时' },
+              { value: '6h', label: '近 6 小时' },
+              { value: '24h', label: '近 24 小时' },
+              { value: '7d', label: '近 7 天' },
+            ]}
+            value={range}
+            onChange={(value) => value && setRange(value as MarketPriceRange)}
+            w={150}
+          />
+        </Group>
+        <Text size="xs" c="chatbox-tertiary">
+          1 USD ≈ ¥{formatNumber(snapshot?.usdCnyRate, 4)}；1 卡时 ≈ ¥{formatNumber(snapshot?.cardHourCnyRate, 3)}
+        </Text>
+      </Flex>
+
+      {quotes.length === 0 && !latestQuery.isLoading ? (
+        <EmptyState title="暂无可用报价" description="行情服务尚未取得该型号的有效价格。" />
+      ) : (
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          {quotes.map((quote) => (
+            <MarketPriceQuoteCard key={`${quote.source}-${quote.gpuModel}`} quote={quote} />
+          ))}
+        </SimpleGrid>
+      )}
+
+      <Paper withBorder radius="lg" p="lg">
+        <Flex justify="space-between" align="center" gap="sm" wrap="wrap" mb="md">
+          <Box>
+            <Title order={4}>{gpuModel} 价格历史</Title>
+            <Text size="xs" c="chatbox-tertiary">
+              最近 30 个采样点；后端最多保留 {snapshot?.historyRetentionDays || 30} 天。
+            </Text>
+          </Box>
+          {historyQuery.isFetching && <Badge variant="light">更新中</Badge>}
+        </Flex>
+        {history.length === 0 ? (
+          <Text size="sm" c="chatbox-tertiary">
+            暂无历史采样。
+          </Text>
+        ) : (
+          <ScrollArea>
+            <Table striped highlightOnHover miw={660}>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>时间</Table.Th>
+                  <Table.Th>来源</Table.Th>
+                  <Table.Th>美元/GPU·小时</Table.Th>
+                  <Table.Th>人民币/GPU·小时</Table.Th>
+                  <Table.Th>卡时/GPU·小时</Table.Th>
+                  <Table.Th>样本</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {history.map((point) => (
+                  <Table.Tr key={`${point.source}-${point.sampledAt}`}>
+                    <Table.Td>{formatDate(point.sampledAt)}</Table.Td>
+                    <Table.Td>{point.source === 'VAST_AI' ? 'Vast.ai' : 'Akamai'}</Table.Td>
+                    <Table.Td>${formatNumber(point.priceUsdPerGpuHour, 4)}</Table.Td>
+                    <Table.Td>¥{formatNumber(point.priceCnyPerGpuHour, 4)}</Table.Td>
+                    <Table.Td>{formatNumber(point.cardHoursPerGpuHour, 4)}</Table.Td>
+                    <Table.Td>{point.sampleSize}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
+        )}
+      </Paper>
+    </Stack>
+  )
+}
+
+function MarketPriceQuoteCard({ quote }: { quote: ComputeMarketPriceQuote }) {
+  const status = marketPriceStatus(quote)
+  const available = quote.priceUsdPerGpuHour != null
+  return (
+    <Paper withBorder radius="lg" p="lg">
+      <Flex justify="space-between" align="flex-start" gap="md">
+        <Box>
+          <Text fw={700}>{quote.sourceLabel}</Text>
+          <Text size="xs" c="chatbox-tertiary">
+            {quote.quoteType === 'MEDIAN_AVAILABLE' ? '当前可租实例中位价' : '官方公开起步价'}
+          </Text>
+        </Box>
+        <Badge color={status.color} variant="light">
+          {status.label}
+        </Badge>
+      </Flex>
+      {available ? (
+        <Stack gap={4} mt="md">
+          <Text size="xl" fw={800}>
+            ${formatNumber(quote.priceUsdPerGpuHour, 4)} / GPU·小时
+          </Text>
+          <Text size="sm">
+            约 ¥{formatNumber(quote.priceCnyPerGpuHour, 4)} · {formatNumber(quote.cardHoursPerGpuHour, 4)} 卡时
+          </Text>
+          <Text size="xs" c="chatbox-tertiary">
+            样本 {quote.sampleSize || 0} · {formatDate(quote.sampledAt)}
+          </Text>
+        </Stack>
+      ) : (
+        <Text size="sm" c="chatbox-tertiary" mt="md">
+          {quote.errorMessage || '当前没有有效报价。'}
+        </Text>
+      )}
+      {quote.sourceUrl && (
+        <Button
+          mt="md"
+          size="xs"
+          variant="subtle"
+          rightSection={<IconExternalLink size={14} />}
+          onClick={() => void platform.openLink(quote.sourceUrl)}
+        >
+          查看数据来源
+        </Button>
+      )}
+    </Paper>
+  )
+}
+
+function marketPriceStatus(quote: ComputeMarketPriceQuote): { label: string; color: string } {
+  if (quote.status === 'OK') return { label: '实时', color: 'green' }
+  if (quote.status === 'STALE') return { label: '缓存', color: 'yellow' }
+  if (quote.status === 'UNCONFIGURED') return { label: '未配置', color: 'gray' }
+  if (quote.status === 'NO_QUOTE') return { label: '暂无报价', color: 'gray' }
+  return { label: '不可用', color: 'red' }
 }
 
 function ReservationModal({
@@ -2915,10 +3131,12 @@ function AdminSettings({
   run: RunAction
 }) {
   const [transferReviewThreshold, setTransferReviewThreshold] = useState(1000)
+  const [usdCnyRate, setUsdCnyRate] = useState(7.2)
 
   useEffect(() => {
     if (!overview) return
     setTransferReviewThreshold(Number(overview.transferReviewThreshold))
+    setUsdCnyRate(Number(overview.usdCnyRate || 7.2))
   }, [overview])
 
   return (
@@ -2939,9 +3157,18 @@ function AdminSettings({
           disabled
           w={220}
         />
+        <NumberInput
+          label="美元兑人民币参考汇率"
+          description="用于把第三方 GPU 美元行情换算成人民币与卡时"
+          min={0.0001}
+          decimalScale={4}
+          value={usdCnyRate}
+          onChange={(value) => setUsdCnyRate(Number(value) || 0)}
+          w={260}
+        />
         <Button
           loading={busy === 'admin-settings'}
-          disabled={transferReviewThreshold <= 0}
+          disabled={transferReviewThreshold <= 0 || usdCnyRate <= 0}
           onClick={() =>
             run(
               'admin-settings',
@@ -2949,6 +3176,7 @@ function AdminSettings({
                 updateComputeAdminSettings({
                   transferReviewThreshold,
                   platformFeeRate: 0,
+                  usdCnyRate,
                 }),
               '结算规则已更新'
             )

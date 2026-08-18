@@ -1,7 +1,6 @@
 import { Alert, Button, Checkbox, Flex, Paper, PasswordInput, Stack, Text, TextInput, Title } from '@mantine/core'
 import { IconExternalLink, IconLogout, IconTrash } from '@tabler/icons-react'
 import { forwardRef, useCallback, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
 import { Modal } from '@/components/layout/Overlay'
@@ -14,7 +13,6 @@ interface LoggedInViewProps {
 }
 
 export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onLogout, onDeleteAccount }, ref) => {
-  const { t } = useTranslation()
   const [opened, setOpened] = useState(false)
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -46,11 +44,11 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
         toast.warning(cause.message)
         return
       }
-      setError(cause instanceof Error ? cause.message : t('Account deletion failed') || 'Account deletion failed')
+      setError(cause instanceof Error ? cause.message : '账号删除失败，请确认当前密码是否正确，然后重试。')
     } finally {
       setSubmitting(false)
     }
-  }, [acknowledged, confirmation, onDeleteAccount, password, resetAndClose, submitting, t])
+  }, [acknowledged, confirmation, onDeleteAccount, password, resetAndClose, submitting])
 
   return (
     <Stack gap="xl" ref={ref}>
@@ -70,10 +68,8 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
       </Flex>
       <Paper shadow="xs" p="md" withBorder>
         <Stack gap="sm">
-          <Text fw={600}>{t('You are logged in to KOD')}</Text>
-          <Text c="kod-tertiary">
-            {t('KOD will use the relay station URL and API key linked to this account to fetch models.')}
-          </Text>
+          <Text fw={600}>已登录 KOD</Text>
+          <Text c="kod-tertiary">KOD 将使用当前账号关联的零售站地址和节点 API 密钥获取可用模型。</Text>
           <Flex justify="flex-end">
             <Button
               variant="light"
@@ -81,7 +77,7 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
               leftSection={<ScalableIcon icon={IconLogout} size={14} />}
               onClick={() => void onLogout()}
             >
-              {t('Logout')}
+              退出登录
             </Button>
           </Flex>
         </Stack>
@@ -89,12 +85,12 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
       <Paper shadow="xs" p="md" withBorder style={{ borderColor: 'var(--mantine-color-red-5)' }}>
         <Stack gap="sm">
           <Text fw={600} c="red">
-            {t('Danger zone')}
+            危险操作
           </Text>
           <Text size="sm" c="chatbox-tertiary">
-            {t(
-              'Permanently delete your KOD account and its cloud data, then remove this account local chats, tasks, generated images, Suanbao data, preferences, credentials and caches from this device. Independent model-provider OAuth credentials are retained.'
-            )}
+            永久删除 KOD
+            账号及其云端数据，并清除该账号在本设备上的本地对话、任务、生成图片、蒜宝数据、偏好设置、凭据和缓存。独立模型提供方的
+            OAuth 授权信息将被保留。
           </Text>
           <Flex justify="flex-end">
             <Button
@@ -103,7 +99,7 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
               leftSection={<ScalableIcon icon={IconTrash} size={14} />}
               onClick={() => setOpened(true)}
             >
-              {t('Delete account')}
+              删除账号
             </Button>
           </Flex>
         </Stack>
@@ -112,16 +108,15 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
         opened={opened}
         onClose={close}
         centered
-        title={t('Permanently delete KOD account')}
+        title="永久删除 KOD 账号"
         closeOnClickOutside={!submitting}
         closeOnEscape={!submitting}
         withCloseButton={!submitting}
       >
         <Stack gap="md">
-          <Alert color="red" variant="light" title={t('This cannot be undone')}>
-            {t(
-              'Your KOD account and cloud data will be permanently deleted. Local chats, task sessions, generated-image records and blobs, Suanbao data, account preferences, relay/provider/license data, caches and login tokens will also be removed. If deletion fails, you remain logged in and no local data is removed.'
-            )}
+          <Alert color="red" variant="light" title="此操作无法撤销">
+            KOD
+            账号及云端数据将被永久删除。本地对话、任务记录、生成图片记录与文件、蒜宝数据、账号偏好设置、零售站与模型提供方数据、缓存和登录令牌也会被清除。如果服务器删除失败，账号将保持登录状态，本地数据不会被删除。
           </Alert>
           {error && (
             <Alert color="red" variant="light">
@@ -129,15 +124,15 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
             </Alert>
           )}
           <PasswordInput
-            label={t('Current password')}
+            label="当前密码"
             value={password}
             onChange={(e) => setPassword(e.currentTarget.value)}
             autoComplete="current-password"
             disabled={submitting}
           />
           <TextInput
-            label={t('Type DELETE to confirm')}
-            description={t('Enter the exact confirmation text: DELETE')}
+            label="输入“确认删除”以继续"
+            description="请完整输入以下确认文字：确认删除"
             value={confirmation}
             onChange={(e) => setConfirmation(e.currentTarget.value)}
             disabled={submitting}
@@ -146,11 +141,11 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
             checked={acknowledged}
             onChange={(e) => setAcknowledged(e.currentTarget.checked)}
             disabled={submitting}
-            label={t('I understand this permanently deletes my account and data.')}
+            label="我已了解此操作会永久删除我的账号和数据。"
           />
           <Flex justify="flex-end" gap="sm">
             <Button variant="light" color="chatbox-gray" onClick={close} disabled={submitting}>
-              {t('Cancel')}
+              取消
             </Button>
             <Button
               color="red"
@@ -158,7 +153,7 @@ export const LoggedInView = forwardRef<HTMLDivElement, LoggedInViewProps>(({ onL
               disabled={!canDeleteAccount(password, confirmation, acknowledged)}
               onClick={() => void submit()}
             >
-              {t('Permanently delete account')}
+              永久删除账号
             </Button>
           </Flex>
         </Stack>

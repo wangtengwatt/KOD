@@ -198,6 +198,57 @@ export interface ComputeAdminOverview {
   circulatingCardHours: number
   transferReviewThreshold: number
   platformFeeRate: number
+  usdCnyRate: number
+}
+
+export type ComputeMarketPriceSource = 'VAST_AI' | 'AKAMAI'
+export type ComputeMarketPriceStatus = 'OK' | 'STALE' | 'NO_QUOTE' | 'UNAVAILABLE' | 'UNCONFIGURED'
+
+export interface ComputeMarketPriceQuote {
+  source: ComputeMarketPriceSource
+  sourceLabel: string
+  gpuModel: string
+  sourceUrl: string
+  status: ComputeMarketPriceStatus
+  quoteType?: 'MEDIAN_AVAILABLE' | 'OFFICIAL_LIST'
+  priceUsdPerGpuHour?: number
+  priceCnyPerGpuHour?: number
+  cardHoursPerGpuHour?: number
+  sampleSize?: number
+  sampledAt?: string
+  lastAttemptAt?: string
+  lastSuccessAt?: string
+  errorMessage?: string
+}
+
+export interface ComputeMarketPriceSnapshot {
+  trackedModels: string[]
+  quotes: ComputeMarketPriceQuote[]
+  usdCnyRate: number
+  cardHourCnyRate: number
+  refreshIntervalSeconds: number
+  historySampleSeconds: number
+  historyRetentionDays: number
+  generatedAt: string
+}
+
+export interface ComputeMarketPricePoint {
+  source: ComputeMarketPriceSource
+  gpuModel: string
+  quoteType: 'MEDIAN_AVAILABLE' | 'OFFICIAL_LIST'
+  priceUsdPerGpuHour: number
+  priceCnyPerGpuHour: number
+  cardHoursPerGpuHour: number
+  sampleSize: number
+  sampledAt: string
+}
+
+export interface ComputeMarketPriceHistory {
+  gpuModel: string
+  range: '1h' | '6h' | '24h' | '7d'
+  points: ComputeMarketPricePoint[]
+  usdCnyRate: number
+  cardHourCnyRate: number
 }
 
 export interface ComputeWithdrawal {
@@ -595,12 +646,13 @@ async function request<T>(path: string, options?: FetchOptions<'json'>, authenti
   if (authenticated && !token) {
     throw new Error('请先登录 KOD 账号')
   }
-  const json = await ofetch<KodResult<T>>(`${getKodApiOrigin()}${path}`, {
+  const url = `${getKodApiOrigin()}${path}`
+  const headers = new Headers(options?.headers as HeadersInit | undefined)
+  if (authenticated && token) headers.set('Authorization', `Bearer ${token}`)
+  const json = await ofetch<KodResult<T>>(url, {
     ...options,
-    headers: {
-      ...(options?.headers || {}),
-      ...(authenticated && token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers,
+    timeout: options?.timeout ?? 20_000,
     ignoreResponseError: true,
   })
   if (json.code !== 0) {
@@ -613,8 +665,22 @@ async function request<T>(path: string, options?: FetchOptions<'json'>, authenti
 }
 
 export function getComputeConfig() {
-  return request<{ cardHourCnyRate: number; cardHourRedeemRate: number; unitName: string; currency: string }>(
-    '/api/compute/config',
+  return request<{
+    cardHourCnyRate: number
+    cardHourRedeemRate: number
+    usdCnyRate: number
+    unitName: string
+    currency: string
+  }>('/api/compute/config', undefined, false)
+}
+
+export function getComputeMarketPrices() {
+  return request<ComputeMarketPriceSnapshot>('/api/compute/market-prices/latest', undefined, false)
+}
+
+export function getComputeMarketPriceHistory(model: string, range: '1h' | '6h' | '24h' | '7d') {
+  return request<ComputeMarketPriceHistory>(
+    `/api/compute/market-prices/history?model=${encodeURIComponent(model)}&range=${encodeURIComponent(range)}`,
     undefined,
     false
   )
@@ -1133,7 +1199,11 @@ export function getComputeAdminOverview() {
   return request<ComputeAdminOverview>('/api/compute/admin/overview')
 }
 
-export function updateComputeAdminSettings(input: { transferReviewThreshold: number; platformFeeRate: number }) {
+export function updateComputeAdminSettings(input: {
+  transferReviewThreshold: number
+  platformFeeRate: number
+  usdCnyRate: number
+}) {
   return request<ComputeAdminOverview>('/api/compute/admin/settings', { method: 'POST', body: input })
 }
 

@@ -142,6 +142,18 @@ export function getKodApiOrigin() {
   return KOD_API_ORIGIN
 }
 
+export const KOD_AUTH_REQUEST_TIMEOUT_MS = 12_000
+
+function throwReadableKodAuthError(error: unknown): never {
+  if (error instanceof Error) {
+    const detail = `${error.name} ${error.message}`
+    if (/abort|timeout|timed out|failed to fetch|fetch failed|network error/i.test(detail)) {
+      throw new Error('登录服务连接超时，请检查网络或确认 KOD 后端服务可用后重试')
+    }
+  }
+  throw error
+}
+
 const KodResultSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
   z.object({
     code: z.number(),
@@ -185,19 +197,26 @@ export async function loginWithKod(params: {
   inviteCode?: string
   emailCode?: string
 }) {
-  const json = await ofetch(`${getKodApiOrigin()}/api/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: {
-      email: params.email,
-      password: params.password,
-      ...(params.inviteCode ? { inviteCode: params.inviteCode } : {}),
-      ...(params.emailCode ? { emailCode: params.emailCode } : {}),
-    },
-    ignoreResponseError: true,
-  })
+  let json: unknown
+  try {
+    json = await ofetch(`${getKodApiOrigin()}/api/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: {
+        email: params.email,
+        password: params.password,
+        ...(params.inviteCode ? { inviteCode: params.inviteCode } : {}),
+        ...(params.emailCode ? { emailCode: params.emailCode } : {}),
+      },
+      ignoreResponseError: true,
+      retry: 0,
+      timeout: KOD_AUTH_REQUEST_TIMEOUT_MS,
+    })
+  } catch (error) {
+    throwReadableKodAuthError(error)
+  }
 
   const data = unwrapKodResult(
     KodResultSchema(
