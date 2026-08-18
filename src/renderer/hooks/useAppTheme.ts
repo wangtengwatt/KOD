@@ -62,8 +62,8 @@ export function getThemeDesign(realTheme: 'light' | 'dark', language: Language):
         : {
             // MUI 内部无法处理 css 变量，需要使用具体颜色值
             background: {
-              default: '#242424',
-              paper: '#242424',
+              default: '#090909',
+              paper: '#141414',
             },
           }),
     },

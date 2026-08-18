@@ -23,6 +23,130 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
+  color: var(--chatbox-tint-primary);
+  background-color: var(--chatbox-background-body);
+  background-image:
+    radial-gradient(circle at 8% 12%, rgba(255, 255, 255, 0.9), transparent 26%),
+    radial-gradient(circle at 90% 88%, rgba(0, 0, 0, 0.055), transparent 30%);
+}
+
+html[data-theme="dark"] body {
+  background-image:
+    radial-gradient(circle at 10% 10%, rgba(255, 255, 255, 0.075), transparent 28%),
+    radial-gradient(circle at 92% 86%, rgba(255, 255, 255, 0.035), transparent 30%);
+}
+
+/* Kod's monochrome glass surface language. */
+.kod-glass,
+.mantine-Modal-content,
+.mantine-Drawer-content,
+.mantine-Popover-dropdown,
+.mantine-Menu-dropdown,
+.mantine-Combobox-dropdown {
+  background: color-mix(in srgb, var(--chatbox-background-body) 88%, transparent) !important;
+  border: 1px solid var(--chatbox-border-primary) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.kod-app-shell {
+  background: transparent;
+}
+
+.kod-sidebar {
+  margin: 10px;
+  height: calc(100% - 20px) !important;
+  overflow: hidden;
+  border-radius: 22px;
+  contain: layout paint;
+}
+
+.kod-page-header {
+  margin: 8px 10px 0;
+  border: 1px solid var(--chatbox-border-primary);
+  border-radius: 16px;
+  background: var(--chatbox-background-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  contain: layout paint;
+}
+
+.kod-input-surface {
+  border: 1px solid var(--chatbox-border-primary);
+  background: var(--chatbox-background-primary) !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  contain: paint;
+}
+
+.mantine-Button-root,
+.mantine-ActionIcon-root,
+.mantine-NavLink-root,
+.mantine-SegmentedControl-root,
+.mantine-Input-input,
+.MuiButtonBase-root {
+  border-radius: 12px;
+  transition: background-color 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+
+.mantine-Button-root[data-variant="light"],
+.mantine-NavLink-root {
+  border: 1px solid var(--chatbox-border-primary);
+  background: var(--chatbox-background-secondary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+html[data-theme="dark"] .mantine-Button-root[data-variant="filled"],
+html[data-theme="dark"] .mantine-ActionIcon-root[data-variant="filled"] {
+  color: #111111;
+}
+
+.mantine-Input-input {
+  border-color: var(--chatbox-border-primary);
+  background: var(--chatbox-background-secondary);
+}
+
+.mantine-Input-input:focus,
+.mantine-Input-input:focus-within {
+  border-color: var(--chatbox-border-secondary);
+  box-shadow: 0 0 0 3px var(--chatbox-background-brand-secondary);
+}
+
+.mantine-Modal-content,
+.mantine-Drawer-content,
+.mantine-Popover-dropdown,
+.mantine-Menu-dropdown,
+.mantine-Combobox-dropdown {
+  border-radius: 18px !important;
+}
+
+/* Apply blur only to short-lived overlays. Persistent surfaces stay translucent
+   without live backdrop sampling, which is much smoother on software rendering. */
+.mantine-Modal-content,
+.mantine-Popover-dropdown,
+.mantine-Menu-dropdown,
+.mantine-Combobox-dropdown {
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .kod-sidebar {
+    margin: 8px;
+    height: calc(100% - 16px) !important;
+  }
+
+  .kod-page-header {
+    margin: 6px 8px 0;
+  }
 }
 
 code {

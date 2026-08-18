@@ -357,7 +357,7 @@ function Root() {
           <WindowControls className="fixed right-0 top-0 z-[5000] bg-chatbox-background-primary" />
         </>
       )}
-      <Grid container className="h-full relative z-[1]">
+      <Grid container className="kod-app-shell h-full relative z-[1]">
         <Sidebar />
         <Box
           className="h-full w-full"
@@ -422,6 +422,7 @@ const creteMantineTheme = (scale = 1) =>
     /** Put your mantine theme override here */
     scale,
     primaryColor: 'chatbox-brand',
+    defaultRadius: 'md',
     colors: {
       'chatbox-brand': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-brand)')),
       'chatbox-gray': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-gray)')),
@@ -511,12 +512,13 @@ const creteMantineTheme = (scale = 1) =>
       Button: Button.extend({
         defaultProps: {
           color: 'chatbox-brand',
+          radius: 'md',
         },
         styles: () => ({
           root: {
             '--button-height-sm': rem('32px'),
             '--button-height-compact-xs': rem('24px'),
-            fontWeight: '400',
+            fontWeight: '500',
           },
         }),
       }),

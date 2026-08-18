@@ -34,7 +34,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { trackJkClickEvent } from '@/analytics/jk'
 import { JK_EVENTS, JK_PAGE_NAMES } from '@/analytics/jk-events'
+import ConversationAdCard, { ConversationAdErrorFallback } from '@/components/ads/ConversationAdCard'
 import Divider from '@/components/common/Divider'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
 import TokenCountMenu from '@/components/InputBox/TokenCountMenu'
 import ProviderImageIcon from '@/components/icons/ProviderImageIcon'
@@ -46,6 +48,7 @@ import useNeedRoomForWinControls from '@/hooks/useNeedRoomForWinControls'
 import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { useTaskContextTokens } from '@/hooks/useTaskContextTokens'
+import { resolveConversationAd } from '@/packages/advertising/conversationAds'
 import {
   getModelContextWindowSync,
   getProviderModelContextWindowSync,
@@ -351,7 +354,7 @@ function TaskMessageBubble({ message, sessionName }: { message: Message; session
 function TaskChat({ session }: { session: NonNullable<ReturnType<typeof useTaskSessionRecord>['data']> }) {
   const modelRegistryVersion = useModelRegistryVersion()
 
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const [input, setInput] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -363,6 +366,11 @@ function TaskChat({ session }: { session: NonNullable<ReturnType<typeof useTaskS
   const relay = useKodRelay()
 
   const generating = session.messages.some((m) => m.generating)
+  const conversationAd = resolveConversationAd(session.messages, {
+    language: i18n.language,
+    placement: 'task-conversation',
+    platformType: platform.type,
+  })
 
   // Model state from session settings or lastUsedModelStore.task
   const model = useMemo(() => {
@@ -564,6 +572,20 @@ function TaskChat({ session }: { session: NonNullable<ReturnType<typeof useTaskS
             {session.messages.map((msg) => (
               <TaskMessageBubble key={msg.id} message={msg} sessionName={session.name} />
             ))}
+            {conversationAd && (
+              <ErrorBoundary
+                key={`task-conversation:${session.id}:${conversationAd.ad.id}:${conversationAd.anchorMessageId}`}
+                name="task-conversation-ad"
+                fallback={ConversationAdErrorFallback}
+              >
+                <ConversationAdCard
+                  ad={conversationAd.ad}
+                  impressionKey={`task-conversation:${session.id}:${conversationAd.ad.id}:${conversationAd.anchorMessageId}`}
+                  placement="task-conversation"
+                  className="mt-1"
+                />
+              </ErrorBoundary>
+            )}
           </Stack>
         </ScrollArea>
       </BlockCodeCollapsedStateProvider>

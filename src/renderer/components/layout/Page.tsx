@@ -24,7 +24,7 @@ export const Page: FC<PageProps> = ({ children, title, left, right }) => {
         h={48}
         align="center"
         px="md"
-        className={clsx('title-bar', isSmallScreen ? 'bg-chatbox-background-primary' : '')}
+        className={clsx('kod-page-header title-bar', isSmallScreen ? 'bg-chatbox-background-primary' : '')}
       >
         {left ||
           ((!showSidebar || isSmallScreen) && (

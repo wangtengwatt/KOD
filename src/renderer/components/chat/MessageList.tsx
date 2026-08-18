@@ -1,7 +1,7 @@
 import NiceModal from '@ebay/nice-modal-react'
 import { ActionIcon, Button, Flex, Stack, Text, Transition } from '@mantine/core'
 import { useThrottledCallback } from '@mantine/hooks'
-import type { Session, Message as SessionMessage, SessionThreadBrief } from '@shared/types'
+import { isChatSession, type Message as SessionMessage, type Session, type SessionThreadBrief } from '@shared/types'
 import {
   IconAlignRight,
   IconArrowBarToUp,
@@ -32,6 +32,8 @@ import { type StateSnapshot, Virtuoso, type VirtuosoHandle } from 'react-virtuos
 import { platformTypeAtom } from '@/hooks/useNeedRoomForWinControls'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
+import { resolveConversationAd } from '@/packages/advertising/conversationAds'
+import platform from '@/platform'
 import * as atoms from '@/stores/atoms'
 import {
   deleteFork,
@@ -46,7 +48,7 @@ import { getAllMessageList, getCurrentThreadHistoryHash } from '@/stores/session
 import { settingsStore } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
 import ActionMenu from '../ActionMenu'
-
+import ConversationAdCard, { ConversationAdErrorFallback } from '../ads/ConversationAdCard'
 import { ErrorBoundary } from '../common/ErrorBoundary'
 import { ScalableIcon } from '../common/ScalableIcon'
 import { BlockCodeCollapsedStateProvider } from '../Markdown'
@@ -101,7 +103,7 @@ type MessageRenderItem =
     }
 
 const MessageList = forwardRef<MessageListRef, MessageListProps>((props, ref) => {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const isSmallScreen = useIsSmallScreen()
   const widthFull = useUIStore((s) => s.widthFull)
 
@@ -112,6 +114,17 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>((props, ref) =>
     [currentSession]
   )
   const currentMessageList = useMemo(() => getAllMessageList(currentSession), [currentSession])
+  const conversationAd = useMemo(
+    () =>
+      isChatSession(currentSession)
+        ? resolveConversationAd(currentMessageList, {
+            language: i18n.language,
+            placement: 'chat-conversation',
+            platformType: platform.type,
+          })
+        : null,
+    [currentMessageList, currentSession, i18n.language]
+  )
 
   const latestSummaryMessageId = useMemo(() => {
     for (let i = currentMessageList.length - 1; i >= 0; i--) {
@@ -394,10 +407,24 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>((props, ref) =>
               <ForkNav sessionId={currentSession.id} msgId={msg.id} forks={currentSession.messageForksHash[msg.id]} />
             </Flex>
           )}
+          {conversationAd?.anchorMessageId === msg.id && (
+            <ErrorBoundary
+              key={`chat-conversation:${currentSession.id}:${conversationAd.ad.id}:${conversationAd.anchorMessageId}`}
+              name="conversation-ad"
+              fallback={ConversationAdErrorFallback}
+            >
+              <ConversationAdCard
+                ad={conversationAd.ad}
+                impressionKey={`chat-conversation:${currentSession.id}:${conversationAd.ad.id}:${conversationAd.anchorMessageId}`}
+                placement="chat-conversation"
+                className="mx-4 mb-3 mt-1"
+              />
+            </ErrorBoundary>
+          )}
         </Stack>
       )
     },
-    [currentSession, currentThreadHash, latestSummaryMessageId]
+    [conversationAd, currentSession, currentThreadHash, latestSummaryMessageId]
   )
 
   useImperativeHandle(ref, () => ({

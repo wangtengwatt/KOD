@@ -64,8 +64,14 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
     throw new Error('安全支付链接仅支持桌面客户端')
   }
 
-  public async openLink(url: string): Promise<void> {
-    window.open(url)
+  public openLink(url: string): Promise<void> {
+    try {
+      const openedWindow = window.open(url, '_blank', 'noopener,noreferrer')
+      if (openedWindow) openedWindow.opener = null
+      return Promise.resolve()
+    } catch (error) {
+      return Promise.reject(error)
+    }
   }
   public async getDeviceName(): Promise<string> {
     // Web 平台返回浏览器名称
