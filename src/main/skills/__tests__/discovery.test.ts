@@ -24,6 +24,7 @@ vi.mock('../../util', () => ({
 
 import type { Dirent } from 'fs'
 import fs from 'fs'
+import path from 'path'
 import { parseSkillFile } from '../parser'
 
 const mockedExistsSync = vi.mocked(fs.existsSync)
@@ -73,7 +74,7 @@ describe('discoverSkills', () => {
     const custom = result.find((s) => s.name === 'my-skill')
     expect(custom).toBeDefined()
     expect(custom!.isBuiltin).toBe(false)
-    expect(custom!.path).toBe('/skills/my-skill')
+    expect(custom!.path).toBe(path.join('/skills', 'my-skill'))
   })
 
   it('should skip non-directory entries', () => {

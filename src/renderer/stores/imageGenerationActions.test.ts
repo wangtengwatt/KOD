@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const submitImageGenerationMock = vi.fn()
-const pollTaskUntilCompleteMock = vi.fn()
+const paintMock = vi.fn()
+const createModelMock = vi.fn(async () => ({ paint: paintMock }))
 const createRecordMock = vi.fn()
 const updateRecordMock = vi.fn()
 const setQueryDataMock = vi.fn()
@@ -12,17 +12,12 @@ const setCurrentRecordIdMock = vi.fn()
 const trackEventMock = vi.fn()
 
 vi.mock('@/adapters', () => ({
+  createModel: createModelMock,
   createModelDependencies: vi.fn(async () => ({
     storage: {
       getImage: getImageMock,
     },
   })),
-}))
-
-vi.mock('@/packages/remote', () => ({
-  submitImageGeneration: submitImageGenerationMock,
-  pollTaskUntilComplete: pollTaskUntilCompleteMock,
-  pollImageTask: vi.fn(),
 }))
 
 vi.mock('./imageGenerationStore', () => ({
@@ -87,22 +82,11 @@ describe('imageGenerationActions reference image payload', () => {
 
     createRecordMock.mockResolvedValue({ id: 'record-1' })
     updateRecordMock.mockImplementation(async (id: string, patch: Record<string, unknown>) => ({ id, ...patch }))
-    submitImageGenerationMock.mockResolvedValue({
-      task_id: 'task-1',
-      items: [{ status: 'pending' }],
-    })
-    pollTaskUntilCompleteMock.mockResolvedValue({
-      items: [
-        {
-          status: 'completed',
-          image_url: 'https://example.com/output.png',
-        },
-      ],
-    })
+    paintMock.mockResolvedValue([])
     getImageMock.mockResolvedValue('data:image/png;base64,AAAA')
   })
 
-  it('sends reference images as image_url entries for both URLs and stored images', async () => {
+  it('sends reference images to the direct model path for both URLs and stored images', async () => {
     const { createAndGenerate } = await import('./imageGenerationActions')
 
     await createAndGenerate({
@@ -116,16 +100,20 @@ describe('imageGenerationActions reference image payload', () => {
     })
 
     await vi.waitFor(() => {
-      expect(submitImageGenerationMock).toHaveBeenCalledTimes(1)
+      expect(paintMock).toHaveBeenCalledTimes(1)
     })
 
-    expect(submitImageGenerationMock).toHaveBeenCalledWith(
+    expect(paintMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        images: [{ image_url: 'https://example.com/reference.png' }, { image_url: 'data:image/png;base64,AAAA' }],
+        images: [{ imageUrl: 'https://example.com/reference.png' }, { imageUrl: 'data:image/png;base64,AAAA' }],
       }),
-      'license-key'
+      expect.any(AbortSignal),
+      expect.any(Function)
     )
-    expect(trackEventMock).toHaveBeenCalledWith('generate_image', expect.objectContaining({ has_reference: true }))
+    expect(trackEventMock).toHaveBeenCalledWith(
+      'generate_image',
+      expect.objectContaining({ has_reference: true, path: 'direct' })
+    )
   })
 
   it('stores structured error codes from Chatbox AI image generation failures', async () => {
@@ -133,7 +121,7 @@ describe('imageGenerationActions reference image payload', () => {
     class StructuredImageGenerationError extends BaseError {
       public code = 20004
     }
-    submitImageGenerationMock.mockRejectedValueOnce(new StructuredImageGenerationError('license not found'))
+    paintMock.mockRejectedValueOnce(new StructuredImageGenerationError('license not found'))
 
     const { createAndGenerate } = await import('./imageGenerationActions')
 
@@ -159,21 +147,7 @@ describe('imageGenerationActions reference image payload', () => {
     })
   })
 
-  it('stores failed item error messages from async image generation results', async () => {
-    pollTaskUntilCompleteMock.mockResolvedValueOnce({
-      task_id: 'task-1',
-      is_finished: true,
-      items: [
-        {
-          uuid: 'item-1',
-          status: 'failed',
-          created_at: '2026-05-08T15:23:34.442+08:00',
-          error_code: 'image_content_moderation_blocked',
-          error_message: 'Content rejected by content moderation',
-        },
-      ],
-    })
-
+  it('stores an error when direct image generation returns no images', async () => {
     const { createAndGenerate } = await import('./imageGenerationActions')
 
     await createAndGenerate({
@@ -191,9 +165,7 @@ describe('imageGenerationActions reference image payload', () => {
         'record-1',
         expect.objectContaining({
           status: 'error',
-          error: 'Content rejected by content moderation',
-          errorCode: 'image_content_moderation_blocked',
-          errorItemUuid: 'item-1',
+          error: 'All images failed to generate',
         })
       )
     })

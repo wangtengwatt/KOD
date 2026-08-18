@@ -6,30 +6,29 @@ import type { SentryScope } from '@shared/utils/sentry_adapter'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatboxAI from './chatboxai'
 
-const openAIMocks = vi.hoisted(() => {
+const openAICompatibleMocks = vi.hoisted(() => {
   const languageModel: LanguageModelV3 = {
     specificationVersion: 'v3',
-    provider: 'openai',
+    provider: 'KodAI',
     modelId: 'gpt-5-mini',
     supportedUrls: {},
     doGenerate: vi.fn(),
     doStream: vi.fn(),
   }
 
-  const responses = vi.fn(() => languageModel)
-  const createOpenAI = vi.fn(() => ({
-    responses,
-    languageModel: vi.fn(),
+  const languageModelFactory = vi.fn(() => languageModel)
+  const createOpenAICompatible = vi.fn(() => ({
+    languageModel: languageModelFactory,
   }))
 
   return {
-    createOpenAI,
-    responses,
+    createOpenAICompatible,
+    languageModelFactory,
   }
 })
 
-vi.mock('@ai-sdk/openai', () => ({
-  createOpenAI: openAIMocks.createOpenAI,
+vi.mock('@ai-sdk/openai-compatible', () => ({
+  createOpenAICompatible: openAICompatibleMocks.createOpenAICompatible,
 }))
 
 class TestChatboxAI extends ChatboxAI {
@@ -66,13 +65,15 @@ function createDependencies(): ModelDependencies {
   }
 }
 
-function createModel(model: ProviderModelInfo) {
+function createModel(model: ProviderModelInfo, relay: { apiHost?: string; apiKey?: string } = {}) {
   return new TestChatboxAI(
     {
       licenseKey: 'test-license',
       licenseInstances: {
         'test-license': 'test-instance',
       },
+      apiHost: relay.apiHost ?? 'https://relay.example/v1/',
+      apiKey: relay.apiKey ?? 'relay-api-key',
       licenseDetail: {} as ChatboxAILicenseDetail,
       model,
       language: 'en',
@@ -99,7 +100,7 @@ describe('ChatboxAI openai-responses models', () => {
     expect(parsed.apiStyle).toBe('openai-responses')
   })
 
-  it('creates an OpenAI Responses gateway provider with Chatbox AI auth headers', () => {
+  it('creates a configured KOD relay provider for openai-responses models', () => {
     const model = createModel({
       modelId: 'gpt-5-mini',
       type: 'chat',
@@ -109,12 +110,12 @@ describe('ChatboxAI openai-responses models', () => {
 
     model.exposeProvider({ sessionId: 'session-123' })
 
-    expect(openAIMocks.createOpenAI).toHaveBeenCalledWith(
+    expect(openAICompatibleMocks.createOpenAICompatible).toHaveBeenCalledWith(
       expect.objectContaining({
-        apiKey: 'test-license',
-        baseURL: expect.stringContaining('/gateway/openai-responses/v1'),
+        name: 'KodAI',
+        apiKey: 'relay-api-key',
+        baseURL: 'https://relay.example/v1',
         headers: {
-          'Instance-Id': 'test-instance',
           'chatbox-session-id': 'session-123',
         },
         fetch: expect.any(Function),
@@ -122,7 +123,7 @@ describe('ChatboxAI openai-responses models', () => {
     )
   })
 
-  it('uses provider.responses for openai-responses chat models', () => {
+  it('uses the configured relay language model for openai-responses chat models', () => {
     const model = createModel({
       modelId: 'gpt-5-mini',
       type: 'chat',
@@ -132,7 +133,23 @@ describe('ChatboxAI openai-responses models', () => {
 
     const chatModel = model.exposeChatModel({ sessionId: 'session-123' })
 
-    expect(openAIMocks.responses).toHaveBeenCalledWith('gpt-5-mini')
+    expect(openAICompatibleMocks.languageModelFactory).toHaveBeenCalledWith('gpt-5-mini')
     expect(chatModel.modelId).toBe('gpt-5-mini')
+  })
+
+  it('fails explicitly when the KOD relay is not configured', () => {
+    const model = createModel(
+      {
+        modelId: 'gpt-5-mini',
+        type: 'chat',
+        apiStyle: 'openai-responses',
+        capabilities: ['reasoning', 'tool_use'],
+      },
+      { apiHost: '', apiKey: '' }
+    )
+
+    expect(() => model.exposeProvider({ sessionId: 'session-123' })).toThrow(
+      'Kod AI relay station is not configured. Please log in to enable Kod AI.'
+    )
   })
 })

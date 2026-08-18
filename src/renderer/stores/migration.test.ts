@@ -403,7 +403,7 @@ describe('migrateStorage test', () => {
     expect(ipcFileData[StorageKey.ConfigVersion]).toBe(JSON.stringify(14))
   })
 
-  it('should initialize data on first run (configVersion = 0, no old storage)', async () => {
+  it('should mark a fresh install without initializing sessions (configVersion = 0, no old storage)', async () => {
     const { getOldVersionStorages } = await import('@/platform/storages')
     const { initData } = await import('@/setup/init_data')
 
@@ -419,7 +419,7 @@ describe('migrateStorage test', () => {
 
     // Should set current version (16) to IPC file storage (Desktop platform)
     expect(ipcFileData[StorageKey.ConfigVersion]).toBe(JSON.stringify(16))
-    expect(initData).toHaveBeenCalled()
+    expect(initData).not.toHaveBeenCalled()
   })
 
   it('should not migrate when old storage type matches current storage type', async () => {
