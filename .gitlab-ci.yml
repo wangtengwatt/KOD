@@ -1,0 +1,27 @@
+stages:
+  - verify
+
+platform-parity:
+  stage: verify
+  tags:
+    - windows
+  timeout: 90m
+  variables:
+    KOD_NODE_BINARY: node
+  script:
+    - corepack enable
+    - pnpm install --frozen-lockfile
+    - pnpm run check:platform-parity
+    - pnpm run check
+    - pnpm run test
+    - pnpm run build:renderer
+    - pnpm run mobile:sync:android:localtest
+    - .\android\gradlew.bat -p android assembleDebug
+    - pnpm run verify:android-build:localtest
+    - pnpm run mobile:sync:android:production
+    - pnpm run verify:production-endpoints
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - android/app/build/outputs/apk/debug/app-debug.apk

@@ -1,0 +1,57 @@
+name: Platform parity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - suanlizhongxin_KOD
+      - work/android-parity-stage1
+
+jobs:
+  windows-android-parity:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      KOD_NODE_BINARY: node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify platform parity manifest
+        run: pnpm run check:platform-parity
+      - name: Type-check
+        run: pnpm run check
+      - name: Test
+        run: pnpm run test
+      - name: Build Windows renderer
+        run: pnpm run build:renderer
+      - name: Synchronize Android local-test environment
+        run: pnpm run mobile:sync:android:localtest
+      - name: Build Android Debug APK
+        run: .\android\gradlew.bat -p android assembleDebug
+      - name: Verify Android Debug APK
+        run: pnpm run verify:android-build:localtest
+      - name: Synchronize Android production environment
+        run: pnpm run mobile:sync:android:production
+      - name: Scan production bundles and Android assets
+        run: pnpm run verify:production-endpoints
+      - name: Upload verified Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KOD-Android-Debug-localtest
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
