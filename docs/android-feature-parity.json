@@ -1,0 +1,86 @@
+[
+  {
+    "id": "account.session",
+    "windows": "shared",
+    "android": "shared",
+    "entrypoints": ["src/renderer/routes/settings/provider/chatbox-ai/-components/useAuthTokens.ts"],
+    "tests": ["src/renderer/routes/settings/provider/chatbox-ai/-components/useAuthTokens.test.ts"]
+  },
+  {
+    "id": "chat.relayNodeSelector",
+    "windows": "shared",
+    "android": "shared",
+    "entrypoints": ["src/renderer/routes/settings/chat.tsx"],
+    "tests": ["src/renderer/stores/providerSettings.test.ts"]
+  },
+  {
+    "id": "chat.historySync",
+    "windows": "shared",
+    "android": "shared",
+    "entrypoints": ["src/renderer/stores/sessionActions.ts"],
+    "tests": ["src/renderer/stores/sessionActions.test.ts"]
+  },
+  {
+    "id": "image.generation",
+    "windows": "shared",
+    "android": "shared",
+    "entrypoints": ["src/renderer/stores/imageGenerationStore.ts"],
+    "tests": ["src/renderer/stores/imageGenerationActions.test.ts"]
+  },
+  {
+    "id": "video.generation",
+    "windows": "shared",
+    "android": "shared",
+    "entrypoints": ["src/renderer/routes/video-creator/index.tsx"],
+    "tests": ["src/renderer/packages/model-calls/generate-video.test.ts"]
+  },
+  {
+    "id": "knowledgeBase",
+    "windows": "shared",
+    "android": "shared",
+    "entrypoints": ["src/shared/knowledge-base.ts"],
+    "tests": ["src/shared/utils/knowledge-base-model-parser.test.ts"]
+  },
+  {
+    "id": "mcp",
+    "windows": "native",
+    "android": "cloud",
+    "entrypoints": ["src/renderer/packages/mcp/controller.ts"],
+    "tests": ["src/renderer/stores/session/tools-builder.test.ts"]
+  },
+  {
+    "id": "skills",
+    "windows": "native",
+    "android": "cloud",
+    "entrypoints": ["src/renderer/packages/skills/controller.ts"],
+    "tests": ["src/renderer/stores/session/__tests__/skills-injection.test.ts"]
+  },
+  {
+    "id": "taskSandbox",
+    "windows": "native",
+    "android": "cloud",
+    "entrypoints": ["src/shared/task-sandbox.ts"],
+    "tests": ["src/renderer/stores/session/tools-builder.test.ts"]
+  },
+  {
+    "id": "wallet",
+    "windows": "cloud",
+    "android": "cloud",
+    "entrypoints": ["src/renderer/api/wallet.ts"],
+    "tests": ["src/renderer/api/wallet.test.ts"]
+  },
+  {
+    "id": "computeCenter",
+    "windows": "cloud",
+    "android": "cloud",
+    "entrypoints": ["src/renderer/packages/computeCenter.ts"],
+    "tests": ["src/renderer/packages/computeDeliveryTime.test.ts"]
+  },
+  {
+    "id": "computeAdmin",
+    "windows": "cloud",
+    "android": "cloud",
+    "entrypoints": ["src/renderer/routes/compute-center.tsx"],
+    "tests": ["src/renderer/packages/computeImageUpload.test.ts"]
+  }
+]
