@@ -42,7 +42,18 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+vi.mock('react-i18next', async () => {
+  const { createInstance } = await import('i18next')
+  const { default: zhHans } = await import('@/i18n/locales/zh-Hans/translation.json')
+  const i18n = createInstance()
+  await i18n.init({
+    resources: { 'zh-Hans': { translation: zhHans } },
+    lng: 'zh-Hans',
+    fallbackLng: 'zh-Hans',
+  })
+
+  return { useTranslation: () => ({ t: i18n.t.bind(i18n), i18n }) }
+})
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: ({ enabled }: { enabled?: boolean }) => ({
@@ -56,7 +67,12 @@ vi.mock('@tanstack/react-query', () => ({
 }))
 
 vi.mock('@/components/layout/Page', () => ({
-  default: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
+  default: ({ children, title }: { children: React.ReactNode; title: React.ReactNode }) => (
+    <main>
+      <h1>{title}</h1>
+      {children}
+    </main>
+  ),
 }))
 
 vi.mock('@/i18n/locales', () => ({ languageNameMap: { 'zh-Hans': '简体中文' }, languages: ['zh-Hans'] }))
@@ -159,6 +175,35 @@ describe('/mobile-my canonical account wiring', () => {
     switchAuthTokens.mockClear()
   })
 
+  it('renders visible account copy from the real Simplified Chinese resource', async () => {
+    await renderMobileMy()
+
+    expect(screen.getByRole('heading', { name: '我的' })).toBeTruthy()
+    expect(screen.getByText('尚未登录 KOD')).toBeTruthy()
+    expect(screen.getByText('安卓端和桌面端共用同一 KOD 账号。')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '登录KOD' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '人民币钱包' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '设置' })).toBeTruthy()
+  })
+
+  it('keeps explicit English account copy for every newly localized key', async () => {
+    const { default: englishResource } = await import('@/i18n/locales/en/translation.json')
+    const translations = englishResource as Record<string, string>
+    const keys = [
+      'Mine',
+      'Not logged in to KOD',
+      'The Android app and desktop app use the same KOD account.',
+      'Switch account',
+      'Log out',
+      'Are you sure you want to log out?',
+      'RMB Wallet',
+    ]
+
+    for (const key of keys) {
+      expect(translations[key]).toBe(key)
+    }
+  })
+
   it('shows the canonical account roles and the shared compute assets for the signed-in account', async () => {
     account.email = 'supplier@kod.test'
     account.isLoggedIn = true
@@ -218,7 +263,7 @@ describe('/mobile-my canonical account wiring', () => {
 
   it('opens canonical login and replaces account tokens on success', async () => {
     await renderMobileMy()
-    fireEvent.click(screen.getByRole('button', { name: 'Login to KOD AI' }))
+    fireEvent.click(screen.getByRole('button', { name: '登录KOD' }))
     fireEvent.click(screen.getByRole('button', { name: 'Complete canonical login' }))
 
     await waitFor(() => expect(switchAuthTokens).toHaveBeenCalledTimes(1))
@@ -243,7 +288,7 @@ describe('/mobile-my canonical account wiring', () => {
     }
     await renderMobileMy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Switch account' }))
+    fireEvent.click(screen.getByRole('button', { name: '切换账号' }))
 
     expect(screen.getByRole('button', { name: 'Complete canonical login' })).toBeTruthy()
   })
@@ -261,11 +306,14 @@ describe('/mobile-my canonical account wiring', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     await renderMobileMy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Log out' }))
+    fireEvent.click(screen.getByRole('button', { name: '退出登录' }))
     expect(clearAuthTokens).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Log out' }))
+    fireEvent.click(screen.getByRole('button', { name: '退出登录' }))
     expect(clearAuthTokens).toHaveBeenCalledTimes(1)
+    expect(confirm).toHaveBeenCalledTimes(2)
+    expect(confirm).toHaveBeenNthCalledWith(1, '确认退出当前 KOD 账号吗？')
+    expect(confirm).toHaveBeenNthCalledWith(2, '确认退出当前 KOD 账号吗？')
     confirm.mockRestore()
   })
 })
