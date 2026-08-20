@@ -91,9 +91,7 @@ describe('loginWithKod', () => {
     vi.useFakeTimers()
     try {
       const loginPromise = loginWithKod({ email: 'a@b.com', password: 'pw' })
-      const assertion = expect(loginPromise).rejects.toThrow(
-        '登录服务连接超时，请确认本机后端已启动且数据库网络可用后重试'
-      )
+      const assertion = expect(loginPromise).rejects.toThrow('登录服务连接超时，请检查网络连接及官网服务状态后重试')
       await vi.advanceTimersByTimeAsync(KOD_AUTH_REQUEST_TIMEOUT_MS)
       await assertion
     } finally {

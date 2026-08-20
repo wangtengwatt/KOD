@@ -6,7 +6,6 @@ import { authInfoStore } from '@/stores/authInfoStore'
 import {
   CHATBOX_BUILD_CHANNEL,
   KOD_API_ORIGIN,
-  NODE_ENV,
   USE_BETA_API,
   USE_BETA_CHATBOX,
   USE_LOCAL_API,
@@ -26,7 +25,10 @@ import {
   type SessionRagConfig,
   type Settings,
 } from '../../shared/types'
+import { getKodApiOrigin } from './kodApiOrigin'
 import { getOS } from './navigator'
+
+export { getKodApiOrigin } from './kodApiOrigin'
 
 const log = getLogger('remote-api')
 
@@ -125,17 +127,16 @@ export function getChatboxOrigin() {
   }
 }
 
-export function getKodApiOrigin() {
-  return USE_LOCAL_API || NODE_ENV === 'development' ? 'http://localhost:8080' : KOD_API_ORIGIN
-}
-
 export const KOD_AUTH_REQUEST_TIMEOUT_MS = 12_000
 
 function throwReadableKodAuthError(error: unknown): never {
   if (error instanceof Error) {
     const detail = `${error.name} ${error.message}`
     if (/abort|timeout|timed out|failed to fetch|fetch failed|network error/i.test(detail)) {
-      throw new Error('登录服务连接超时，请确认本机后端已启动且数据库网络可用后重试')
+      if (getKodApiOrigin().startsWith('http://localhost:')) {
+        throw new Error('登录服务连接超时，请确认本机后端已启动且数据库网络可用后重试')
+      }
+      throw new Error('登录服务连接超时，请检查网络连接及官网服务状态后重试')
     }
   }
   throw error
@@ -178,7 +179,7 @@ function unwrapKodResult<T>(result: { code: number; message?: string; data?: T |
 export const KOD_ACCOUNT_DELETE_CONFIRMATION = 'DELETE'
 
 export async function deleteKodAccount(params: { accessToken: string; password: string; confirmation?: string }) {
-  const json = await ofetch(`${KOD_API_ORIGIN}/api/account`, {
+  const json = await ofetch(`${getKodApiOrigin()}/api/account`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${params.accessToken}`,

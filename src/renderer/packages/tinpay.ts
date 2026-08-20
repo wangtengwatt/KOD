@@ -1,6 +1,6 @@
 import { tinpayCheckoutUrlSchema, tinpaySessionIdSchema, tinpaySessionStatusSchema } from '@shared/tinpay'
 import { z } from 'zod'
-import { KOD_API_ORIGIN } from '@/variables'
+import { getKodApiOrigin } from './kodApiOrigin'
 import { getAuthenticatedAfetch } from './remote'
 
 const sessionFields = {
@@ -61,7 +61,7 @@ async function parse<T>(response: Response, parser: (value: unknown) => T): Prom
 export async function createTinpaySession(input: TinpayCreateRequest, signal?: AbortSignal): Promise<TinpaySession> {
   const afetch = await getAuthenticatedAfetch()
   const response = await afetch(
-    `${KOD_API_ORIGIN}/api/tinpay/demo-sessions`,
+    `${getKodApiOrigin()}/api/tinpay/demo-sessions`,
     { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input), signal },
     { retry: 0 }
   )
@@ -71,7 +71,7 @@ export async function getTinpaySession(sessionId: string, signal?: AbortSignal):
   const id = tinpaySessionIdSchema.parse(sessionId)
   const afetch = await getAuthenticatedAfetch()
   const response = await afetch(
-    `${KOD_API_ORIGIN}/api/tinpay/demo-sessions/${encodeURIComponent(id)}`,
+    `${getKodApiOrigin()}/api/tinpay/demo-sessions/${encodeURIComponent(id)}`,
     { method: 'GET', signal },
     { retry: 0 }
   )

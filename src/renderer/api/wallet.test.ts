@@ -204,6 +204,122 @@ describe('wallet contracts', () => {
       )
     )
     await expect(walletApi.getWallet()).rejects.toMatchObject({ kind: 'business', message: 'balance unavailable' })
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: 'secret',
+      refreshToken: 'secret',
+    })
+  })
+  it('clears the persisted session when a successful HTTP response carries an unauthorized result code', async () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'expired-access-token',
+      refreshToken: 'expired-refresh-token',
+      email: 'u@example.com',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ code: 401, message: 'token 无效或已过期', data: null }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+      )
+    )
+
+    await expect(walletApi.getWallet()).rejects.toMatchObject({ kind: 'auth', message: '登录状态已失效，请重新登录' })
+    expect(authInfoStore.getState().accessToken).toBeNull()
+    expect(authInfoStore.getState().refreshToken).toBeNull()
+  })
+  it('clears the persisted session when the HTTP status is unauthorized', async () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'expired-access-token',
+      refreshToken: 'expired-refresh-token',
+      email: 'u@example.com',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ code: 401, message: 'unauthorized', data: null }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          })
+      )
+    )
+
+    await expect(walletApi.getWallet()).rejects.toMatchObject({ kind: 'auth' })
+    expect(authInfoStore.getState().accessToken).toBeNull()
+    expect(authInfoStore.getState().refreshToken).toBeNull()
+  })
+  it('clears the persisted session when a successful HTTP response carries a forbidden result code', async () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'forbidden-access-token',
+      refreshToken: 'forbidden-refresh-token',
+      email: 'u@example.com',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ code: 403, message: 'forbidden', data: null }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+      )
+    )
+
+    await expect(walletApi.getWallet()).rejects.toMatchObject({ kind: 'auth' })
+    expect(authInfoStore.getState().accessToken).toBeNull()
+    expect(authInfoStore.getState().refreshToken).toBeNull()
+  })
+  it('clears the persisted session when the HTTP status is forbidden', async () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'forbidden-access-token',
+      refreshToken: 'forbidden-refresh-token',
+      email: 'u@example.com',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ code: 403, message: 'forbidden', data: null }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' },
+          })
+      )
+    )
+
+    await expect(walletApi.getWallet()).rejects.toMatchObject({ kind: 'auth' })
+    expect(authInfoStore.getState().accessToken).toBeNull()
+    expect(authInfoStore.getState().refreshToken).toBeNull()
+  })
+  it('does not clear a newer session when an older wallet request finishes unauthorized', async () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'old-access-token',
+      refreshToken: 'old-refresh-token',
+      email: 'old@example.com',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        authInfoStore.getState().setTokens({
+          accessToken: 'new-access-token',
+          refreshToken: 'new-refresh-token',
+          email: 'new@example.com',
+        })
+        return new Response(JSON.stringify({ code: 401, message: 'token 无效或已过期', data: null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      })
+    )
+
+    await expect(walletApi.getWallet()).rejects.toMatchObject({ kind: 'auth' })
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: 'new-access-token',
+      refreshToken: 'new-refresh-token',
+      loginEmail: 'new@example.com',
+    })
   })
   it('logs only endpoint and issue path for schema failures', async () => {
     authInfoStore.getState().setTokens({ accessToken: 'secret-token', refreshToken: 'secret' })

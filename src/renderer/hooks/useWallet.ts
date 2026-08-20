@@ -1,9 +1,9 @@
 ﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect } from 'react'
 import { walletApi } from '@/api/wallet'
+import { getKodApiOrigin } from '@/packages/kodApiOrigin'
 import platform from '@/platform'
 import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
-import { KOD_API_ORIGIN } from '@/variables'
 
 export type WalletIdentity = string
 
@@ -86,5 +86,5 @@ export function useWallet(page: number, pageSize: number) {
     mutationFn: ({ amount, paymentMethod }: { amount: number; paymentMethod: string }) =>
       walletApi.pay(amount, paymentMethod),
   })
-  return { identity, apiHost: new URL(KOD_API_ORIGIN).host, info, balance, history, amount, pay, refresh }
+  return { identity, apiHost: new URL(getKodApiOrigin()).host, info, balance, history, amount, pay, refresh }
 }

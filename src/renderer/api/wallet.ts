@@ -1,7 +1,7 @@
 import { ofetch } from 'ofetch'
 import { z } from 'zod'
+import { getKodApiOrigin } from '@/packages/kodApiOrigin'
 import { authInfoStore } from '@/stores/authInfoStore'
-import { KOD_API_ORIGIN } from '@/variables'
 
 const nullableString = z.string().nullish()
 const decimalPattern = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/
@@ -155,6 +155,12 @@ function accessToken() {
   if (!token) throw new WalletApiError('请先登录 Kod 账户', 'auth')
   return token
 }
+function invalidSession(rejectedAccessToken: string) {
+  if (authInfoStore.getState().accessToken === rejectedAccessToken) {
+    authInfoStore.getState().clearTokens()
+  }
+  return new WalletApiError('登录状态已失效，请重新登录', 'auth')
+}
 function schemaFailure(path: string, issues: z.core.$ZodIssue[]): WalletApiError {
   const issuePaths = issues.map((issue) => (issue.path.length ? issue.path.join('.') : '<root>')).join(',')
   console.warn(`[wallet] schema endpoint=${path} issue_path=${issuePaths}`)
@@ -165,23 +171,24 @@ async function request<T extends z.ZodType>(
   schema: T,
   options: { method?: 'GET' | 'POST'; body?: unknown; retry?: number } = {}
 ): Promise<z.infer<T>> {
+  const requestAccessToken = accessToken()
   try {
-    const response = await ofetch.raw(new URL(path, KOD_API_ORIGIN).toString(), {
+    const response = await ofetch.raw(new URL(path, getKodApiOrigin()).toString(), {
       method: options.method ?? 'GET',
       body: options.body as Record<string, unknown> | undefined,
       retry: options.retry ?? 1,
       ignoreResponseError: true,
       headers: {
-        Authorization: `Bearer ${accessToken()}`,
+        Authorization: `Bearer ${requestAccessToken}`,
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       },
     })
-    if (response.status === 401 || response.status === 403)
-      throw new WalletApiError('登录状态已失效，请重新登录', 'auth')
+    if (response.status === 401 || response.status === 403) throw invalidSession(requestAccessToken)
     if (response.status < 200 || response.status >= 300)
       throw new WalletApiError(`钱包服务请求失败（HTTP ${response.status}）`, 'http')
     const envelope = ResultEnvelopeSchema.safeParse(response._data)
     if (!envelope.success) throw schemaFailure(path, envelope.error.issues)
+    if (envelope.data.code === 401 || envelope.data.code === 403) throw invalidSession(requestAccessToken)
     if (envelope.data.code !== 0) throw new WalletApiError(envelope.data.message || '钱包服务处理失败', 'business')
     if (envelope.data.data == null)
       throw schemaFailure(path, [{ code: 'custom', path: ['data'], message: 'missing data', input: undefined }])
