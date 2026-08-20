@@ -5,16 +5,18 @@ param()
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = [System.IO.Path]::GetFullPath($PSScriptRoot).TrimEnd('\')
 $RendererPort = 1212
-$HealthUri = "http://127.0.0.1:$RendererPort/"
+$HealthUris = @("http://127.0.0.1:$RendererPort/", "http://[::1]:$RendererPort/", "http://localhost:$RendererPort/")
 $StartupGraceSeconds = 45
 $LogPath = Join-Path $ProjectRoot '.kod-dev-launcher.log'
 $PackagePath = Join-Path $ProjectRoot 'package.json'
 $ElectronPath = Join-Path $ProjectRoot 'node_modules\electron\dist\electron.exe'
+$LauncherCorePath = Join-Path $ProjectRoot 'scripts\windows\kod-dev-launcher-core.ps1'
 $env:ELECTRON_RUN_AS_NODE = $null
-$Node22Path = 'C:\Program Files\nodejs'
-if (Test-Path -LiteralPath (Join-Path $Node22Path 'node.exe') -PathType Leaf) {
-  $env:Path = "$Node22Path;$env:Path"
+
+if (-not (Test-Path -LiteralPath $LauncherCorePath -PathType Leaf)) {
+  throw "启动器核心不存在：$LauncherCorePath"
 }
+. $LauncherCorePath
 
 function Write-LauncherLog([string]$Message, [ConsoleColor]$Color = [ConsoleColor]::Gray) {
   $line = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
@@ -31,18 +33,11 @@ function Wait-OnFailure([string]$Message, [int]$ExitCode = 1) {
 }
 
 function Test-RendererHealthy {
-  try {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri $HealthUri -TimeoutSec 2
-    return $response.StatusCode -ge 200 -and $response.StatusCode -lt 500
-  } catch {
-    return $false
-  }
+  return Test-KodRendererHealthy -Uris $HealthUris
 }
 
 function Test-ProjectPath([string]$Text) {
-  if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
-  $normalizedText = $Text.Replace('/', '\')
-  return $normalizedText.IndexOf($ProjectRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0
+  return Test-KodProjectPath -Text $Text -ProjectRoot $ProjectRoot
 }
 
 function Test-KodDevMarker([string]$CommandLine) {
@@ -119,25 +114,51 @@ function Stop-KodDevProcesses([object[]]$Processes) {
   }
 }
 
-function Invoke-KodDevelopment {
-  $env:NODE_OPTIONS = '--max-old-space-size=4096'
-  $env:DEV_PORT = "$RendererPort"
-  & pnpm.cmd dev 2>&1 | ForEach-Object {
-    $line = [string]$_
+function Invoke-KodPnpm($PnpmCommand, [string[]]$Arguments) {
+  $commandArguments = [string[]]@($PnpmCommand.PrefixArguments) + $Arguments
+  return Invoke-KodExternalCommand -FilePath $PnpmCommand.FilePath -Arguments $commandArguments -OutputAction {
+    param([string]$line)
     Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8
     Write-Host $line
   }
-  $exitCode = $LASTEXITCODE
-  if ($null -eq $exitCode) { $exitCode = 1 }
-  return [int]$exitCode
+}
+
+function Invoke-KodDevelopment($PnpmCommand) {
+  $env:NODE_OPTIONS = '--max-old-space-size=4096'
+  $env:DEV_PORT = "$RendererPort"
+  return Invoke-KodPnpm -PnpmCommand $PnpmCommand -Arguments @('dev')
 }
 
 try {
   if (-not (Test-Path -LiteralPath $PackagePath -PathType Leaf)) { Wait-OnFailure "KOD 项目不存在：$ProjectRoot" }
   $package = Get-Content -LiteralPath $PackagePath -Raw | ConvertFrom-Json
   if (-not $package.scripts.dev) { Wait-OnFailure "package.json 缺少 dev 脚本：$PackagePath" }
-  if (-not (Get-Command pnpm.cmd -ErrorAction SilentlyContinue)) { Wait-OnFailure '未找到 pnpm.cmd，请先安装并加入 PATH。' }
-  if (-not (Test-Path -LiteralPath $ElectronPath -PathType Leaf)) { Wait-OnFailure '项目依赖不完整，请先在项目目录运行 pnpm install。当前 Node 版本也必须符合项目要求（Node 18、20 或 22）。' }
+
+  $nodeCandidates = [System.Collections.Generic.List[string]]::new()
+  $nodeCandidates.Add((Join-Path $ProjectRoot '.tools\node\node.exe'))
+  $nodeCandidates.Add((Join-Path $ProjectRoot '.node\node.exe'))
+  $nodeCandidates.Add('C:\Program Files\nodejs\node.exe')
+  $pathNode = Get-Command node.exe -ErrorAction SilentlyContinue
+  if ($null -ne $pathNode) { $nodeCandidates.Add($pathNode.Source) }
+  try {
+    $nodeCommand = Resolve-KodNodeCommand -CandidatePaths $nodeCandidates.ToArray() -MinimumVersion '22.12.0' -MaximumExclusiveVersion '25.0.0'
+  } catch {
+    Wait-OnFailure $_.Exception.Message
+  }
+  $nodeDirectory = Split-Path -Parent $nodeCommand.FilePath
+  $env:Path = "$nodeDirectory;$env:Path"
+
+  $pnpmCandidates = [System.Collections.Generic.List[string]]::new()
+  $pathPnpm = Get-Command pnpm.cmd -ErrorAction SilentlyContinue
+  if ($null -ne $pathPnpm) { $pnpmCandidates.Add($pathPnpm.Source) }
+  $pathCorepack = Get-Command corepack.cmd -ErrorAction SilentlyContinue
+  if ($null -ne $pathCorepack) { $pnpmCandidates.Add($pathCorepack.Source) }
+  try {
+    $pnpmCommand = Resolve-KodPnpmCommand -NodeDirectory $nodeDirectory -CandidatePaths $pnpmCandidates.ToArray() -MinimumVersion '10.17.0'
+  } catch {
+    Wait-OnFailure $_.Exception.Message
+  }
+  Write-LauncherLog "工具链：Node $($nodeCommand.Version) [$($nodeCommand.FilePath)]；pnpm $($pnpmCommand.Version) [$($pnpmCommand.FilePath)]。" Cyan
 
   Set-Location -LiteralPath $ProjectRoot
   $pathBytes = [Text.Encoding]::UTF8.GetBytes($ProjectRoot.ToLowerInvariant())
@@ -149,6 +170,24 @@ try {
   try {
     $hasMutex = $mutex.WaitOne(0)
     if (-not $hasMutex) { Write-LauncherLog '另一个 KOD 启动器正在检查或启动项目，请稍后再试。' Yellow; exit 0 }
+
+    $missingDependencies = @(Get-KodMissingDependencies $ProjectRoot)
+    if ($missingDependencies.Count -gt 0) {
+      Write-LauncherLog "检测到依赖不完整，准备执行 pnpm install --frozen-lockfile。缺少：$($missingDependencies -join ', ')" Yellow
+    }
+    try {
+      $dependencyResult = Ensure-KodDependencies -ProjectRoot $ProjectRoot -PnpmCommand $pnpmCommand -InstallAction {
+        param($Command, [string[]]$Arguments)
+        return Invoke-KodPnpm -PnpmCommand $Command -Arguments $Arguments
+      }
+    } catch {
+      Wait-OnFailure $_.Exception.Message
+    }
+    if ($dependencyResult.Installed) {
+      Write-LauncherLog '项目依赖已按 pnpm-lock.yaml 恢复完成。' Green
+    } else {
+      Write-LauncherLog '项目依赖检查通过，无需重新安装。' Green
+    }
 
     $existing = @(Get-KodDevProcesses (Get-CimInstance Win32_Process))
     if ($existing.Count -gt 0) {
@@ -164,7 +203,7 @@ try {
       }
     }
 
-    $exitCode = Invoke-KodDevelopment
+    $exitCode = Invoke-KodDevelopment -PnpmCommand $pnpmCommand
     if ($exitCode -ne 0) { Wait-OnFailure "KOD 开发进程已退出，退出码=$exitCode。" $exitCode }
     Write-LauncherLog 'KOD 开发进程已正常退出。' Green
     exit 0
