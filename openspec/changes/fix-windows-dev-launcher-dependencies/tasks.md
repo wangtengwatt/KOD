@@ -19,7 +19,7 @@
 
 - [x] 4.1 审计领先提交和工作区，排除密钥、私钥、日志、依赖目录与构建产物
 - [x] 4.2 验证 OpenSpec、Git 差异和提交历史后提交修复
-- [ ] 4.3 推送全部现有进度到 GitLab `suanlizhongxin_KOD`
+- [x] 4.3 推送全部现有进度到 GitLab `suanlizhongxin_KOD`
 ## 5. Safety follow-up
 
 - [x] 5.1 Add project-root boundary isolation and IPv4/IPv6 loopback health probing with regression tests
