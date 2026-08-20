@@ -1,6 +1,7 @@
 import NiceModal from '@ebay/nice-modal-react'
 import {
   ActionIcon,
+  Alert,
   Box,
   Button,
   Flex,
@@ -31,6 +32,7 @@ import { ChatboxWelcomeCard } from '@/components/common/ChatboxWelcomeCard'
 import { ImageModelSelect } from '@/components/ImageModelSelect'
 import Page from '@/components/layout/Page'
 import { type ImageModelGroup, useImageModelGroups } from '@/hooks/useImageModelGroups'
+import { useKodRelay } from '@/hooks/useKodRelay'
 import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { getLogger } from '@/lib/utils'
@@ -48,7 +50,7 @@ import {
   useImageGenerationRecord,
 } from '@/stores/imageGenerationStore'
 import { queryClient } from '@/stores/queryClient'
-import { settingsStore, useSettingsStore } from '@/stores/settingsStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import * as toastActions from '@/stores/toastActions'
 import { getHomeWelcomeCardMode } from '@/utils/homeWelcomeCard'
 import {
@@ -212,6 +214,7 @@ function ImageCreatorPage() {
   const { t } = useTranslation()
   const isSmallScreen = useIsSmallScreen()
   const { providers } = useProviders()
+  const relay = useKodRelay()
   const imageModelGroups = useImageModelGroups()
   const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
   const hasExpiredLicense = useSettingsStore((s) => s.hasExpiredLicense)
@@ -275,7 +278,13 @@ function ImageCreatorPage() {
   }, [])
 
   useEffect(() => {
-    if (imageModelGroups.length === 0) return
+    if (imageModelGroups.length === 0) {
+      if (relay.selection) {
+        setSelectedProvider(relay.providerId)
+        setSelectedModel('')
+      }
+      return
+    }
     const selectedGroup = imageModelGroups.find((group) => group.providerId === selectedProvider)
     const selectedOption = selectedGroup?.models.find((model) => model.modelId === selectedModel)
     if (selectedOption) return
@@ -288,7 +297,7 @@ function ImageCreatorPage() {
     setSelectedModel(firstModel.modelId)
     const ratioOptionsForFirstModel = getRatioOptionsForModel(firstModel.modelId)
     setSelectedRatio((prev) => (ratioOptionsForFirstModel.includes(prev) ? prev : 'auto'))
-  }, [imageModelGroups, selectedProvider, selectedModel])
+  }, [imageModelGroups, relay.providerId, relay.selection, selectedProvider, selectedModel])
 
   // Cleanup orphan temp uploads if user leaves the page mid-way.
   useEffect(() => {
@@ -360,8 +369,8 @@ function ImageCreatorPage() {
     }
 
     // P0 去云化：Kod AI 走中转站，不再需要 licenseKey，改为检查登录态（有 accessToken 才会拉到中转站配置）
-    if (selectedProvider === ModelProviderEnum.ChatboxAI && !isLoggedIn) {
-      toastActions.add(t('Please log in to Chatbox AI first'))
+    if ((selectedProvider === ModelProviderEnum.ChatboxAI || selectedProvider === relay.providerId) && !isLoggedIn) {
+      toastActions.add('请先登录 KOD 账号')
       return
     }
 
@@ -392,7 +401,17 @@ function ImageCreatorPage() {
       const message = error instanceof Error ? error.message : String(error)
       toastActions.add(t('Failed to generate image') + (message ? `: ${message}` : ''))
     }
-  }, [prompt, referenceImages, selectedProvider, selectedModel, selectedRatio, isCurrentlyGenerating, isLoggedIn, t])
+  }, [
+    prompt,
+    referenceImages,
+    selectedProvider,
+    selectedModel,
+    selectedRatio,
+    isCurrentlyGenerating,
+    isLoggedIn,
+    relay.providerId,
+    t,
+  ])
 
   const handleQuickPromptSubmit = useCallback(
     async (quickPrompt: string) => {
@@ -403,8 +422,8 @@ function ImageCreatorPage() {
       }
 
       // P0 去云化：Kod AI 走中转站，改为检查登录态而非 licenseKey
-      if (selectedProvider === ModelProviderEnum.ChatboxAI && !isLoggedIn) {
-        toastActions.add(t('Please log in to Chatbox AI first'))
+      if ((selectedProvider === ModelProviderEnum.ChatboxAI || selectedProvider === relay.providerId) && !isLoggedIn) {
+        toastActions.add('请先登录 KOD 账号')
         return
       }
 
@@ -425,7 +444,7 @@ function ImageCreatorPage() {
         toastActions.add(t('Failed to generate image') + (message ? `: ${message}` : ''))
       }
     },
-    [selectedProvider, selectedModel, isCurrentlyGenerating, isLoggedIn, t]
+    [selectedProvider, selectedModel, isCurrentlyGenerating, isLoggedIn, relay.providerId, t]
   )
 
   const handleUseAsReference = useCallback((storageKey: string, sourceRecordId?: string) => {
@@ -604,6 +623,12 @@ function ImageCreatorPage() {
           {/* Input Area */}
           <Box py="md" px="sm">
             <Stack gap="sm" maw={800} mx="auto">
+              {relay.selection && imageModelGroups.length === 0 && (
+                <Alert color="yellow" title="当前零售站暂不支持图片生成">
+                  当前零售站（{relay.selection.stationUrl}）没有可用的图片模型，请在左侧切换支持生图的零售站或节点。
+                </Alert>
+              )}
+
               {!currentRecord && welcomeCardMode !== 'none' && (
                 <ChatboxWelcomeCard mode={welcomeCardMode} pageName={JK_PAGE_NAMES.IMAGE_PAGE} />
               )}

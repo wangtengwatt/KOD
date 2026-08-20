@@ -1,7 +1,7 @@
 import type { VideoGeneration, VideoGenerationModel } from '@shared/types'
-import { walletApi } from '@/api/wallet'
 import {
   downloadVideoAsDataUrl,
+  getVideoAvailability,
   getVideoServiceErrorMessage,
   pollVideoTaskUntilComplete,
   submitVideoTask,
@@ -46,14 +46,8 @@ let activeController: AbortController | null = null
 
 async function assertOfficialVideoAvailable() {
   if (!authInfoStore.getState().accessToken) throw new VideoLoginRequiredError()
-  try {
-    const wallet = await walletApi.getWallet()
-    if (wallet.balance <= 0) throw new VideoBalanceInsufficientError()
-  } catch (error) {
-    if (error instanceof VideoBalanceInsufficientError) throw error
-    // Match fd4e961: wallet service failure must not take the independent video provider down.
-    console.warn('[Video] wallet availability check failed; continuing with upstream provider', error)
-  }
+  const availability = await getVideoAvailability()
+  if (!availability.available) throw new Error(availability.reason || 'KOD 视频服务尚未启用。')
 }
 
 async function resolveReferenceImages(keys: string[]) {
@@ -63,32 +57,6 @@ async function resolveReferenceImages(keys: string[]) {
     if (image) images.push(image)
   }
   return images
-}
-
-async function reportBilling(record: VideoGeneration, taskId: string, tokens: number) {
-  if (!authInfoStore.getState().accessToken || tokens <= 0) return
-  try {
-    const result = await walletApi.reportVideoConsumption({
-      requestId: `${record.id}:${taskId}`,
-      model: record.model.modelId,
-      tokens,
-      upstreamTaskId: taskId,
-      duration: record.duration,
-      resolution: record.resolution,
-      hasVideoInput: record.referenceImages.length > 0,
-      hasAudio: true,
-    })
-    await updateVideoRecord(record.id, {
-      billedAmount: result.amount,
-      billedAt: Date.now(),
-      billingError: undefined,
-    })
-    await queryClient.invalidateQueries({ queryKey: ['wallet'] })
-  } catch (error) {
-    await updateVideoRecord(record.id, {
-      billingError: error instanceof Error ? error.message : String(error),
-    })
-  }
 }
 
 async function runGeneration(record: VideoGeneration) {
@@ -118,28 +86,21 @@ async function runGeneration(record: VideoGeneration) {
         await queryClient.invalidateQueries({ queryKey: [VIDEO_GEN_QUERY_KEY] })
       },
     })
-    if (finalTask.status === 'failed' || !finalTask.videoUrl) {
+    if (finalTask.status === 'failed') {
       throw new Error(finalTask.errorMessage || '视频生成失败，上游未返回视频。')
     }
 
-    let videoKey = finalTask.videoUrl
-    try {
-      const dataUrl = await downloadVideoAsDataUrl(finalTask.id, finalTask.videoUrl, controller.signal)
-      videoKey = StorageKeyGenerator.video(`video-gen:${record.id}`)
-      await storage.setBlob(videoKey, dataUrl)
-      queryClient.setQueryData(['blob', videoKey], dataUrl)
-    } catch (error) {
-      console.warn('[Video] local download failed; retaining the temporary upstream URL', error)
-    }
+    const dataUrl = await downloadVideoAsDataUrl(finalTask.id, controller.signal)
+    const videoKey = StorageKeyGenerator.video(`video-gen:${record.id}`)
+    await storage.setBlob(videoKey, dataUrl)
+    queryClient.setQueryData(['blob', videoKey], dataUrl)
 
-    const tokens = finalTask.usage?.totalTokens ?? finalTask.usage?.completionTokens ?? 0
-    const completed = await updateVideoRecord(record.id, {
+    await updateVideoRecord(record.id, {
       status: 'done',
       progress: 100,
       generatedVideos: [videoKey],
-      tokensUsed: tokens || undefined,
     })
-    if (completed) await reportBilling(completed, finalTask.id, tokens)
+    await queryClient.invalidateQueries({ queryKey: ['wallet'] })
   } catch (error) {
     if (!(error instanceof Error && error.name === 'AbortError')) {
       await updateVideoRecord(record.id, { status: 'error', error: getVideoServiceErrorMessage(error) })

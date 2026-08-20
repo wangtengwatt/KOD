@@ -64,6 +64,10 @@ function normalizeBaseUrl(value: string) {
   return value.replace(/\/+$/, '')
 }
 
+function isRelayImageModelId(modelId: string) {
+  return /image|dall|flux|stable-diffusion|sdxl|midjourney/i.test(modelId)
+}
+
 async function parseKodRelayResponse<T>(response: Response): Promise<T> {
   const result = (await response.json()) as KodRelayApiResult<T>
   if (response.status === 409 || result.code === 409) {
@@ -153,11 +157,12 @@ export async function fetchKodRelayModels(selection: KodRelaySelection, signal?:
   const result = (await response.json()) as { data?: Array<{ id?: unknown; name?: unknown }> }
   return (result.data || []).flatMap<ProviderModelInfo>((item) => {
     if (typeof item.id !== 'string') return []
+    const type = isRelayImageModelId(item.id) ? ('image' as const) : ('chat' as const)
     return [
       enrichModelFromAnyRegistry({
         modelId: item.id,
         nickname: typeof item.name === 'string' ? item.name : item.id,
-        type: 'chat' as const,
+        type,
       }),
     ]
   })

@@ -1,61 +1,72 @@
-import { describe, expect, it } from 'vitest'
-import {
-  buildOpenAIVideosBody,
-  buildVolcengineTasksBody,
-  getVideoServiceErrorMessage,
-  normalizeOpenAIVideosResponse,
-  normalizeVolcengineTasksResponse,
-} from './generate-video'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const params = {
-  model: 'seedance-2.0-asset-fast',
-  prompt: '云海日出',
-  images: ['data:image/png;base64,abc'],
-  duration: 5 as const,
-  resolution: '720p' as const,
-  ratio: '16:9' as const,
-}
+const { submitMock, statusMock } = vi.hoisted(() => ({
+  submitMock: vi.fn(),
+  statusMock: vi.fn(),
+}))
 
-describe('official video request compatibility', () => {
-  it('builds the OpenAI videos request used by the source commit', () => {
-    expect(buildOpenAIVideosBody(params)).toMatchObject({
-      model: params.model,
-      prompt: params.prompt,
-      image: params.images[0],
-      images: params.images,
-      seconds: '5',
-      metadata: { duration: 5, resolution: '720p', ratio: '16:9', watermark: false },
-    })
+vi.mock('@/api/videoGeneration', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/api/videoGeneration')>()
+  return {
+    ...original,
+    videoGenerationApi: {
+      availability: vi.fn(),
+      submit: submitMock,
+      status: statusMock,
+      content: vi.fn(),
+    },
+  }
+})
+
+import { fetchVideoTask, getVideoServiceErrorMessage, submitVideoTask } from './generate-video'
+
+const TASK_ID = '11111111-1111-4111-8111-111111111111'
+
+describe('KOD video proxy compatibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
   })
 
-  it('builds the Volcengine fallback request with optional images', () => {
-    expect(buildVolcengineTasksBody(params)).toMatchObject({
-      model: params.model,
-      duration: 5,
-      resolution: '720p',
-      content: [
-        { type: 'image_url', image_url: { url: params.images[0] } },
-        { type: 'text', text: params.prompt },
-      ],
-    })
-  })
+  it('submits generation-only parameters to the authenticated KOD backend', async () => {
+    submitMock.mockResolvedValue(task('QUEUED'))
 
-  it('normalizes both supported response protocols', () => {
-    expect(
-      normalizeOpenAIVideosResponse({ id: 'a', status: 'completed', metadata: { url: 'https://v/a.mp4' } })
-    ).toMatchObject({ id: 'a', status: 'completed', videoUrl: 'https://v/a.mp4' })
-    expect(
-      normalizeVolcengineTasksResponse({
-        id: 'b',
-        status: 'succeeded',
-        content: { video_url: 'https://v/b.mp4' },
-        usage: { total_tokens: 12 },
+    await expect(
+      submitVideoTask({
+        model: 'seedance-2.0-asset-fast',
+        prompt: '云海日出',
+        images: ['data:image/png;base64,abc'],
+        duration: 5,
+        resolution: '720p',
+        ratio: '16:9',
       })
-    ).toMatchObject({ id: 'b', status: 'completed', videoUrl: 'https://v/b.mp4', usage: { totalTokens: 12 } })
+    ).resolves.toMatchObject({ id: TASK_ID, status: 'queued' })
+
+    expect(submitMock).toHaveBeenCalledWith(
+      {
+        model: 'seedance-2.0-asset-fast',
+        prompt: '云海日出',
+        referenceImages: ['data:image/png;base64,abc'],
+        durationSeconds: 5,
+        resolution: '720p',
+        ratio: '16:9',
+      },
+      undefined
+    )
+  })
+
+  it('normalizes server task states without exposing an upstream URL', async () => {
+    statusMock.mockResolvedValue(task('SUCCEEDED'))
+
+    await expect(fetchVideoTask(TASK_ID)).resolves.toEqual({
+      id: TASK_ID,
+      status: 'completed',
+      progress: 100,
+      errorCode: undefined,
+      errorMessage: undefined,
+    })
   })
 
   it('turns service failures into an isolated actionable reason', () => {
-    expect(getVideoServiceErrorMessage(new Error('Status Code 401'))).toContain('认证失败')
     expect(getVideoServiceErrorMessage(new Error('fetch failed'))).toContain('无法连接')
     expect(
       getVideoServiceErrorMessage(
@@ -68,3 +79,21 @@ describe('official video request compatibility', () => {
     )
   })
 })
+
+function task(status: 'QUEUED' | 'SUCCEEDED') {
+  return {
+    publicTaskId: TASK_ID,
+    model: 'seedance-2.0-asset-fast',
+    durationSeconds: 5,
+    resolution: '720p',
+    ratio: '16:9',
+    price: 1.25,
+    status,
+    progress: status === 'SUCCEEDED' ? 100 : 0,
+    errorCode: null,
+    errorMessage: null,
+    billed: status === 'SUCCEEDED',
+    createdAt: 1,
+    updatedAt: 2,
+  }
+}

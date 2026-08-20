@@ -131,8 +131,6 @@ export default defineConfig({
     'process.env.USE_BETA_CHATBOX': JSON.stringify(''),
     'process.env.KOD_API_ORIGIN': JSON.stringify('https://kod.kai.com'),
     'process.env.KOD_PAYMENT_HOSTS': JSON.stringify('kod.kai.com,mzf.mapay.cc'),
-    'process.env.KOD_VIDEO_API_HOST': JSON.stringify(''),
-    'process.env.KOD_VIDEO_API_KEY': JSON.stringify(''),
   },
   optimizeDeps: {
     // Match the electron-vite renderer config: pre-bundle dependencies so Vite

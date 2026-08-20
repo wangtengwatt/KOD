@@ -1,4 +1,4 @@
-import { ActionIcon, Box, Button, Flex, Image, NavLink, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Box, Button, Flex, NavLink, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core'
 import SwipeableDrawer from '@mui/material/SwipeableDrawer'
 import {
   IconCirclePlus,
@@ -20,6 +20,7 @@ import Divider from './components/common/Divider'
 import { ScalableIcon } from './components/common/ScalableIcon'
 import SessionAttachmentRagDevPane from './components/dev/SessionAttachmentRagDevPane'
 import ThemeSwitchButton from './components/dev/ThemeSwitchButton'
+import { SidebarBrand } from './components/SidebarBrand'
 import SessionList from './components/session/SessionList'
 import TaskSessionList from './components/session/TaskSessionList'
 import { FORCE_ENABLE_DEV_PAGES } from './dev/devToolsConfig'
@@ -28,7 +29,6 @@ import { useIsSmallScreen, useSidebarWidth } from './hooks/useScreenChange'
 import useVersion from './hooks/useVersion'
 import { navigateToSettings } from './modals/Settings'
 import { trackingEvent } from './packages/event'
-import icon from './static/icon.png'
 import { settingsStore, useLanguage } from './stores/settingsStore'
 import { taskSessionStore } from './stores/taskSessionStore'
 import { useUIStore } from './stores/uiStore'
@@ -167,17 +167,7 @@ export default function Sidebar() {
         {needRoomForMacWindowControls && <Box className="title-bar flex-[0_0_44px]" />}
         <Flex align="center" justify="space-between" px="md" py="sm">
           <Flex align="center" gap="sm">
-            <Flex align="center" gap="sm" onClick={() => navigate({ to: '/about' })} style={{ cursor: 'pointer' }}>
-              <Image src={icon} w={20} h={20} />
-              <Text span c="chatbox-secondary" size="xl" lh={1.2} fw="700">
-                KOD
-              </Text>
-              {/\d/.test(versionHook.version) && (
-                <Text span c="chatbox-tertiary" size="sm">
-                  {versionHook.version}
-                </Text>
-              )}
-            </Flex>
+            <SidebarBrand version={versionHook.version} onAbout={() => navigate({ to: '/about' })} />
             {FORCE_ENABLE_DEV_PAGES && <ThemeSwitchButton size="xs" />}
           </Flex>
 

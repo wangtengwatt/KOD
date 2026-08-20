@@ -80,6 +80,26 @@ describe('Kod relay API', () => {
     })
   })
 
+  it('classifies relay image models so the image creator can display them', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: 'gemini-2.5-flash-image', name: 'Gemini Image' },
+            { id: 'gpt-relay', name: 'Relay GPT' },
+          ],
+        }),
+        { status: 200 }
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchKodRelayModels(selection)).resolves.toEqual([
+      expect.objectContaining({ modelId: 'gemini-2.5-flash-image', type: 'image' }),
+      expect.objectContaining({ modelId: 'gpt-relay', type: 'chat' }),
+    ])
+  })
+
   it('surfaces HTTP or payload 409 as a conflict', async () => {
     vi.stubGlobal(
       'fetch',

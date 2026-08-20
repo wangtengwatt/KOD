@@ -3,7 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { getModelManifest, type RemoteModelInfo } from '@/packages/remote'
 import { useLanguage, useSettingsStore } from '@/stores/settingsStore'
+import { buildManualRelayImageGroup } from './manualRelayImageModels'
 import useChatboxAIModels from './useChatboxAIModels'
+import { useKodRelay } from './useKodRelay'
 import { useProviders } from './useProviders'
 
 export interface ImageModelOption {
@@ -104,6 +106,7 @@ export function useImageModelGroups(): ImageModelGroup[] {
   const { providers } = useProviders()
   const { chatboxAIImageModels } = useChatboxAIModels()
   const providerSettingsMap = useSettingsStore((state) => state.providers)
+  const relay = useKodRelay()
 
   const chatboxProvider = providers.find((p) => p.id === ModelProviderEnum.ChatboxAI)
   const openAIProvider = providers.find((p) => p.id === ModelProviderEnum.OpenAI)
@@ -117,6 +120,15 @@ export function useImageModelGroups(): ImageModelGroup[] {
   )
 
   return useMemo(() => {
+    if (relay.selection) {
+      const relayGroup = buildManualRelayImageGroup(
+        relay.selection,
+        relay.models,
+        providerSettingsMap?.[relay.providerId]?.excludedModels || []
+      )
+      return relayGroup ? [relayGroup] : []
+    }
+
     const groups: ImageModelGroup[] = []
     if (chatboxProvider) {
       const excluded = new Set(providerSettingsMap?.[ModelProviderEnum.ChatboxAI]?.excludedModels || [])
@@ -185,5 +197,8 @@ export function useImageModelGroups(): ImageModelGroup[] {
     chatboxAIImageModels,
     openAIImageModels,
     geminiImageModels,
+    relay.selection,
+    relay.models,
+    relay.providerId,
   ])
 }

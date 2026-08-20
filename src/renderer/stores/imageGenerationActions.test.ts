@@ -10,8 +10,12 @@ const getImageMock = vi.fn()
 const setCurrentGeneratingIdMock = vi.fn()
 const setCurrentRecordIdMock = vi.fn()
 const trackEventMock = vi.fn()
+const paintMock = vi.fn()
+const addGeneratedImageMock = vi.fn()
+const setBlobMock = vi.fn()
 
 vi.mock('@/adapters', () => ({
+  createModel: vi.fn(async () => ({ paint: paintMock })),
   createModelDependencies: vi.fn(async () => ({
     storage: {
       getImage: getImageMock,
@@ -30,7 +34,7 @@ vi.mock('./imageGenerationStore', () => ({
   IMAGE_GEN_QUERY_KEY: 'image-gen',
   createRecord: createRecordMock,
   updateRecord: updateRecordMock,
-  addGeneratedImage: vi.fn(),
+  addGeneratedImage: addGeneratedImageMock,
   imageGenerationStore: {
     getState: () => ({
       currentGeneratingId: null,
@@ -70,15 +74,19 @@ vi.mock('@/lib/utils', () => ({
 }))
 
 vi.mock('@/platform', () => ({
-  default: {},
+  default: {
+    getImageGenerationStorage: () => ({
+      getById: vi.fn(async () => ({ generatedImages: [] })),
+    }),
+  },
 }))
 
 vi.mock('@/storage', () => ({
-  default: {},
+  default: { setBlob: setBlobMock },
 }))
 
 vi.mock('@/storage/StoreStorage', () => ({
-  StorageKeyGenerator: {},
+  StorageKeyGenerator: { picture: vi.fn(() => 'stored-output') },
 }))
 
 describe('imageGenerationActions reference image payload', () => {
@@ -87,18 +95,8 @@ describe('imageGenerationActions reference image payload', () => {
 
     createRecordMock.mockResolvedValue({ id: 'record-1' })
     updateRecordMock.mockImplementation(async (id: string, patch: Record<string, unknown>) => ({ id, ...patch }))
-    submitImageGenerationMock.mockResolvedValue({
-      task_id: 'task-1',
-      items: [{ status: 'pending' }],
-    })
-    pollTaskUntilCompleteMock.mockResolvedValue({
-      items: [
-        {
-          status: 'completed',
-          image_url: 'https://example.com/output.png',
-        },
-      ],
-    })
+    paintMock.mockResolvedValue(['data:image/png;base64,OUTPUT'])
+    addGeneratedImageMock.mockResolvedValue({ id: 'record-1', generatedImages: ['stored-output'] })
     getImageMock.mockResolvedValue('data:image/png;base64,AAAA')
   })
 
@@ -116,16 +114,21 @@ describe('imageGenerationActions reference image payload', () => {
     })
 
     await vi.waitFor(() => {
-      expect(submitImageGenerationMock).toHaveBeenCalledTimes(1)
+      expect(paintMock).toHaveBeenCalledTimes(1)
     })
 
-    expect(submitImageGenerationMock).toHaveBeenCalledWith(
+    expect(paintMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        images: [{ image_url: 'https://example.com/reference.png' }, { image_url: 'data:image/png;base64,AAAA' }],
+        images: [{ imageUrl: 'https://example.com/reference.png' }, { imageUrl: 'data:image/png;base64,AAAA' }],
       }),
-      'license-key'
+      expect.any(AbortSignal),
+      expect.any(Function)
     )
-    expect(trackEventMock).toHaveBeenCalledWith('generate_image', expect.objectContaining({ has_reference: true }))
+    expect(submitImageGenerationMock).not.toHaveBeenCalled()
+    expect(trackEventMock).toHaveBeenCalledWith(
+      'generate_image',
+      expect.objectContaining({ has_reference: true, path: 'direct' })
+    )
   })
 
   it('stores structured error codes from Chatbox AI image generation failures', async () => {
@@ -133,7 +136,7 @@ describe('imageGenerationActions reference image payload', () => {
     class StructuredImageGenerationError extends BaseError {
       public code = 20004
     }
-    submitImageGenerationMock.mockRejectedValueOnce(new StructuredImageGenerationError('license not found'))
+    paintMock.mockRejectedValueOnce(new StructuredImageGenerationError('license not found'))
 
     const { createAndGenerate } = await import('./imageGenerationActions')
 
@@ -159,20 +162,8 @@ describe('imageGenerationActions reference image payload', () => {
     })
   })
 
-  it('stores failed item error messages from async image generation results', async () => {
-    pollTaskUntilCompleteMock.mockResolvedValueOnce({
-      task_id: 'task-1',
-      is_finished: true,
-      items: [
-        {
-          uuid: 'item-1',
-          status: 'failed',
-          created_at: '2026-05-08T15:23:34.442+08:00',
-          error_code: 'image_content_moderation_blocked',
-          error_message: 'Content rejected by content moderation',
-        },
-      ],
-    })
+  it('stores direct image generation failures without falling back to the retired cloud task API', async () => {
+    paintMock.mockRejectedValueOnce(new Error('Content rejected by content moderation'))
 
     const { createAndGenerate } = await import('./imageGenerationActions')
 
@@ -192,10 +183,9 @@ describe('imageGenerationActions reference image payload', () => {
         expect.objectContaining({
           status: 'error',
           error: 'Content rejected by content moderation',
-          errorCode: 'image_content_moderation_blocked',
-          errorItemUuid: 'item-1',
         })
       )
     })
+    expect(submitImageGenerationMock).not.toHaveBeenCalled()
   })
 })
