@@ -102,7 +102,7 @@ describe('Android environment contract', () => {
         {
           environment: 'localtest',
           appId: 'com.kod.app.localtest',
-          displayName: 'KOD 鏈湴娴嬭瘯',
+          displayName: 'KOD 本地测试',
         }
       )
     ).toThrow(/Capacitor server URL/i)
