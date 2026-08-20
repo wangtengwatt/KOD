@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import AdmZip from 'adm-zip'
@@ -97,7 +97,9 @@ describe.skipIf(process.platform !== 'win32')('Android APK verification', () => 
     const result = runVerifier(['-Environment', 'production', '-OutputsRoot', root, '-AaptPath', aapt])
 
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
-    expect(result.stdout).toContain(fixture.apkPath)
+    const reportedApkPath = result.stdout.match(/^APK path: ([^\r\n]+)$/m)?.[1]
+    expect(reportedApkPath).toBeDefined()
+    expect(realpathSync.native(reportedApkPath!)).toBe(realpathSync.native(fixture.apkPath))
   })
 
   it.each([
