@@ -198,7 +198,6 @@ try {
         $archive.Dispose()
     }
 
-    $expectedUrl = if ($Environment -eq 'localtest') { 'http://10.0.2.2:8080' } else { $null }
     $expectedScheme = if ($Environment -eq 'localtest') { 'http' } else { 'https' }
     $expectedCleartext = $Environment -eq 'localtest'
     $expectedMixedContent = $Environment -eq 'localtest'
@@ -225,12 +224,8 @@ try {
     if ([bool]$capacitor.server.cleartext -ne $expectedCleartext -or [bool]$capacitor.android.allowMixedContent -ne $expectedMixedContent) {
         throw "$Environment APK transport policy does not match the synchronized environment"
     }
-    $actualUrl = $capacitor.server.url
-    if ($Environment -eq 'localtest' -and $actualUrl -ne $expectedUrl) {
-        throw "localtest APK endpoint mismatch: expected $expectedUrl, received $actualUrl"
-    }
-    if ($Environment -eq 'production' -and $actualUrl) {
-        throw "production APK must not contain a Capacitor server URL: $actualUrl"
+    if ($capacitor.server.PSObject.Properties.Name -contains 'url') {
+        throw "$Environment APK must not contain a Capacitor server URL; service origin is verified from bundled renderer assets"
     }
 
     $nodeBinary = if ($env:KOD_NODE_BINARY) { $env:KOD_NODE_BINARY } else { (Get-Command node).Source }

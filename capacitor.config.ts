@@ -17,7 +17,6 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: isLocalAndroidTest ? 'http' : 'https',
     cleartext: isLocalAndroidTest,
-    ...(isLocalAndroidTest ? { url: 'http://10.0.2.2:8080' } : {}),
   },
 }
 

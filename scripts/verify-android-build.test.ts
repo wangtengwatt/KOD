@@ -14,7 +14,7 @@ function createFixtureApk(
   root: string,
   environment: AndroidEnvironment,
   rendererSource: string,
-  options: { label?: string; name?: string } = {},
+  options: { label?: string; name?: string; serverUrl?: string } = {},
 ) {
   const appId = environment === 'localtest' ? 'com.kod.app.localtest' : 'com.kod.app'
   const displayName = options.label ?? (environment === 'localtest' ? 'KOD 本地测试' : 'KOD')
@@ -26,7 +26,7 @@ function createFixtureApk(
     server: {
       androidScheme: environment === 'localtest' ? 'http' : 'https',
       cleartext: environment === 'localtest',
-      ...(environment === 'localtest' ? { url: 'http://10.0.2.2:8080' } : {}),
+      ...(options.serverUrl ? { url: options.serverUrl } : {}),
     },
   }
   const zip = new AdmZip()
@@ -175,6 +175,28 @@ describe.skipIf(process.platform !== 'win32')('Android APK verification', () => 
 
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
     expect(result.stdout).toContain('Application label: KOD')
+  })
+
+  it.each([
+    ['production', 'https://example.com'],
+    ['localtest', 'http://10.0.2.2:8080'],
+  ] as const)('rejects a %s package containing a Capacitor server URL', (environment, serverUrl) => {
+    const root = makeRoot()
+    const rendererOrigin = environment === 'localtest' ? 'http://10.0.2.2:8080' : 'https://kod.kai.com'
+    const fixture = createFixtureApk(root, environment, `const KOD_API_ORIGIN="${rendererOrigin}"`, { serverUrl })
+    const aapt = createFakeAapt(root, fixture.appId, fixture.displayName, environment)
+
+    const result = runVerifier([
+      '-Environment',
+      environment,
+      '-ApkPath',
+      fixture.apkPath,
+      '-AaptPath',
+      aapt,
+    ])
+
+    expect(result.status).not.toBe(0)
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/Capacitor server URL/i)
   })
 
   it.each([

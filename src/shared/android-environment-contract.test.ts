@@ -24,7 +24,7 @@ describe('Android environment contract', () => {
     expect(config.server?.url).toBeUndefined()
   })
 
-  it('emits the visibly distinct local-test identity and intended emulator HTTP origin', async () => {
+  it('emits the visibly distinct local-test identity without replacing the bundled renderer URL', async () => {
     const config = await loadCapacitorConfig('localtest')
 
     expect(config).toMatchObject({
@@ -34,9 +34,9 @@ describe('Android environment contract', () => {
       server: {
         androidScheme: 'http',
         cleartext: true,
-        url: 'http://10.0.2.2:8080',
       },
     })
+    expect(config.server?.url).toBeUndefined()
   })
 
   it('rejects unknown environment values instead of silently producing a mixed build', async () => {
@@ -52,11 +52,7 @@ describe('Android environment contract', () => {
 
     const productionConfig = await loadCapacitorConfig('production')
     const localConfig = await loadCapacitorConfig('localtest')
-    const verify = verifier.verifyAndroidBuildEnvironment as (
-      variant: string,
-      config: unknown,
-      marker: unknown
-    ) => void
+    const verify = verifier.verifyAndroidBuildEnvironment as (variant: string, config: unknown, marker: unknown) => void
 
     expect(() =>
       verify('release', productionConfig, {
@@ -87,5 +83,28 @@ describe('Android environment contract', () => {
         displayName: 'KOD',
       })
     ).toThrow(/debug.*localtest/i)
+
+    expect(() =>
+      verify(
+        'release',
+        { ...productionConfig, server: { ...productionConfig.server, url: 'https://example.com' } },
+        {
+          environment: 'production',
+          appId: 'com.kod.app',
+          displayName: 'KOD',
+        }
+      )
+    ).toThrow(/Capacitor server URL/i)
+    expect(() =>
+      verify(
+        'debug',
+        { ...localConfig, server: { ...localConfig.server, url: 'http://10.0.2.2:8080' } },
+        {
+          environment: 'localtest',
+          appId: 'com.kod.app.localtest',
+          displayName: 'KOD 鏈湴娴嬭瘯',
+        }
+      )
+    ).toThrow(/Capacitor server URL/i)
   })
 })

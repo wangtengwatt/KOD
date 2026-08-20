@@ -18,7 +18,6 @@ const environments = {
     androidScheme: 'http',
     cleartext: true,
     allowMixedContent: true,
-    url: 'http://10.0.2.2:8080',
   },
 }
 
@@ -30,6 +29,9 @@ export function verifyAndroidBuildEnvironment(variant, capacitorConfig, marker) 
   if (marker?.environment !== expectedEnvironment) {
     throw new Error(`${variant} builds require the ${expectedEnvironment} synchronized environment marker`)
   }
+  if (Object.prototype.hasOwnProperty.call(capacitorConfig?.server ?? {}, 'url')) {
+    throw new Error(`${variant} Capacitor server URL must be absent so the APK loads its bundled renderer`)
+  }
 
   const actual = {
     appId: capacitorConfig?.appId,
@@ -37,7 +39,6 @@ export function verifyAndroidBuildEnvironment(variant, capacitorConfig, marker) 
     androidScheme: capacitorConfig?.server?.androidScheme,
     cleartext: capacitorConfig?.server?.cleartext,
     allowMixedContent: capacitorConfig?.android?.allowMixedContent,
-    url: capacitorConfig?.server?.url,
   }
   for (const [key, value] of Object.entries(expected)) {
     if (key === 'variant') continue
