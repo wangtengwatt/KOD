@@ -32,6 +32,8 @@ Verified on 2026-08-21 (Asia/Shanghai) in Windows PowerShell, branch `feature/re
 
 `corepack pnpm run lint` also remains nonzero on the untouched repository baseline: 921 files checked, 13 errors and 1,009 warnings. Re-running with `--diagnostic-level=error --max-diagnostics=none` placed all 13 errors in unchanged files (`TopPSlider.tsx`, `SessionList.tsx`, `RemoteDialogWindow.tsx`, `ios_web_preview_init.ts`, `static/index.css`, and `chatboxai.ts`). The 11-file task-targeted Biome check is clean.
 
+A final post-commit full-suite run executed concurrently with the production build reproduced the six classified failures and also hit one Windows `EBUSY` while `store-node.test.ts` wrote its newly-created temporary `config.json` (154 files: 146 passed, 6 failed, 2 skipped; 1,456 tests passed, 7 failed, 54 skipped). Neither that test, `store-node.ts`, nor dependency/config files differ from `f97c615`. Two immediate isolated reruns of `store-node.test.ts` both passed 1/1, so this additional failure is a transient Windows file-lock baseline rather than a branch regression. The concurrent production build itself passed with the same 5,352/82/15,029 transformed-module counts and non-fatal baseline warnings described above.
+
 ## Independent cross-branch review repair
 
 The required read-only review covered client `f97c615..9cc3b8b` and backend `f37e8cb..efb43df`. It found one Critical and four Important gaps. Each was reproduced with a failing regression test before repair:
