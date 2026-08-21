@@ -126,6 +126,23 @@ Final client verification passes TypeScript, the two-file changed Biome check, a
 
 Both strict OpenSpec validations pass. The final client production-video, protected-price, and added-secret scans are zero, as are the backend realtime-price-file, video-production-file, and added-secret scans.
 
+## Eighth independent cross-branch review repair
+
+An eighth completely fresh read-only reviewer covered client `f97c615..45c63e9` and backend `f37e8cb..9c35364`; it did not inherit an earlier verdict. It reported no Critical findings and four Important findings. The repaired code heads are client `1b65586` and backend `c8dcade`:
+
+- card-hour listing creation now locks the seller's legacy and qualified wallets before its first source-lot `FOR UPDATE`, matching purchase, delivery, freeze, release, and expiry account-before-lot order;
+- registered email-invite participants are pre-resolved, sorted by user ID, locked together through the primary-key path, and revalidated from the locked rows. Reciprocal A-to-B and B-to-A invitation requests therefore cannot each hold their inviter row while waiting for the other target row;
+- the referral drawer partitions reward receipts by normalized identity, resets local form/mutation state on account changes, and binds invitation continuations to a render-synchronous identity epoch. A's receipt is not rendered in B and A's delayed success/error cannot clear or annotate B's form;
+- rewarded-ad claim completion revalidates the watch owner both after receipt invalidation and inside the deferred `onClaimed` continuation, so A's callback cannot refresh B after a mounted identity change.
+
+All four regressions were demonstrated red before production repair. The listing test recorded the old first wallet lock sequence as 58 after the first source-lot lock sequence 10. The referral test found no sorted participant lock query. The drawer test rendered `A reward receipt` after switching to B, and the rewarded-ad test observed one old-owner `onClaimed` call after releasing delayed invalidations. After repair, the backend focused market/referral set passes 20/20 and the two directly affected client component files pass 28/28.
+
+The complete 11-file client feature/video command passes 126/126 tests. `corepack pnpm run check` passes. The production build passes after transforming 5,352 main, 82 preload, and 15,029 renderer modules, with only the documented non-fatal baseline warnings. The final full client run contains 154 files: 147 passed, 5 failed, 2 skipped; 1,531 tests: 1,471 passed, the same 6 classified baseline failures, and 54 skipped. None of the failing tests or their production/configuration/dependency files changed in this repair.
+
+The four-file changed-client Biome check exits 0; the only diagnostic is the pre-existing `useConst` warning in an unchanged `RewardedVideoCard.tsx` line. Full Biome checks 921 files and remains the exact 13-error baseline in the same six unchanged files. The paired backend full suite passes 142/142 with no failures, errors, or skips; packaging passes and produces a 121,129,159-byte JAR. Both strict OpenSpec validations pass.
+
+Final range scans report zero client production video-sensitive added lines, zero protected realtime-price added lines, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files. `git diff --check f97c615 --` and `git diff --check f37e8cb --` both pass.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
