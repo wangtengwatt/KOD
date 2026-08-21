@@ -1320,12 +1320,22 @@ export function createTestComputeIdentity() {
   return request<ComputeIdentity>('/api/compute/identity/test', { method: 'POST' })
 }
 
-export async function submitComputeIdentity(input: { realName: string; identityNo: string; front: File; back: File }) {
+type CurrentOwnerGuard = () => boolean
+
+function requireCurrentOwner(isCurrentOwner?: CurrentOwnerGuard) {
+  if (isCurrentOwner && !isCurrentOwner()) throw new Error('账户已切换，已取消旧账户操作')
+}
+
+export async function submitComputeIdentity(
+  input: { realName: string; identityNo: string; front: File; back: File },
+  isCurrentOwner?: CurrentOwnerGuard
+) {
   const submit = async (maxBytes: number) => {
     const [front, back] = await Promise.all([
       prepareComputeImageUpload(input.front, maxBytes),
       prepareComputeImageUpload(input.back, maxBytes),
     ])
+    requireCurrentOwner(isCurrentOwner)
     const body = new FormData()
     body.append('realName', input.realName)
     body.append('identityNo', input.identityNo)
@@ -1359,11 +1369,12 @@ export interface ComputeNodeInput {
   resourceProof: File | null
 }
 
-export async function createSupplierNode(input: ComputeNodeInput) {
+export async function createSupplierNode(input: ComputeNodeInput, isCurrentOwner?: CurrentOwnerGuard) {
   const { resourceProof, ...payload } = input
   if (!resourceProof) throw new Error('请上传 GPU 资源证明图片')
   const submit = async (maxBytes: number) => {
     const proof = await prepareComputeImageUpload(resourceProof, maxBytes)
+    requireCurrentOwner(isCurrentOwner)
     const body = new FormData()
     body.append('payload', JSON.stringify(payload))
     body.append('resourceProof', proof)
@@ -1412,12 +1423,19 @@ export interface ComputeProductInput {
   upstreamKeyId?: number
 }
 
-export async function createSupplierGpuProduct(input: ComputeProductInput, images: File[] = []) {
+export async function createSupplierGpuProduct(
+  input: ComputeProductInput,
+  images: File[] = [],
+  isCurrentOwner?: CurrentOwnerGuard
+) {
+  requireCurrentOwner(isCurrentOwner)
   const product = await request<ComputeProduct>('/api/compute/supplier/products', { method: 'POST', body: input })
+  requireCurrentOwner(isCurrentOwner)
   for (const image of images) {
     const uploadImage = async (maxBytes: number) => {
       const body = new FormData()
       body.append('image', await prepareComputeImageUpload(image, maxBytes))
+      requireCurrentOwner(isCurrentOwner)
       return request<{ imageId: number; productId: number }>(`/api/compute/supplier/products/${product.id}/images`, {
         method: 'POST',
         body,

@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ ofetch: vi.fn() }))
+const mocks = vi.hoisted(() => ({ ofetch: vi.fn(), prepareComputeImageUpload: vi.fn() }))
 
 vi.mock('ofetch', () => ({ ofetch: mocks.ofetch }))
 vi.mock('@/packages/remote', () => ({ getKodApiOrigin: () => 'https://kod.test' }))
+vi.mock('@/packages/computeImageUpload', () => ({
+  COMPUTE_IMAGE_UPLOAD_MAX_BYTES: 800_000,
+  COMPUTE_IMAGE_UPLOAD_RETRY_BYTES: 500_000,
+  isComputeUploadSizeExceeded: () => false,
+  prepareComputeImageUpload: mocks.prepareComputeImageUpload,
+}))
 vi.mock('@/stores/authInfoStore', () => ({
   authInfoStore: { getState: () => ({ accessToken: 'test-access-token' }) },
 }))
@@ -11,6 +17,8 @@ vi.mock('@/stores/authInfoStore', () => ({
 import {
   ComputeAccountSchema,
   createEmailInvitation,
+  createSupplierGpuProduct,
+  createSupplierNode,
   EmailInvitationSchema,
   getComputeAccount,
   listEmailInvitations,
@@ -20,6 +28,7 @@ import {
   PlatformServerSkuSchema,
   rentPlatformServer,
   setLeaseAutoRenew,
+  submitComputeIdentity,
 } from './computeCenter'
 
 const pendingInvitation = {
@@ -294,5 +303,87 @@ describe('reward referral and platform hosting contracts', () => {
         headers: { Authorization: 'Bearer test-access-token' },
       })
     )
+  })
+})
+
+describe('multi-stage compute uploads remain account-owned', () => {
+  beforeEach(() => {
+    mocks.ofetch.mockReset()
+    mocks.prepareComputeImageUpload.mockReset()
+  })
+
+  it.each([
+    [
+      'identity',
+      2,
+      (file: File, isCurrentOwner: () => boolean) =>
+        submitComputeIdentity({ realName: 'A', identityNo: 'ID-A', front: file, back: file }, isCurrentOwner),
+    ],
+    [
+      'supplier node',
+      1,
+      (file: File, isCurrentOwner: () => boolean) =>
+        createSupplierNode(
+          {
+            nodeName: 'A node',
+            region: 'cn',
+            gpuModel: 'H100',
+            gpuMemoryGb: 80,
+            gpuCount: 1,
+            cpuDescription: 'cpu',
+            ramGb: 64,
+            storageGb: 1024,
+            networkDescription: 'network',
+            resourceProof: file,
+          },
+          isCurrentOwner
+        ),
+    ],
+  ])(
+    'does not submit %s material after the owner changes during image preparation',
+    async (_name, prepareCount, submit) => {
+      const releases: Array<(file: File) => void> = []
+      mocks.prepareComputeImageUpload.mockImplementation(
+        () =>
+          new Promise<File>((resolve) => {
+            releases.push(resolve)
+          })
+      )
+      let current = true
+      const file = new File(['a'], 'a.png', { type: 'image/png' })
+
+      const pending = submit(file, () => current)
+      await vi.waitFor(() => expect(mocks.prepareComputeImageUpload).toHaveBeenCalledTimes(prepareCount))
+      current = false
+      releases.forEach((release) => release(file))
+
+      await expect(pending).rejects.toThrow('账户已切换')
+      expect(mocks.ofetch).not.toHaveBeenCalled()
+    }
+  )
+
+  it('does not upload product images with a new owner after product creation', async () => {
+    mocks.ofetch.mockResolvedValueOnce({ code: 0, data: { id: 77 } })
+    let release: ((file: File) => void) | undefined
+    mocks.prepareComputeImageUpload.mockImplementation(
+      () =>
+        new Promise<File>((resolve) => {
+          release = resolve
+        })
+    )
+    let current = true
+    const file = new File(['a'], 'a.png', { type: 'image/png' })
+
+    const pending = createSupplierGpuProduct(
+      { name: 'A product', description: '', region: 'cn' },
+      [file],
+      () => current
+    )
+    await vi.waitFor(() => expect(mocks.prepareComputeImageUpload).toHaveBeenCalledTimes(1))
+    current = false
+    release?.(file)
+
+    await expect(pending).rejects.toThrow('账户已切换')
+    expect(mocks.ofetch).toHaveBeenCalledTimes(1)
   })
 })

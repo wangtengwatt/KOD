@@ -2435,7 +2435,11 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                   if (!identityFront || !identityBack) return
                   return run(
                     'identity-submit',
-                    () => submitComputeIdentity({ realName, identityNo, front: identityFront, back: identityBack }),
+                    (isCurrentOwner) =>
+                      submitComputeIdentity(
+                        { realName, identityNo, front: identityFront, back: identityBack },
+                        isCurrentOwner
+                      ),
                     '实名认证已提交审核'
                   )
                 }}
@@ -2605,7 +2609,13 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                   mt="md"
                   loading={busy === 'supplier-node'}
                   disabled={!node.nodeName.trim() || !node.resourceProof}
-                  onClick={() => run('supplier-node', () => createSupplierNode(node), 'GPU 资源资质已提交审核')}
+                  onClick={() =>
+                    run(
+                      'supplier-node',
+                      (isCurrentOwner) => createSupplierNode(node, isCurrentOwner),
+                      'GPU 资源资质已提交审核'
+                    )
+                  }
                 >
                   提交资源审核
                 </Button>
@@ -2726,7 +2736,7 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                   onClick={() =>
                     run(
                       'supplier-product',
-                      () => createSupplierGpuProduct(gpu, productImages),
+                      (isCurrentOwner) => createSupplierGpuProduct(gpu, productImages, isCurrentOwner),
                       'GPU 固定套餐已提交审核'
                     )
                   }
