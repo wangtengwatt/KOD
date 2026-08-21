@@ -1,4 +1,5 @@
 import { type FetchOptions, ofetch } from 'ofetch'
+import { z } from 'zod'
 import {
   COMPUTE_IMAGE_UPLOAD_MAX_BYTES,
   COMPUTE_IMAGE_UPLOAD_RETRY_BYTES,
@@ -313,6 +314,79 @@ export interface ComputeReferralReward {
   cancelReason?: string
   createTime: string
 }
+
+const contractDecimalPattern = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/
+const contractDecimalWire = z.union([z.number().finite(), z.string().regex(contractDecimalPattern)])
+const contractNonnegativeDecimal = contractDecimalWire
+  .transform((value) => Number(value))
+  .pipe(z.number().finite().nonnegative())
+const contractLongId = z
+  .union([z.string().regex(/^[1-9]\d*$/), z.number().int().positive().safe()])
+  .transform((value) => String(value))
+const contractDateTime = z.string().min(1)
+
+export const EmailInvitationSchema = z.object({
+  id: contractLongId,
+  inviterUserId: contractLongId,
+  email: z.string().min(1),
+  inviteCode: z.string().min(1),
+  inviteeUserId: contractLongId.nullable(),
+  status: z.enum(['PENDING', 'ACCEPTED', 'FAILED', 'EXPIRED']),
+  failureReason: z.string(),
+  createdAt: contractDateTime,
+  acceptedAt: contractDateTime.nullable(),
+  expiresAt: contractDateTime,
+  registrationLink: z.string().min(1),
+})
+export type EmailInvitation = z.infer<typeof EmailInvitationSchema>
+
+const EmailInvitationReceiptSchema = z.object({ acknowledgment: z.string().min(1) })
+
+export const PlatformServerSkuSchema = z.object({
+  id: contractLongId,
+  skuCode: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string(),
+  region: z.string().min(1),
+  gpuModel: z.string().min(1),
+  gpuMemoryGb: z.number().int().nonnegative(),
+  gpuCount: z.number().int().positive(),
+  cpuDescription: z.string(),
+  ramGb: z.number().int().nonnegative(),
+  storageGb: z.number().int().nonnegative(),
+  networkDescription: z.string(),
+  monthlyRent: contractNonnegativeDecimal,
+  platformSalePrice: contractNonnegativeDecimal,
+  packageDurationHours: z.number().int().positive(),
+  deliveryDeadlineHours: z.number().int().nonnegative(),
+  totalInventory: z.number().int().nonnegative(),
+  availableInventory: z.number().int().nonnegative(),
+  status: z.literal('ACTIVE'),
+})
+export type PlatformServerSku = z.infer<typeof PlatformServerSkuSchema>
+
+export const PlatformServerLeaseSchema = z.object({
+  id: contractLongId,
+  leaseNo: z.string().min(1),
+  userId: contractLongId,
+  skuId: contractLongId,
+  requestId: z.string().min(1),
+  hostedNodeId: contractLongId,
+  productId: contractLongId,
+  monthlyRent: contractNonnegativeDecimal,
+  salePrice: contractNonnegativeDecimal,
+  status: z.enum(['ACTIVE', 'STOPPING', 'RELEASED']),
+  autoRenew: z.boolean(),
+  startedAt: contractDateTime,
+  expiresAt: contractDateTime,
+  stoppingAt: contractDateTime.nullable(),
+  releasedAt: contractDateTime.nullable(),
+  renewalCount: z.number().int().nonnegative(),
+})
+export type PlatformServerLease = z.infer<typeof PlatformServerLeaseSchema>
+
+const EmailInvitationListSchema = z.array(EmailInvitationSchema)
+const PlatformServerSkuListSchema = z.array(PlatformServerSkuSchema)
 
 export type CardHourAssetType = 'STANDARD' | 'SPECIFIC'
 export type CardHourMarketType = 'PRIMARY_SALE' | 'IDLE_TRANSFER' | 'RFQ'
@@ -752,6 +826,55 @@ export function bindComputeReferral(inviteCode: string, deviceId: string) {
 
 export function listComputeReferralRewards() {
   return request<ComputeReferralReward[]>('/api/compute/referrals/rewards')
+}
+
+function localDateTime(date: Date) {
+  const pad = (value: number, width = 2) => String(value).padStart(width, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
+}
+
+export function createEmailInvitation(email: string, requestId: string) {
+  return request<unknown>('/api/compute/referrals/email-invites', {
+    method: 'POST',
+    body: { email },
+    headers: { 'Idempotency-Key': requestId },
+    retry: 0,
+  }).then((data) => EmailInvitationReceiptSchema.parse(data))
+}
+
+export function listEmailInvitations(days = 90) {
+  const to = new Date()
+  const from = new Date(to)
+  from.setDate(from.getDate() - days)
+  const search = new URLSearchParams({ from: localDateTime(from), to: localDateTime(to) })
+  return request<unknown>(`/api/compute/referrals/email-invites?${search.toString()}`).then((data) =>
+    EmailInvitationListSchema.parse(data)
+  )
+}
+
+export function listPlatformServerSkus() {
+  return request<unknown>('/api/compute/platform-hosting/skus', undefined, false).then((data) =>
+    PlatformServerSkuListSchema.parse(data)
+  )
+}
+
+export function rentPlatformServer(skuId: string, requestId: string) {
+  return request<unknown>('/api/compute/platform-hosting/leases', {
+    method: 'POST',
+    body: { skuId, requestId },
+    retry: 0,
+  }).then((data) => PlatformServerLeaseSchema.parse(data))
+}
+
+export function setLeaseAutoRenew(leaseId: string, enabled: boolean, requestId: string) {
+  return request<unknown>(`/api/compute/platform-hosting/leases/${encodeURIComponent(leaseId)}/auto-renew`, {
+    method: 'POST',
+    body: { enabled },
+    headers: { 'Idempotency-Key': requestId },
+    retry: 0,
+  }).then((data) => PlatformServerLeaseSchema.parse(data))
 }
 
 export function listCardHourMarketListings() {

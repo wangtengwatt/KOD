@@ -89,34 +89,41 @@ export const WalletSchema = WalletWireSchema.transform((value) => ({
   historicalConsumption: decimalNumber.parse(value.historical_consumption),
 }))
 
-export const CardTimeAccountWireSchema = z
-  .object({
-    available_card_hours: decimalWire.optional(),
-    availableCardHours: decimalWire.optional(),
-  })
-  .superRefine((value, context) => {
-    if (value.available_card_hours === undefined && value.availableCardHours === undefined) {
-      context.addIssue({ code: 'custom', path: ['available_card_hours'], message: 'available card hours is required' })
-    }
-    if (
-      value.available_card_hours !== undefined &&
-      value.availableCardHours !== undefined &&
-      Number(value.available_card_hours) !== Number(value.availableCardHours)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        path: ['available_card_hours'],
-        message: 'available card hour fields must match',
-      })
-    }
-  })
-  .transform((value) => ({
-    available_card_hours: decimalWire.parse(value.available_card_hours ?? value.availableCardHours),
-  }))
-export const CardTimeAccountSchema = CardTimeAccountWireSchema.transform((value) => ({
-  availableCardHours: nonnegativeNumber.parse(value.available_card_hours),
-}))
-export type CardTimeAccount = z.infer<typeof CardTimeAccountSchema>
+const snakeCaseCardHourAccountSchema = z.object({
+  spendable_card_hours: decimalWire,
+  redeemable_card_hours: decimalWire,
+  reward_card_hours: decimalWire,
+})
+const camelCaseCardHourAccountSchema = z.object({
+  spendableCardHours: decimalWire,
+  redeemableCardHours: decimalWire,
+  rewardCardHours: decimalWire,
+})
+
+export const CardHourAccountWireSchema = z
+  .union([snakeCaseCardHourAccountSchema, camelCaseCardHourAccountSchema])
+  .transform((value) =>
+    'spendable_card_hours' in value
+      ? {
+          spendableCardHours: value.spendable_card_hours,
+          redeemableCardHours: value.redeemable_card_hours,
+          rewardCardHours: value.reward_card_hours,
+        }
+      : value
+  )
+export const CardHourAccountSchema = CardHourAccountWireSchema.transform((value) => ({
+  availableCardHours: nonnegativeNumber.parse(value.spendableCardHours),
+  spendableCardHours: nonnegativeNumber.parse(value.spendableCardHours),
+  redeemableCardHours: nonnegativeNumber.parse(value.redeemableCardHours),
+  rewardCardHours: nonnegativeNumber.parse(value.rewardCardHours),
+})).refine((value) => value.spendableCardHours <= value.redeemableCardHours + value.rewardCardHours + 1e-9, {
+  message: 'spendable card hours cannot exceed qualified card hours',
+})
+export type CardHourBalances = z.infer<typeof CardHourAccountSchema>
+
+export const CardTimeAccountWireSchema = CardHourAccountWireSchema
+export const CardTimeAccountSchema = CardHourAccountSchema
+export type CardTimeAccount = CardHourBalances
 
 export const RewardedAdStatusWireSchema = z
   .object({

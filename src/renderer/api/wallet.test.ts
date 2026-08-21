@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getKodApiOrigin } from '@/packages/kodApiOrigin'
 import { authInfoStore } from '@/stores/authInfoStore'
 import {
+  CardHourAccountSchema,
   CardTimeAccountSchema,
   PayMethodSchema,
   RewardedAdClaimSchema,
@@ -374,9 +375,45 @@ describe('wallet contracts', () => {
     await expect(walletApi.pay(10, 'alipay')).rejects.toBeInstanceOf(WalletApiError)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
-  it('accepts snake_case and camelCase card-time balances', () => {
-    expect(CardTimeAccountSchema.parse({ available_card_hours: '1.25' })).toEqual({ availableCardHours: 1.25 })
-    expect(CardTimeAccountSchema.parse({ availableCardHours: 2 })).toEqual({ availableCardHours: 2 })
+  it('keeps reward hours out of redeemable hours for snake_case and camelCase accounts', () => {
+    expect(
+      CardHourAccountSchema.parse({
+        spendable_card_hours: '100.000',
+        redeemable_card_hours: '90.000',
+        reward_card_hours: '10.000',
+      })
+    ).toEqual({
+      availableCardHours: 100,
+      spendableCardHours: 100,
+      redeemableCardHours: 90,
+      rewardCardHours: 10,
+    })
+    expect(
+      CardTimeAccountSchema.parse({ spendableCardHours: 2, redeemableCardHours: '1.25', rewardCardHours: '0.75' })
+    ).toEqual({ availableCardHours: 2, spendableCardHours: 2, redeemableCardHours: 1.25, rewardCardHours: 0.75 })
+  })
+  it('accepts frozen hours while rejecting malformed or impossible card-hour balances', () => {
+    expect(
+      CardHourAccountSchema.parse({
+        spendable_card_hours: '95.000',
+        redeemable_card_hours: '90.000',
+        reward_card_hours: '10.000',
+      })
+    ).toEqual({ availableCardHours: 95, spendableCardHours: 95, redeemableCardHours: 90, rewardCardHours: 10 })
+    expect(() =>
+      CardHourAccountSchema.parse({
+        spendable_card_hours: '100.000',
+        redeemable_card_hours: '90,000',
+        reward_card_hours: '10.000',
+      })
+    ).toThrow()
+    expect(() =>
+      CardHourAccountSchema.parse({
+        spendable_card_hours: '101.000',
+        redeemable_card_hours: '90.000',
+        reward_card_hours: '10.000',
+      })
+    ).toThrow()
   })
   it('parses rewarded-ad status and claim decimal wire values', () => {
     const apiOrigin = getKodApiOrigin()
