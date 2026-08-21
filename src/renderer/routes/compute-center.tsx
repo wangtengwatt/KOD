@@ -160,7 +160,11 @@ export const Route = createFileRoute('/compute-center')({
   validateSearch: zodValidator(computeSearchSchema),
 })
 
-type RunAction = (key: string, action: () => Promise<unknown>, success: string) => Promise<boolean>
+type RunAction = (
+  key: string,
+  action: (isCurrentOwner: () => boolean) => Promise<unknown>,
+  success: string
+) => Promise<boolean>
 type RunCardHourAction = (
   key: string,
   action: (autoTopUp: boolean) => Promise<unknown>,
@@ -272,18 +276,24 @@ export function ComputeCenterPage() {
   }, [computeQueryKey, isLoggedIn, queryClient])
 
   const run: RunAction = async (key, action, success) => {
+    const ownerIdentity = identity
+    const isCurrentOwner = () => currentIdentityRef.current === ownerIdentity
+    if (!ownerIdentity || !isCurrentOwner()) return false
     setBusy(key)
     setMessage(null)
     try {
-      await action()
+      await action(isCurrentOwner)
+      if (!isCurrentOwner()) return false
       setMessage({ color: 'green', text: success })
       await queryClient.invalidateQueries({ queryKey: computeQueryKey() })
+      if (!isCurrentOwner()) return false
       return true
     } catch (error) {
+      if (!isCurrentOwner()) return false
       setMessage({ color: 'red', text: error instanceof Error ? error.message : '操作失败' })
       return false
     } finally {
-      setBusy(null)
+      if (isCurrentOwner()) setBusy(null)
     }
   }
 
@@ -395,8 +405,9 @@ export function ComputeCenterPage() {
               if (!search.invite) return
               void run(
                 'referral-bind',
-                async () => {
+                async (isCurrentOwner) => {
                   const config = await platform.getConfig()
+                  if (!isCurrentOwner()) return
                   await bindComputeReferral(search.invite || '', config.uuid)
                 },
                 '邀请关系绑定成功'

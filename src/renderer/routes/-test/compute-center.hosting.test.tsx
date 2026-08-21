@@ -8,16 +8,21 @@ import type { ComputeAccount, ComputeGpuNode, ComputeProduct, PlatformServerSku 
 
 const mocks = vi.hoisted(() => ({
   activateComputeApi: vi.fn(),
+  bindComputeReferral: vi.fn(),
   getComputeAccount: vi.fn(),
   getComputeConfig: vi.fn(),
   getComputeIdentity: vi.fn(),
+  previewComputeReferral: vi.fn(),
   getComputeSupplier: vi.fn(),
   listComputeProducts: vi.fn(),
   listPlatformServerLeases: vi.fn(),
   listPlatformServerSkus: vi.fn(),
   listSupplierNodes: vi.fn(),
   listSupplierProducts: vi.fn(),
+  platformGetConfig: vi.fn(),
 }))
+
+const routeSearch = vi.hoisted(() => ({ current: {} as { invite?: string } }))
 
 const auth = vi.hoisted(() => {
   type AuthState = { accessToken: string; refreshToken: string; loginEmail: string }
@@ -46,7 +51,7 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
     ...original,
     createFileRoute: () => (options: Record<string, unknown>) => ({
       ...options,
-      useSearch: () => ({}),
+      useSearch: () => routeSearch.current,
     }),
     useNavigate: () => vi.fn(),
   }
@@ -74,14 +79,30 @@ vi.mock('@/stores/authInfoStore', async () => {
       useSyncExternalStore(auth.subscribe, () => selector(auth.getState())),
   }
 })
+vi.mock('@/platform', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/platform')>()
+  return {
+    ...original,
+    default: {
+      ...original.default,
+      type: 'desktop',
+      getConfig: mocks.platformGetConfig,
+      getPlatform: vi.fn().mockResolvedValue('win32'),
+      isFullscreen: vi.fn().mockResolvedValue(false),
+      openLink: vi.fn(),
+    },
+  }
+})
 vi.mock('@/packages/computeCenter', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/packages/computeCenter')>()
   return {
     ...original,
     activateComputeApi: mocks.activateComputeApi,
+    bindComputeReferral: mocks.bindComputeReferral,
     getComputeAccount: mocks.getComputeAccount,
     getComputeConfig: mocks.getComputeConfig,
     getComputeIdentity: mocks.getComputeIdentity,
+    previewComputeReferral: mocks.previewComputeReferral,
     getComputeSupplier: mocks.getComputeSupplier,
     listComputeProducts: mocks.listComputeProducts,
     listPlatformServerLeases: mocks.listPlatformServerLeases,
@@ -194,6 +215,7 @@ const supplierNodes = [
 
 beforeEach(() => {
   vi.clearAllMocks()
+  routeSearch.current = {}
   auth.setState({
     accessToken: 'test-token',
     refreshToken: 'test-refresh-token',
@@ -201,6 +223,13 @@ beforeEach(() => {
   })
   mocks.getComputeAccount.mockResolvedValue(account)
   mocks.getComputeIdentity.mockResolvedValue({ status: 'APPROVED', verificationType: 'REAL' })
+  mocks.previewComputeReferral.mockResolvedValue({
+    inviteCode: 'INVITE-A',
+    inviterEmail: 'inviter@example.com',
+    canBind: true,
+    reason: '',
+  })
+  mocks.platformGetConfig.mockResolvedValue({ uuid: 'device-a' })
   mocks.getComputeSupplier.mockResolvedValue({ status: 'APPROVED', displayName: 'Test supplier' })
   mocks.getComputeConfig.mockResolvedValue({
     cardHourCnyRate: 1,
@@ -362,4 +391,42 @@ it('discards a delayed card-hour top-up quote when the authenticated account cha
   })
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(mocks.activateComputeApi).toHaveBeenCalledTimes(1)
+})
+
+it('does not bind an old invitation with the new account after a mounted account switch', async () => {
+  routeSearch.current = { invite: 'INVITE-A' }
+  let resolveConfig: ((config: { uuid: string }) => void) | undefined
+  mocks.platformGetConfig.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveConfig = resolve
+      })
+  )
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MantineProvider>
+        <ComputeCenterPage />
+      </MantineProvider>
+    </QueryClientProvider>
+  )
+
+  const confirm = await screen.findByRole('button', { name: '确认绑定' })
+  await waitFor(() => expect(confirm.hasAttribute('disabled')).toBe(false))
+  fireEvent.click(confirm)
+  await waitFor(() => expect(mocks.platformGetConfig).toHaveBeenCalledTimes(1))
+  act(() => {
+    auth.setState({
+      accessToken: 'second-token',
+      refreshToken: 'second-refresh-token',
+      loginEmail: 'second@example.com',
+    })
+  })
+  await act(async () => {
+    resolveConfig?.({ uuid: 'device-a' })
+    await Promise.resolve()
+  })
+
+  expect(mocks.bindComputeReferral).not.toHaveBeenCalled()
+  expect(screen.queryByText('邀请关系绑定成功')).toBeNull()
 })
