@@ -9,9 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
-import { JK_PAGE_NAMES } from '@/analytics/jk-events'
 import { BalanceInsufficientToast } from '@/components/BalanceInsufficientToast'
-import { ChatboxWelcomeCard } from '@/components/common/ChatboxWelcomeCard'
 import { MessageLayoutSelector } from '@/components/common/MessageLayoutPreview'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
 import { ImageInStorage } from '@/components/Image'
@@ -22,7 +20,6 @@ import { RelayNoticeToast } from '@/components/RelayNoticeToast'
 import { RelayStationSelector } from '@/components/RelayStationSelector'
 import { useMyCopilots, useRemoteCopilotsByCursor } from '@/hooks/useCopilots'
 import { useKodRelay } from '@/hooks/useKodRelay'
-import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { navigateToSettings } from '@/modals/Settings'
 import * as remote from '@/packages/remote'
@@ -33,7 +30,6 @@ import { submitNewUserMessage, switchCurrentSession } from '@/stores/sessionActi
 import { initEmptyChatSession } from '@/stores/sessionHelpers'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
-import { getHomeWelcomeCardMode } from '@/utils/homeWelcomeCard'
 
 export const Route = createFileRoute('/')({
   component: Index,
@@ -66,15 +62,8 @@ function Index() {
     ...initEmptyChatSession(),
   })
 
-  const { providers } = useProviders()
   const relay = useKodRelay()
-  const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
-  const hasExpiredLicense = useSettingsStore((s) => s.hasExpiredLicense)
   const isLoggedIn = useAuthInfoStore((s) => Boolean(s.accessToken && s.refreshToken))
-  const welcomeCardMode = useMemo(
-    () => getHomeWelcomeCardMode({ providerCount: providers.length, isLoggedIn, hasLicense, hasExpiredLicense }),
-    [providers.length, isLoggedIn, hasLicense, hasExpiredLicense]
-  )
 
   const selectedModel = useMemo(() => {
     if (session.settings?.provider && session.settings?.modelId) {
@@ -244,7 +233,7 @@ function Index() {
   return (
     <Page title="">
       <div className="p-0 flex flex-col h-full">
-        {messageLayout || welcomeCardMode !== 'none' ? (
+        {messageLayout ? (
           <Stack align="center" justify="center" gap="sm" flex={1}>
             <HomepageIcon className="h-8" />
             <Text fw="600" size={isSmallScreen ? 'sm' : 'md'}>
@@ -301,16 +290,6 @@ function Index() {
               </Button>
             </Stack>
           </Stack>
-        )}
-
-        {welcomeCardMode !== 'none' && (
-          <Box px="sm">
-            <ChatboxWelcomeCard
-              mode={welcomeCardMode}
-              pageName={JK_PAGE_NAMES.CHAT_PAGE}
-              className={clsx('mb-md', widthFull ? 'w-full' : 'w-full max-w-4xl mx-auto')}
-            />
-          </Box>
         )}
 
         <Stack gap="sm">

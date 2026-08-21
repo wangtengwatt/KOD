@@ -172,7 +172,13 @@ export default function Sidebar() {
           </Flex>
 
           <Tooltip label={t('Collapse')} openDelay={1000} withArrow>
-            <ActionIcon variant="subtle" color="chatbox-tertiary" size={20} onClick={() => setShowSidebar(false)}>
+            <ActionIcon
+              variant="subtle"
+              color="chatbox-tertiary"
+              size={isSmallScreen ? 44 : 36}
+              aria-label={t('Collapse')}
+              onClick={() => setShowSidebar(false)}
+            >
               <IconLayoutSidebarLeftCollapse />
             </ActionIcon>
           </Tooltip>
@@ -219,31 +225,49 @@ export default function Sidebar() {
 
         <SidebarUpdateBanner />
 
-        <Stack gap={0} px="xs" pb="xs">
+        <Stack className="sidebar-footer" gap={0} px="sm" pb="sm">
           <Divider />
-          <Stack gap="xs" pt="xs" mb="xs">
+          <Stack className="sidebar-create-group" gap="xs" pt="sm">
             {sidebarMode === 'task' && featureFlags.taskMode ? (
-              <Button variant="light" fullWidth onClick={handleCreateNewTask}>
-                <ScalableIcon icon={IconCirclePlus} className="mr-2" />
+              <Button
+                className="sidebar-create-button sidebar-create-button-primary"
+                variant="light"
+                fullWidth
+                onClick={handleCreateNewTask}
+              >
+                <ScalableIcon icon={IconCirclePlus} size={18} className="mr-2" />
                 {t('New Task')}
               </Button>
             ) : (
               <>
-                <Button variant="light" fullWidth data-testid="new-chat-button" onClick={handleCreateNewSession}>
-                  <ScalableIcon icon={IconCirclePlus} className="mr-2" />
+                <Button
+                  className="sidebar-create-button sidebar-create-button-primary"
+                  variant="light"
+                  fullWidth
+                  data-testid="new-chat-button"
+                  onClick={handleCreateNewSession}
+                >
+                  <ScalableIcon icon={IconCirclePlus} size={18} className="mr-2" />
                   {t('New Chat')}
                 </Button>
                 <Button
+                  className="sidebar-create-button"
                   variant="light"
                   fullWidth
                   data-testid="new-image-button"
                   onClick={handleCreateNewPictureSession}
                 >
-                  <ScalableIcon icon={IconPhotoPlus} className="mr-2" />
+                  <ScalableIcon icon={IconPhotoPlus} size={18} className="mr-2" />
                   {t('Create Image')}
                 </Button>
-                <Button variant="light" fullWidth data-testid="new-video-button" onClick={handleCreateNewVideoSession}>
-                  <ScalableIcon icon={IconVideoPlus} className="mr-2" />
+                <Button
+                  className="sidebar-create-button"
+                  variant="light"
+                  fullWidth
+                  data-testid="new-video-button"
+                  onClick={handleCreateNewVideoSession}
+                >
+                  <ScalableIcon icon={IconVideoPlus} size={18} className="mr-2" />
                   生成视频
                 </Button>
               </>
@@ -251,26 +275,28 @@ export default function Sidebar() {
           </Stack>
 
           {isSmallScreen ? (
-            <Flex gap="md" align="center">
-              <NavLink
-                c="chatbox-secondary"
-                className="rounded"
-                label={t('My Copilots')}
-                leftSection={<ScalableIcon icon={IconMessageChatbot} size={20} />}
+            <Flex className="sidebar-mobile-nav" gap="xs" align="center" justify="space-between" mt="md">
+              <ActionIcon
+                className="sidebar-mobile-action"
+                variant="transparent"
+                color="chatbox-secondary"
+                size={44}
+                aria-label={t('My Copilots')}
                 onClick={() => {
                   navigate({
                     to: '/copilots',
                   })
                   setShowSidebar(false)
                 }}
-                variant="light"
-                p="xs"
-              />
+              >
+                <ScalableIcon icon={IconMessageChatbot} size={20} />
+              </ActionIcon>
 
               <ActionIcon
+                className="sidebar-mobile-action"
                 variant="transparent"
                 color="chatbox-secondary"
-                size={24}
+                size={44}
                 aria-label="算力中心"
                 onClick={() => {
                   navigate({ to: '/compute-center' })
@@ -281,9 +307,11 @@ export default function Sidebar() {
               </ActionIcon>
 
               <ActionIcon
+                className="sidebar-mobile-action"
                 variant="transparent"
                 color="chatbox-secondary"
-                size={24}
+                size={44}
+                aria-label={t('Settings')}
                 onClick={() => {
                   navigateToSettings()
                   setShowSidebar(false)
@@ -296,41 +324,51 @@ export default function Sidebar() {
             </Flex>
           ) : (
             <>
-              <NavLink
-                c="chatbox-secondary"
-                className="rounded"
-                label={t('My Copilots')}
-                leftSection={<ScalableIcon icon={IconMessageChatbot} size={20} />}
-                onClick={() => {
-                  navigate({
-                    to: '/copilots',
-                  })
-                  if (isSmallScreen) {
-                    setShowSidebar(false)
-                  }
-                }}
-                variant="light"
-                p="xs"
-              />
-              <NavLink
-                c="chatbox-secondary"
-                className="rounded"
-                label="算力中心"
-                leftSection={<ScalableIcon icon={IconCpu} size={20} />}
-                onClick={() => navigate({ to: '/compute-center' })}
-                variant="light"
-                p="xs"
-              />
-              <NavLink
-                c="chatbox-secondary"
-                className="rounded"
-                label={t('Settings')}
-                leftSection={<ScalableIcon icon={IconSettingsFilled} size={20} />}
-                onClick={() => navigateToSettings()}
-                variant="light"
-                p="xs"
-              />
-              <AboutNavLink versionHook={versionHook} navigate={navigate} />
+              <Stack className="sidebar-nav-group" gap="xs" mt="md">
+                <NavLink
+                  component="button"
+                  type="button"
+                  c="chatbox-secondary"
+                  className="sidebar-nav-item"
+                  label={t('My Copilots')}
+                  leftSection={<ScalableIcon icon={IconMessageChatbot} size={20} />}
+                  onClick={() => {
+                    navigate({
+                      to: '/copilots',
+                    })
+                    if (isSmallScreen) {
+                      setShowSidebar(false)
+                    }
+                  }}
+                  variant="light"
+                  p="xs"
+                />
+                <NavLink
+                  component="button"
+                  type="button"
+                  c="chatbox-secondary"
+                  className="sidebar-nav-item"
+                  label="算力中心"
+                  leftSection={<ScalableIcon icon={IconCpu} size={20} />}
+                  onClick={() => navigate({ to: '/compute-center' })}
+                  variant="light"
+                  p="xs"
+                />
+              </Stack>
+              <Stack className="sidebar-system-group" gap="xs" mt="md">
+                <NavLink
+                  component="button"
+                  type="button"
+                  c="chatbox-secondary"
+                  className="sidebar-nav-item"
+                  label={t('Settings')}
+                  leftSection={<ScalableIcon icon={IconSettingsFilled} size={20} />}
+                  onClick={() => navigateToSettings()}
+                  variant="light"
+                  p="xs"
+                />
+                <AboutNavLink versionHook={versionHook} navigate={navigate} />
+              </Stack>
             </>
           )}
         </Stack>
@@ -422,8 +460,10 @@ function AboutNavLink({
 
   return (
     <NavLink
-      c="chatbox-tertiary"
-      className="rounded"
+      component="button"
+      type="button"
+      c="chatbox-secondary"
+      className="sidebar-nav-item"
       label={
         <Flex align="center" gap={6}>
           <span>{`${t('About')} ${/\d/.test(versionHook.version) ? `(${versionHook.version})` : ''}`}</span>
@@ -450,14 +490,17 @@ function SmallScreenAboutIcon({
   navigate: ReturnType<typeof useNavigate>
   setShowSidebar: (v: boolean) => void
 }) {
+  const { t } = useTranslation()
   const showDot = useShowUpdateDot(versionHook)
 
   return (
     <Box className="relative">
       <ActionIcon
+        className="sidebar-mobile-action"
         variant="transparent"
         color="chatbox-secondary"
-        size={24}
+        size={44}
+        aria-label={t('About')}
         onClick={() => {
           navigate({ to: '/about' })
           setShowSidebar(false)

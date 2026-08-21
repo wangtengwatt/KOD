@@ -126,6 +126,7 @@ yarn-error.log*
 # IDE / Editor
 .idea
 .dir-locals.el
+.impeccable/
 
 # vercel
 .vercel

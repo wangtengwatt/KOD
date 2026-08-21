@@ -6,6 +6,7 @@ import {
   FileButton,
   Flex,
   Radio,
+  SegmentedControl,
   Select,
   Stack,
   Switch,
@@ -15,7 +16,7 @@ import {
 } from '@mantine/core'
 import { type Language, type ProviderInfo, type Settings, Theme } from '@shared/types'
 import { formatFileSize } from '@shared/utils'
-import { IconInfoCircle } from '@tabler/icons-react'
+import { IconInfoCircle, IconMoon, IconSun } from '@tabler/icons-react'
 import { createFileRoute } from '@tanstack/react-router'
 import dayjs from 'dayjs'
 import { mapValues, uniqBy } from 'lodash'
@@ -29,6 +30,7 @@ import storage, { StorageKey } from '@/storage'
 import { getMetaStorage, recoverSessionList } from '@/stores/chatStore'
 import { migrateOnData } from '@/stores/migration'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useUIStore } from '@/stores/uiStore'
 
 export const Route = createFileRoute('/settings/general')({
   component: RouteComponent,
@@ -37,6 +39,9 @@ export const Route = createFileRoute('/settings/general')({
 export function RouteComponent() {
   const { t } = useTranslation()
   const { setSettings, ...settings } = useSettingsStore((state) => state)
+  const realTheme = useUIStore((state) => state.realTheme)
+  const selectedTheme =
+    settings.theme === Theme.System ? (realTheme === 'dark' ? Theme.Dark : Theme.Light) : settings.theme
 
   return (
     <Stack p="md" gap="xl">
@@ -72,29 +77,43 @@ export function RouteComponent() {
         />
 
         {/* theme */}
-        <AdaptiveSelect
-          maw={320}
-          comboboxProps={{ withinPortal: true, withArrow: true }}
-          label={t('Theme')}
-          styles={{
-            label: {
-              fontWeight: 400,
-            },
-          }}
-          data={[
-            { value: `${Theme.System}`, label: t('Follow System') },
-            { value: `${Theme.Light}`, label: t('Light Mode') },
-            { value: `${Theme.Dark}`, label: t('Dark Mode') },
-          ]}
-          value={`${settings.theme}`}
-          onChange={(val) => {
-            if (val) {
-              setSettings({
-                theme: parseInt(val),
-              })
-            }
-          }}
-        />
+        <Stack gap="xxs" maw={320}>
+          <Text size="sm">{t('Theme')}</Text>
+          <SegmentedControl
+            fullWidth
+            h={44}
+            aria-label={String(t('Theme'))}
+            data={[
+              {
+                value: `${Theme.Light}`,
+                label: (
+                  <Flex align="center" justify="center" gap="xxs">
+                    <IconSun aria-hidden size={17} />
+                    <span>{t('Light Mode')}</span>
+                  </Flex>
+                ),
+              },
+              {
+                value: `${Theme.Dark}`,
+                label: (
+                  <Flex align="center" justify="center" gap="xxs">
+                    <IconMoon aria-hidden size={17} />
+                    <span>{t('Dark Mode')}</span>
+                  </Flex>
+                ),
+              },
+            ]}
+            value={`${selectedTheme}`}
+            onChange={(value) => {
+              setSettings({ theme: Number(value) as Theme })
+            }}
+          />
+          {settings.theme === Theme.System && (
+            <Text size="xs" c="chatbox-tertiary">
+              {t('Follow System')}
+            </Text>
+          )}
+        </Stack>
 
         {/* Font Size */}
         <Stack>

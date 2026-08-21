@@ -5,10 +5,8 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from 'zustand'
-import { JK_PAGE_NAMES } from '@/analytics/jk-events'
 import { BalanceInsufficientToast } from '@/components/BalanceInsufficientToast'
 import MessageList, { type MessageListRef } from '@/components/chat/MessageList'
-import { ChatboxWelcomeCard } from '@/components/common/ChatboxWelcomeCard'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import InputBox from '@/components/InputBox/InputBox'
 import Header from '@/components/layout/Header'
@@ -17,8 +15,6 @@ import { RelayNoticeToast } from '@/components/RelayNoticeToast'
 import { RelayStationSelector } from '@/components/RelayStationSelector'
 import ThreadHistoryDrawer from '@/components/session/ThreadHistoryDrawer'
 import { useKodRelay } from '@/hooks/useKodRelay'
-import { useProviders } from '@/hooks/useProviders'
-import { defaultSessionsForCN, defaultSessionsForEN } from '@/packages/initial_data'
 import * as remote from '@/packages/remote'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
 import { updateSession as updateSessionStore, useSession } from '@/stores/chatStore'
@@ -26,41 +22,22 @@ import { lastUsedModelStore } from '@/stores/lastUsedModelStore'
 import * as scrollActions from '@/stores/scrollActions'
 import { modifyMessage, removeCurrentThread, startNewThread, submitNewUserMessage } from '@/stores/sessionActions'
 import { getAllMessageList } from '@/stores/sessionHelpers'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { useUIStore } from '@/stores/uiStore'
-import { getHomeWelcomeCardMode } from '@/utils/homeWelcomeCard'
 
 export const Route = createFileRoute('/session/$sessionId')({
   component: RouteComponent,
 })
-
-const builtInTemplateSessionIds = new Set(
-  [...defaultSessionsForEN, ...defaultSessionsForCN].map((session) => session.id)
-)
 
 function RouteComponent() {
   const { t } = useTranslation()
   const { sessionId: currentSessionId } = Route.useParams()
   const navigate = useNavigate()
   const { session: currentSession, isFetching } = useSession(currentSessionId)
-  const { providers } = useProviders()
   const relay = useKodRelay()
-  const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
-  const hasExpiredLicense = useSettingsStore((s) => s.hasExpiredLicense)
   const isLoggedIn = useAuthInfoStore((s) => Boolean(s.accessToken && s.refreshToken))
-  const widthFull = useUIStore((s) => s.widthFull)
   const setLastUsedChatModel = useStore(lastUsedModelStore, (state) => state.setChatModel)
   const setLastUsedPictureModel = useStore(lastUsedModelStore, (state) => state.setPictureModel)
-  const welcomeCardMode = useMemo(
-    () => getHomeWelcomeCardMode({ providerCount: providers.length, isLoggedIn, hasLicense, hasExpiredLicense }),
-    [providers.length, isLoggedIn, hasLicense, hasExpiredLicense]
-  )
 
   const currentMessageList = useMemo(() => (currentSession ? getAllMessageList(currentSession) : []), [currentSession])
-  const shouldShowTemplateWelcomeCard = useMemo(
-    () => Boolean(currentSession && builtInTemplateSessionIds.has(currentSession.id) && welcomeCardMode !== 'none'),
-    [currentSession, welcomeCardMode]
-  )
   const lastGeneratingMessage = useMemo(
     () => currentMessageList.find((m: Message) => m.generating),
     [currentMessageList]
@@ -209,20 +186,6 @@ function RouteComponent() {
       <MessageList ref={messageListRef} key={`message-list${currentSessionId}`} currentSession={currentSession} />
 
       <Box className="relative">
-        {shouldShowTemplateWelcomeCard && (
-          // absolute — taken out of flow, doesn't affect layout of siblings
-          // bottom: '100%' — positioned right above the parent box's top edge (like a tooltip anchoring upward)
-          <Box className="pointer-events-none absolute left-0 right-0 z-10" style={{ bottom: '100%' }} px="sm" mb="sm">
-            <Box className={widthFull ? 'w-full' : 'max-w-4xl mx-auto'}>
-              <ChatboxWelcomeCard
-                mode={welcomeCardMode}
-                pageName={JK_PAGE_NAMES.CHAT_PAGE}
-                className="pointer-events-auto w-full"
-              />
-            </Box>
-          </Box>
-        )}
-
         {isLoggedIn && (
           <Box px="md" pb="xs" className="flex justify-center">
             <RelayStationSelector
