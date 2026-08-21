@@ -15,6 +15,8 @@ Date: 2026-08-21
 - Desktop production build and Web build pass.
 - Android Capacitor shared renderer build and sync pass.
 - iOS shared renderer build passes; native Xcode signing/simulator verification is not available on this Windows host.
+- PowerShell parsing passes for the backend, full-stack and client launchers. The desktop shortcut now targets the full-stack launcher, which validates the backend before starting the final `suanlizhongxin_KOD` checkout with `USE_LOCAL_API=true`.
+- The launcher was configuration-tested without starting the real backend because the approved production-database smoke policy is read-only and backend schema initialization is a write operation.
 
 ## Full-suite baseline
 
