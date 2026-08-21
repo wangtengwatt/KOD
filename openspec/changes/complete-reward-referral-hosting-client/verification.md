@@ -56,6 +56,19 @@ A fresh read-only review of the post-repair client and backend ranges reported n
 
 The final affected client regression run passed 37/37 tests, the combined feature/video run passed 113/113, TypeScript check passed, and the production build again transformed 5,352 main, 82 preload, and 15,029 renderer modules. The paired backend full suite now passes 132/132 tests, and the repackaged JAR is 121,126,123 bytes. Both strict OpenSpec validations passed.
 
+## Third independent cross-branch review repair
+
+A third fresh read-only review of client `f97c615..1bc0815` and backend `f37e8cb..3792456` did not reuse either earlier verdict. It reported no Critical findings and four Important findings. The repaired heads are client `099ed9b` and backend `1f51ac6`:
+
+- rewarded-ad completion and claim now both enforce the persisted server `claimableAt`, so a campaign whose `minimumSeconds` exceeds its asset duration cannot be claimed early by a scripted client;
+- lease renewal now takes the user account row before the SKU row, matching rent's account-before-SKU order and removing the same-user rent/renew lock inversion;
+- a mounted rewarded-ad card closes and clears its active watch locally on an authenticated A-to-B change without sending A's watch identifier through B's credentials;
+- an in-flight official video generation captures its owner identity and owner history partition, aborts on a real account change, and marks only A's record retryable. Normal token refresh for the same normalized email does not abort the task.
+
+The final client account-switch regression set passed 23/23 tests, and the complete 11-file feature/video target set passed 116/116. `corepack pnpm run check` passed. The post-repair production build passed with 5,352 main, 82 preload, and 15,029 renderer modules. The final full client run contained 154 files: 147 passed, 5 failed, 2 skipped; 1,521 tests: 1,461 passed, 6 failed, 54 skipped. The six failures are exactly the classified baseline rows above; none of their tests, production files, configuration, or dependency lockfiles changed in the branch.
+
+The five changed client files pass Biome check. The full 921-file Biome lint still reports exactly the same 13 baseline errors in the six unchanged files recorded above. The two repaired backend service classes pass 38/38 focused tests; the full backend suite passes 134/134, and the repackaged JAR is 121,126,198 bytes. Strict validation passes for both `complete-reward-referral-hosting-client` and paired backend `complete-reward-referral-hosting-platform`.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
