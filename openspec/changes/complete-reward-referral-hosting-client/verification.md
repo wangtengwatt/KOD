@@ -113,6 +113,19 @@ The backend participant-lock regression was red at test compilation before `lock
 
 Strict OpenSpec validation passes for both client and paired backend changes. Final scans report zero client production video-sensitive added lines, zero protected realtime-price added lines, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files. `git diff --check f97c615` and `git diff --check f37e8cb HEAD` both pass.
 
+## Seventh independent cross-branch review repair
+
+A seventh completely fresh read-only reviewer, created with no inherited review context, covered client `f97c615..f123471` and backend `f37e8cb..c73dc39`. It reported no Critical findings and two Important findings. The repaired code heads are client `21d7bad` and backend `9c35364`:
+
+- platform-hosting rent success, reconciliation, and error callbacks now recheck their captured identity after every awaited refresh/fetch/invalidation boundary and before local state changes. A delayed A callback can update only A-scoped query data and cannot close B's newly opened checkout or display A's feedback in B;
+- GPU reservation settlement extracts buyer and supplier before either wallet mutation and prelocks both through the sorted legacy/qualified participant helper. Opposing A-to-B and B-to-A settlements therefore cannot each hold their buyer wallet while waiting for the other supplier wallet.
+
+Both regressions were demonstrated red first. The client test paused A inside post-rent invalidation, switched to B, opened B's checkout, then released A and observed the old success feedback leak. The backend order test recorded the old `buyer lock -> supplier credit -> supplier lock` sequence and failed because no joint participant prelock existed. After repair, PlatformHostingPanel passes 19/19, the backend qualified-market suite passes 9/9, and the complete 11-file client feature/video set passes 124/124.
+
+Final client verification passes TypeScript, the two-file changed Biome check, and production build with 5,352 main, 82 preload, and 15,029 renderer modules. The full suite contains 154 files: 147 passed, 5 failed, 2 skipped; 1,529 tests: 1,469 passed, the same 6 classified baseline failures, and 54 skipped. Full Biome remains the exact 13-error baseline across the same six unchanged files. The backend full suite passes 140/140 with no failures, errors, or skips; packaging passes and produces a 121,127,085-byte JAR.
+
+Both strict OpenSpec validations pass. The final client production-video, protected-price, and added-secret scans are zero, as are the backend realtime-price-file, video-production-file, and added-secret scans.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
