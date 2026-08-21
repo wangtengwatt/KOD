@@ -260,6 +260,20 @@ Fresh final verification used Node `v22.23.2` and Corepack pnpm `10.33.0`. TypeS
 
 The paired backend full suite passes 171/171 across 37 suites with no failures, errors, or skips. Packaging succeeds and produces a 121,140,729-byte executable JAR. The explicit seven-class server-side video suite passes 19/19 without a real upstream key. Client and both backend-related strict OpenSpec validations pass. Final scans report zero production client upstream/key matches, zero protected realtime-price additions/changed files, zero client/backend added-secret matches, and zero changed backend video-production files; both range diff checks pass.
 
+## Eighteenth independent cross-branch review repair
+
+An eighteenth completely fresh read-only reviewer covered client `f97c615..a143b49` and backend `f37e8cb..1102362`; it did not inherit an earlier verdict. It reported zero Critical and three Important backend findings. The client required no production change:
+
+- platform renewal now takes the account lifecycle/wallet locks before the lease row and then revalidates lease ownership and state, matching account deletion and removing the lease-to-account/account-to-lease deadlock cycle;
+- schedule acceptance re-reads the participant order after locking the reservation, rejects an elapsed schedule deadline, and requires the guarded reservation transition to affect exactly one row before creating a booking or advancing proposals/order state;
+- account deletion includes every active card-hour redemption participant in the sorted lifecycle/wallet lock vector. Undelivered redemptions are cancelled and exactly refunded, later delivery states move to administrator dispute, and delivery, usage, top-up, confirmation, automatic confirmation, and settlement revalidate participant lifecycle state before mutation. A tombstoned supplier cannot receive settlement income.
+
+The four focused regressions were observed RED before production repair: renewal had no lifecycle prelock; an expired schedule advanced into the acceptance path; deletion left a pending-delivery redemption and its buyer freeze open; and a tombstoned supplier still received settlement. After repair, the eight related backend classes pass 86/86. The fresh backend full suite passes 175/175 across 37 suites with zero failures, errors, or skips. Packaging succeeds and produces `kod-portal-backend-0.1.0.jar` (121,141,964 bytes); the explicit seven-class server-side video suite passes 19/19 without a real upstream key.
+
+Fresh client verification used Node `v22.23.2` and Corepack pnpm `10.33.0`. The selected 11-file reward/referral/hosting/video set passes 128/128, TypeScript check passes, and the production build passes after transforming 5,352 main, 82 preload, and 15,029 renderer modules. The full suite remains 154 files: 147 passed, 5 failed, 2 skipped; 1,536 tests: 1,476 passed, the same six classified baseline failures, and 54 skipped. Full Biome remains the exact unchanged baseline of 13 errors and 1,010 warnings across 921 files.
+
+Strict OpenSpec validation, protected realtime-price checks, client production video/upstream-key checks, added-line secret scans, and both repository range whitespace checks are rerun after documentation updates below. No real upstream submit/status/download was attempted because no server-side upstream API key was provided.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
