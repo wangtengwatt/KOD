@@ -143,6 +143,19 @@ The four-file changed-client Biome check exits 0; the only diagnostic is the pre
 
 Final range scans report zero client production video-sensitive added lines, zero protected realtime-price added lines, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files. `git diff --check f97c615 --` and `git diff --check f37e8cb --` both pass.
 
+## Ninth independent cross-branch review repair
+
+A ninth completely fresh read-only reviewer covered client `f97c615..f15d770` and backend `f37e8cb..c8dcade`; it did not inherit an earlier verdict. It reported no Critical findings and two Important findings. The client required no production change; the paired backend repair head is `2e6db45`:
+
+- invitation creation and every new-user provisioning path now serialize on a normalized-email database gate. Registration acquires that gate before insertion and invitation acceptance, while invitation creation acquires the same gate before checking whether the email is already registered. Password registration also re-queries the user after acquiring the gate, so a concurrent winner is treated as an existing account rather than inserted again;
+- the compute-center and card-hour-market schedulers no longer hold wallet locks across a multi-item outer transaction. Every wallet-mutating candidate runs in its own `REQUIRES_NEW` transaction, re-locks its exact business row, and revalidates status and mutable deadlines before any ledger mutation or notification. Duplicate multi-instance scans therefore become idempotent row-serialized attempts instead of retaining A then B versus B then A wallet locks across a batch.
+
+The email-gate regression was first red at test compilation because `lockEmailGate` did not exist; the password-registration winner test then failed by entering verification-code registration from a stale pre-gate `null`. The scheduler contract test was red before the outer `@Transactional` annotations were removed, and the deadline regression failed because a future auto-confirm deadline still entered settlement. After repair, both direct regressions pass and the final backend full suite passes 147/147 across 35 suites with zero failures, errors, or skips. Packaging passes and produces a 121,132,060-byte JAR. The seven backend video suites pass 19/19 without a real upstream key.
+
+Fresh client verification used Node `v22.23.2`. The complete 11-file feature/video command passes 126/126; TypeScript check passes; the production build passes after transforming 5,352 main, 82 preload, and 15,029 renderer modules; and the 11-file Biome check is clean. The full client suite remains 154 files: 147 passed, 5 failed, 2 skipped; 1,531 tests: 1,471 passed, the same six classified baseline failures, and 54 skipped. Full Biome lint checks 921 files and remains nonzero only on the unchanged baseline (13 errors; 1,010 warnings).
+
+Both strict OpenSpec validations pass. Final scans report zero client production video-sensitive added lines, zero protected realtime-price added lines, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files. `git diff --check f97c615 --` and `git diff --check f37e8cb --` both pass.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
