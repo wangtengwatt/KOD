@@ -196,6 +196,19 @@ The first post-repair backend full run exposed one task-introduced flaky test as
 
 The final client code is unchanged from the eleventh repair: the 11-file feature/video set remains 130/130, TypeScript and changed-file Biome remain clean, the 5,352/82/15,029-module production build remains passing, and the full suite remains 1,475 passed, the same six classified baseline failures, and 54 skipped out of 1,535 tests. Strict OpenSpec validation passes for both client and backend. Final scans again report zero production video-sensitive additions, zero protected realtime-price changes, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files; both range diff checks pass.
 
+## Thirteenth independent cross-branch review repair
+
+A thirteenth completely fresh read-only reviewer covered client `f97c615..d77b440` and backend `f37e8cb..8aba672`; it did not inherit an earlier verdict. It reported no Critical findings and two Important findings. The client required no production change; the repaired backend head is `184771c`:
+
+- marketplace chat-image purge, node delist, and identity-document purge now scan candidate IDs without retaining cross-item locks, then re-lock and revalidate each item in a separate fail-fast configured `REQUIRES_NEW` transaction. A storage or row failure is logged with its item identity and cannot roll back or starve later cleanup/delist work; filesystem deletion remains idempotent through `deleteIfExists`;
+- closing a supplier identity no longer directly offlines nodes/products owned by an `ACTIVE` or `STOPPING` platform lease. Platform-managed resources therefore remain serviceable under the lease lifecycle instead of becoming OFFLINE while the lease remains ACTIVE and auto-renews. Non-platform supplier resources are still suspended/offlined. The close timestamp expression was made MySQL/H2-portable so the end-to-end closure regression can execute against the test database.
+
+Both findings were demonstrated red before production repair. The scheduler contract first failed compilation because marketplace/trust lacked per-item transaction configuration, and the platform integration test observed a rented managed node become `OFFLINE` immediately after `closeIdentity`. After repair, the scheduler contract covers all four per-item services, including missing-template fail-fast, `REQUIRES_NEW`, first-item failure isolation, and second-item commit. The platform regression proves the managed node stays `RUNNING`, its product stays `PUBLISHED`, and the still-serviceable lease can renew normally.
+
+The fresh backend full suite passes 154/154 across 35 suites with no failures, errors, or skips. Packaging passes and produces a 121,136,314-byte JAR; the seven backend video suites pass 19/19 without a real upstream key. The final client verification again passes the 11-file target set 130/130 and TypeScript check; the full suite remains 154 files with 1,475 passed, the same six classified baseline failures, and 54 skipped out of 1,535 tests. The production build passes with 5,352 main, 82 preload, and 15,029 renderer modules.
+
+Strict OpenSpec validation passes for client and backend. Final scans again report zero production video-sensitive additions, zero protected realtime-price changes, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files; both range diff checks pass.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
