@@ -169,6 +169,21 @@ Final client verification passes TypeScript, the two-file changed Biome check, a
 
 Both strict OpenSpec validations pass. Final scans again report zero client production video-sensitive added lines, zero protected realtime-price added lines, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files. Both range diff checks pass.
 
+## Eleventh independent cross-branch review repair
+
+An eleventh completely fresh read-only reviewer covered client `f97c615..43bc9bd` and backend `f37e8cb..c15ddfe`; it did not inherit an earlier verdict. It reported no Critical findings and two Important findings. The repaired code heads are client `f8f5811` and backend `c4e989e`:
+
+- multi-stage compute uploads now carry the generic action runner's captured owner guard into identity submission, supplier-node proof preparation, supplier-product creation, and every product-image preparation/retry boundary. If A changes to B while local image preparation is pending, the continuation stops before reading B's current token or issuing an authenticated request;
+- both wallet-mutating schedulers isolate each `REQUIRES_NEW` item failure, log the concrete item type/id, and continue to the next candidate. A missing transaction template remains a fail-fast configuration error, while one permanently bad row can no longer starve later refunds, settlements, expirations, or conversions in the same job.
+
+All findings were demonstrated red before production repair. The three client regressions showed identity and supplier-node requests reaching the request layer after owner change, and a supplier-product image upload continuing after A's product creation with B current. The backend regression showed the first transaction exception escaping the item wrapper and preventing the second action. After repair, the direct client set passes 16/16 and `ComputeSettlementTaskTest` passes; the final complete 11-file client feature/video set passes 130/130.
+
+Fresh final client verification used Node `v22.23.2`. TypeScript check passes, changed-file Biome checks 3/3 files clean, and the production build passes after transforming 5,352 main, 82 preload, and 15,029 renderer modules. The full suite contains 154 files: 147 passed, 5 failed, 2 skipped; 1,535 tests: 1,475 passed, the same six classified baseline failures, and 54 skipped. None of the six failing tests, their production files, test configuration, `package.json`, or `pnpm-lock.yaml` changed in this repair. Full Biome lint checks 921 files and remains the documented unchanged baseline of 13 errors and 1,010 warnings.
+
+The backend full suite passes 150/150 across 35 suites with no failures, errors, or skips. Packaging passes and produces a 121,133,259-byte JAR. The seven backend video suites pass 19/19 without a real upstream key. Strict OpenSpec validation passes for client `complete-reward-referral-hosting-client` and backend `complete-reward-referral-hosting-platform`.
+
+Final range scans report zero client production video-sensitive added lines, zero protected realtime-price added lines in the two compute-center files, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files. `git diff --check f97c615 --` and `git diff --check f37e8cb --` both pass.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
