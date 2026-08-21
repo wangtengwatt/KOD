@@ -161,6 +161,48 @@ describe('official video generation actions', () => {
     expect(mocks.submit).not.toHaveBeenCalled()
   })
 
+  it('releases and aborts the pending startup slot when its authenticated owner changes', async () => {
+    authInfoStore.setState({
+      accessToken: 'account-a-access',
+      refreshToken: 'account-a-refresh',
+      loginEmail: 'account-a@kod.test',
+    })
+    let resolveFirst: ((availability: { available: boolean; reason: string }) => void) | undefined
+    mocks.availability
+      .mockImplementationOnce(
+        (signal?: AbortSignal) =>
+          new Promise((resolve, reject) => {
+            resolveFirst = resolve
+            signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+          })
+      )
+      .mockResolvedValueOnce({ available: false, reason: 'account-b unavailable' })
+    const params = {
+      prompt: record.prompt,
+      referenceImages: record.referenceImages,
+      model: record.model,
+      duration: record.duration,
+      resolution: record.resolution,
+      ratio: record.ratio,
+    } as const
+
+    const first = createAndGenerateVideo(params)
+    await vi.waitFor(() => expect(mocks.availability).toHaveBeenCalledTimes(1))
+    authInfoStore.setState({
+      accessToken: 'account-b-access',
+      refreshToken: 'account-b-refresh',
+      loginEmail: 'account-b@kod.test',
+    })
+    const second = createAndGenerateVideo(params)
+    await Promise.resolve()
+    resolveFirst?.({ available: false, reason: 'account-a stale response' })
+
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' })
+    await expect(second).rejects.toThrow('account-b unavailable')
+    expect(mocks.availability).toHaveBeenCalledTimes(2)
+    expect(mocks.createRecord).not.toHaveBeenCalled()
+  })
+
   it('uses the backend task flow after availability succeeds and stores only the downloaded result locally', async () => {
     authInfoStore.getState().setTokens({ accessToken: 'kod-access', refreshToken: 'kod-refresh' })
     mocks.availability.mockResolvedValue({

@@ -43,19 +43,24 @@ export interface GenerateVideoParams {
 }
 
 let activeController: AbortController | null = null
-let activeStartup: symbol | null = null
+interface GenerationStartup {
+  controller: AbortController
+  ownerIdentity: string
+}
+
+let activeStartup: GenerationStartup | null = null
 const ACCOUNT_CHANGED_ERROR = '账号已切换，请切回原账号后重试。'
 
-function reserveGenerationStartup() {
+function reserveGenerationStartup(ownerIdentity: string) {
   if (activeStartup || videoGenerationStore.getState().currentGeneratingId) {
     throw new Error('已有视频正在生成，请等待当前任务完成。')
   }
-  const startup = Symbol('video-generation-startup')
+  const startup = { controller: new AbortController(), ownerIdentity }
   activeStartup = startup
   return startup
 }
 
-function releaseGenerationStartup(startup: symbol) {
+function releaseGenerationStartup(startup: GenerationStartup) {
   if (activeStartup === startup) activeStartup = null
 }
 
@@ -77,12 +82,17 @@ function assertGenerationOwner(ownerIdentity: string, controller: AbortControlle
 }
 
 authInfoStore.subscribe(currentAuthIdentity, (identity, previousIdentity) => {
-  if (identity !== previousIdentity) activeController?.abort()
+  if (identity === previousIdentity) return
+  if (activeStartup && activeStartup.ownerIdentity !== identity) {
+    activeStartup.controller.abort()
+    activeStartup = null
+  }
+  activeController?.abort()
 })
 
-async function assertOfficialVideoAvailable() {
+async function assertOfficialVideoAvailable(signal: AbortSignal) {
   if (!authInfoStore.getState().accessToken) throw new VideoLoginRequiredError()
-  const availability = await getVideoAvailability()
+  const availability = await getVideoAvailability(signal)
   if (!availability.available) throw new Error(availability.reason || 'KOD 视频服务尚未启用。')
 }
 
@@ -168,11 +178,11 @@ async function runGeneration(record: VideoGeneration, ownerEmail: string | null,
 }
 
 export async function createAndGenerateVideo(params: GenerateVideoParams) {
-  const startup = reserveGenerationStartup()
   const ownerIdentity = currentAuthIdentity()
+  const startup = reserveGenerationStartup(ownerIdentity)
   const ownerEmail = authInfoStore.getState().loginEmail
   try {
-    await assertOfficialVideoAvailable()
+    await assertOfficialVideoAvailable(startup.controller.signal)
     if (activeStartup !== startup || currentAuthIdentity() !== ownerIdentity) throw accountChangedAbort()
     const record = await createVideoRecord(params)
     if (activeStartup !== startup || currentAuthIdentity() !== ownerIdentity) {
@@ -191,11 +201,11 @@ export async function createAndGenerateVideo(params: GenerateVideoParams) {
 }
 
 export async function retryVideoGeneration(id: string) {
-  const startup = reserveGenerationStartup()
   const ownerIdentity = currentAuthIdentity()
+  const startup = reserveGenerationStartup(ownerIdentity)
   const ownerEmail = authInfoStore.getState().loginEmail
   try {
-    await assertOfficialVideoAvailable()
+    await assertOfficialVideoAvailable(startup.controller.signal)
     if (activeStartup !== startup || currentAuthIdentity() !== ownerIdentity) throw accountChangedAbort()
     const record = await getVideoRecord(id, ownerEmail)
     if (!record) throw new Error('找不到这条视频历史记录。')
@@ -225,6 +235,7 @@ export async function retryVideoGeneration(id: string) {
 }
 
 export function cancelVideoGeneration() {
+  activeStartup?.controller.abort()
   activeStartup = null
   activeController?.abort()
   activeController = null

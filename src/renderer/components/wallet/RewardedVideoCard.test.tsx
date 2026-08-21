@@ -246,6 +246,49 @@ describe('RewardedVideoCard', () => {
     expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
   })
 
+  it('invalidates the active watch during render before the identity cleanup effect runs', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false },
+      },
+    })
+    let fired = false
+    const RenderRaceEvent = ({ enabled }: { enabled: boolean }) => {
+      if (enabled && !fired) {
+        fired = true
+        const video = document.querySelector('video') as HTMLVideoElement | null
+        if (video) {
+          monotonicClock = status.durationSeconds * 1000
+          video.currentTime = status.durationSeconds
+          video.dispatchEvent(new Event('ended', { bubbles: true }))
+        }
+      }
+      return null
+    }
+    const tree = (identity: string, triggerRace: boolean) => (
+      <QueryClientProvider client={queryClient}>
+        <MantineProvider>
+          <RewardedVideoCard identity={identity} />
+          <RenderRaceEvent enabled={triggerRace} />
+        </MantineProvider>
+      </QueryClientProvider>
+    )
+    const view = render(tree('member@kod.test', false))
+    await openAd()
+
+    view.rerender(tree('other@kod.test', true))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(fired).toBe(true)
+    expect(mocks.progressRewardedAd).not.toHaveBeenCalled()
+    expect(mocks.completeRewardedAd).not.toHaveBeenCalled()
+    expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
+  })
+
   it('labels the placement as an ad in the card and player', async () => {
     renderCard()
 

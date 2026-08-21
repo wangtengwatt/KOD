@@ -26,6 +26,12 @@ interface PlaybackSegment {
   wallStartedAt: number
 }
 
+interface WatchOwner {
+  epoch: number
+  identity: string
+  watchId: number
+}
+
 export interface RewardedVideoCardProps {
   identity: string
   onClaimed?: (claim: RewardedAdClaim) => undefined | Promise<unknown>
@@ -89,7 +95,15 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   const progressTokenRef = useRef('')
   const progressInFlightRef = useRef<Promise<boolean> | null>(null)
   const previousIdentityRef = useRef(identity)
+  const renderedIdentityRef = useRef(identity)
+  const identityEpochRef = useRef(0)
+  const watchOwnerRef = useRef<WatchOwner | null>(null)
   const currentIdentityRef = useRef(identity)
+  if (renderedIdentityRef.current !== identity) {
+    renderedIdentityRef.current = identity
+    identityEpochRef.current += 1
+    watchOwnerRef.current = null
+  }
   currentIdentityRef.current = identity
 
   const status = useQuery({
@@ -119,6 +133,16 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   const assetDurationSeconds = status.data?.durationSeconds ?? requiredSeconds
   const requiredMilliseconds = requiredSeconds * 1000
   const watchExpired = Boolean(watch?.expiresAt && Date.now() / 1000 >= watch.expiresAt)
+
+  const isWatchOwnerCurrent = useCallback((activeWatch: RewardedAdWatch, owner: WatchOwner | null) => {
+    return Boolean(
+      owner &&
+        watchOwnerRef.current === owner &&
+        owner.watchId === activeWatch.watchId &&
+        owner.identity === currentIdentityRef.current &&
+        owner.epoch === identityEpochRef.current
+    )
+  }, [])
 
   const publishProgress = useCallback(
     (milliseconds: number) => {
@@ -177,6 +201,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
       video.playbackRate = 1
     }
     watchRef.current = null
+    watchOwnerRef.current = null
     segmentRef.current = null
     creditedMillisecondsRef.current = 0
     effectiveMillisecondsRef.current = 0
@@ -220,7 +245,8 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
 
   const attemptClaim = useCallback(async () => {
     const activeWatch = watchRef.current
-    if (!activeWatch || !endedRef.current || !eligibleRef.current) return
+    const owner = watchOwnerRef.current
+    if (!activeWatch || !isWatchOwnerCurrent(activeWatch, owner) || !endedRef.current || !eligibleRef.current) return
     if (claimStateRef.current !== 'idle') return
     if (activeWatch.expiresAt > 0 && Date.now() / 1000 >= activeWatch.expiresAt) {
       setClaimError('本次广告已过期，请关闭后重新观看。')
@@ -231,6 +257,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     setClaimError(null)
     try {
       const result = await claim.mutateAsync(activeWatch.watchId)
+      if (!isWatchOwnerCurrent(activeWatch, owner)) return
       claimStateRef.current = 'succeeded'
       trackRewardedAd('rewarded_ad_claim', activeWatch, result.rewardCardHours)
       setClaimResult(result)
@@ -240,21 +267,25 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
           .then(() => onClaimed(result))
           .catch(() => undefined)
     } catch (error) {
+      if (!isWatchOwnerCurrent(activeWatch, owner)) return
       claimStateRef.current = 'idle'
       setClaimError(errorMessage(error))
     }
-  }, [claim, identity, onClaimed, queryClient])
+  }, [claim, identity, isWatchOwnerCurrent, onClaimed, queryClient])
 
   const handleStart = useCallback(async () => {
     const currentStatus = status.data
     if (!currentStatus?.eligible || currentStatus.remainingCount <= 0) return
+    const startIdentity = identity
+    const startEpoch = identityEpochRef.current
 
     try {
       const activeWatch = await start.mutateAsync(currentStatus.campaignId)
-      if (currentIdentityRef.current !== identity) return
+      if (currentIdentityRef.current !== startIdentity || identityEpochRef.current !== startEpoch) return
       resetPlayback()
       setRecoveryNotice(null)
       watchRef.current = activeWatch
+      watchOwnerRef.current = { epoch: startEpoch, identity: startIdentity, watchId: activeWatch.watchId }
       progressTokenRef.current = activeWatch.progressToken
       setWatch(activeWatch)
       setVideoSource({ posterUrl: currentStatus.posterUrl ?? '', videoUrl: activeWatch.videoUrl })
@@ -267,8 +298,11 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
 
   const abandonWatch = useCallback(
     async (activeWatch: RewardedAdWatch, notice: string | null) => {
+      const owner = watchOwnerRef.current
+      if (!isWatchOwnerCurrent(activeWatch, owner)) return false
       try {
         const receipt = await abandon.mutateAsync(activeWatch.watchId)
+        if (!isWatchOwnerCurrent(activeWatch, owner)) return false
         if (receipt.watchId !== activeWatch.watchId) throw new Error('服务端返回了不匹配的放弃回执')
         if (!abandonTrackedRef.current) {
           abandonTrackedRef.current = true
@@ -280,11 +314,12 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
         await queryClient.invalidateQueries({ queryKey: walletKeys.rewardedAdStatus(identity) })
         return true
       } catch (error) {
+        if (!isWatchOwnerCurrent(activeWatch, owner)) return false
         setClaimError(`放弃本次观看失败：${errorMessage(error)}`)
         return false
       }
     },
-    [abandon, identity, queryClient, resetPlayback, status.data?.rewardCardHours]
+    [abandon, identity, isWatchOwnerCurrent, queryClient, resetPlayback, status.data?.rewardCardHours]
   )
 
   const handleClose = useCallback(async () => {
@@ -339,11 +374,16 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
       )
       if (progressInFlightRef.current) return progressInFlightRef.current
       const activeWatch = watchRef.current
-      if (!activeWatch || !progressTokenRef.current) return Promise.resolve(false)
+      const owner = watchOwnerRef.current
+      if (!activeWatch || !isWatchOwnerCurrent(activeWatch, owner) || !progressTokenRef.current) {
+        return Promise.resolve(false)
+      }
 
-      const request = (async () => {
+      let request: Promise<boolean>
+      request = (async () => {
         let reported = false
         while (serverProgressPositionRef.current < serverProgressTargetRef.current) {
+          if (!isWatchOwnerCurrent(activeWatch, owner)) return false
           const nextPosition = serverProgressPositionRef.current + 1
           const nextSequence = serverProgressSequenceRef.current + 1
           try {
@@ -354,6 +394,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
               sequence: nextSequence,
               focused: !document.hidden,
             })
+            if (!isWatchOwnerCurrent(activeWatch, owner)) return false
             if (receipt.mediaPositionSeconds !== nextPosition || receipt.sequence !== nextSequence) {
               throw new Error('服务端返回了不匹配的播放进度')
             }
@@ -363,10 +404,11 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
             reported = true
             if (serverProgressPositionRef.current < serverProgressTargetRef.current) {
               await new Promise((resolve) => window.setTimeout(resolve, SERVER_PROGRESS_INTERVAL_MILLISECONDS))
-              if (watchRef.current?.watchId !== activeWatch.watchId) return false
+              if (!isWatchOwnerCurrent(activeWatch, owner)) return false
             }
           } catch (error) {
-            if (isElapsedProgressWindow(error) && watchRef.current?.watchId === activeWatch.watchId) {
+            if (!isWatchOwnerCurrent(activeWatch, owner)) return false
+            if (isElapsedProgressWindow(error)) {
               const video = videoRef.current
               if (video) {
                 settleSegment(video)
@@ -382,12 +424,12 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
         }
         return reported
       })().finally(() => {
-        progressInFlightRef.current = null
+        if (progressInFlightRef.current === request) progressInFlightRef.current = null
       })
       progressInFlightRef.current = request
       return request
     },
-    [abandonWatch, assetDurationSeconds, progress, settleSegment]
+    [abandonWatch, assetDurationSeconds, isWatchOwnerCurrent, progress, settleSegment]
   )
 
   const handleTimeUpdate = useCallback(
@@ -456,7 +498,8 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   const attemptCompletionAndClaim = useCallback(
     async (video: HTMLVideoElement | null = videoRef.current) => {
       const activeWatch = watchRef.current
-      if (!activeWatch || !endedRef.current) return
+      const owner = watchOwnerRef.current
+      if (!activeWatch || !isWatchOwnerCurrent(activeWatch, owner) || !endedRef.current) return
       if (effectiveMillisecondsRef.current < requiredMilliseconds) {
         eligibleRef.current = false
         autoClaimAttemptedRef.current = false
@@ -464,6 +507,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
         return
       }
       if (video) await reportServerProgress(video.currentTime)
+      if (!isWatchOwnerCurrent(activeWatch, owner)) return
       if (serverProgressPositionRef.current < assetDurationSeconds) {
         eligibleRef.current = false
         autoClaimAttemptedRef.current = false
@@ -472,10 +516,12 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
       }
       setClaimError(null)
       try {
+        if (!isWatchOwnerCurrent(activeWatch, owner)) return
         const receipt = await complete.mutateAsync({
           watchId: activeWatch.watchId,
           progressToken: progressTokenRef.current,
         })
+        if (!isWatchOwnerCurrent(activeWatch, owner)) return
         if (receipt.watchId !== activeWatch.watchId) {
           throw new Error('服务端返回了不匹配的播放完成回执')
         }
@@ -487,12 +533,21 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
         }
         await attemptClaim()
       } catch (error) {
+        if (!isWatchOwnerCurrent(activeWatch, owner)) return
         eligibleRef.current = false
         autoClaimAttemptedRef.current = false
         setClaimError(`完整播放确认失败：${errorMessage(error)}`)
       }
     },
-    [assetDurationSeconds, attemptClaim, complete, reportServerProgress, requiredMilliseconds, status.data]
+    [
+      assetDurationSeconds,
+      attemptClaim,
+      complete,
+      isWatchOwnerCurrent,
+      reportServerProgress,
+      requiredMilliseconds,
+      status.data,
+    ]
   )
 
   const handleEnded = useCallback(
