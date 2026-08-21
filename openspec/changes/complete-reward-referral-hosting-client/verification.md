@@ -69,6 +69,20 @@ The final client account-switch regression set passed 23/23 tests, and the compl
 
 The five changed client files pass Biome check. The full 921-file Biome lint still reports exactly the same 13 baseline errors in the six unchanged files recorded above. The two repaired backend service classes pass 38/38 focused tests; the full backend suite passes 134/134, and the repackaged JAR is 121,126,198 bytes. Strict validation passes for both `complete-reward-referral-hosting-client` and paired backend `complete-reward-referral-hosting-platform`.
 
+## Fourth independent cross-branch review repair
+
+A fourth fresh read-only review covered client `f97c615..70843f4` and backend `f37e8cb..1f51ac6`, without inheriting an earlier verdict. It requested changes for one Critical and four Important findings. The repaired heads are client `a569797` and backend `324c60b`:
+
+- both legacy and fixed-package GPU order entry points now reject a buyer's self-owned GPU product, closing the exploitable legacy self-deliver/auto-settle path that could consume reward escrow and credit the same account redeemable `GPU_RENTAL_INCOME`;
+- a delayed rewarded-ad start response is discarded if its captured identity is no longer current, so an A watch cannot be installed into B after the switch;
+- platform-hosting checkout records its owner identity, closes on a mounted account change, and rechecks identity before rent. Pending rent and renewal callbacks also ignore a different current identity;
+- redeemable credits now explicitly lock the legacy account before mutating the qualified ledger, matching the legacy-to-qualified order used by rent, renewal, and debit flows;
+- the hosting panel displays the server's available `withdrawableCardHours`, not the redeemable total that includes frozen order funds.
+
+The repaired client component set passes 37/37 tests and the complete 11-file feature/video set passes 119/119. TypeScript check and production build pass; the build again transformed 5,352 main, 82 preload, and 15,029 renderer modules. The final full client run contains 154 files: 147 passed, 5 failed, 2 skipped; 1,524 tests: 1,464 passed, the same 6 classified baseline failures, and 54 skipped. Changed-file Biome is clean; full Biome remains the exact 13-error unchanged baseline.
+
+The backend security/lock-order plus lease focused set passes 27/27 tests, the full backend suite passes 136/136, and the repackaged JAR is 121,126,358 bytes. The self-owned GPU regression uses a reward-only qualified balance and proves reward, redeemable, frozen, and reservation state remain unchanged. The lock-order regression verifies the legacy `FOR UPDATE` occurs before `creditRedeemable`.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
