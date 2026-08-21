@@ -346,6 +346,37 @@ const contractNonnegativeDecimal = z
     }
     return value
   })
+const moneyDecimalPattern = /^\d{1,16}(?:\.\d{1,4})?$/
+const maxSafeMoneyTenThousandths = BigInt(Number.MAX_SAFE_INTEGER)
+const maxUnambiguousNumericMoney = 2 ** 39
+const contractNonnegativeMoney = z
+  .union([z.number().finite().nonnegative(), z.string()])
+  .transform((input, context) => {
+    if (typeof input === 'number' && input >= maxUnambiguousNumericMoney) {
+      context.addIssue({ code: 'custom', message: 'numeric money exceeds unambiguous ten-thousandth precision' })
+      return z.NEVER
+    }
+    const text = String(input)
+    if (!moneyDecimalPattern.test(text)) {
+      context.addIssue({ code: 'custom', message: 'money must be a nonnegative decimal with at most four places' })
+      return z.NEVER
+    }
+    const [whole, fraction = ''] = text.split('.')
+    const tenThousandths = BigInt(whole) * 10_000n + BigInt(fraction.padEnd(4, '0'))
+    if (tenThousandths > maxSafeMoneyTenThousandths) {
+      context.addIssue({ code: 'custom', message: 'money exceeds the exact UI number range' })
+      return z.NEVER
+    }
+    const value = Number(text)
+    if (value.toFixed(4) !== `${whole}.${fraction.padEnd(4, '0')}`) {
+      context.addIssue({ code: 'custom', message: 'money cannot round-trip through the UI number type' })
+      return z.NEVER
+    }
+    return value
+  })
+function exactDecimalUnits(value: number, scale: number) {
+  return BigInt(value.toFixed(scale).replace('.', ''))
+}
 const contractLongId = z
   .union([z.string().regex(/^[1-9]\d*$/), z.number().int().positive().safe()])
   .transform((value) => String(value))
@@ -374,8 +405,8 @@ export const ComputeAccountSchema: z.ZodType<ComputeAccount> = z
     lifetimeConsumption: contractNonnegativeDecimal,
     rentalIncome: contractNonnegativeDecimal,
     rentalIncomeCnyEquivalent: contractNonnegativeNumber,
-    commissionIncome: contractNonnegativeDecimal,
-    pendingCommission: contractNonnegativeDecimal,
+    commissionIncome: contractNonnegativeMoney,
+    pendingCommission: contractNonnegativeMoney,
     totalIncomeCny: contractNonnegativeNumber,
     invitedCount: contractCount,
     apiSalesIncome: contractNonnegativeDecimal,
@@ -407,12 +438,18 @@ export const ComputeAccountSchema: z.ZodType<ComputeAccount> = z
     unreadOrderMessages: contractCount.optional(),
   })
   .passthrough()
-  .refine((value) => value.availableCardHours === value.spendableCardHours, {
-    message: 'available and spendable card hours must match',
-  })
-  .refine((value) => value.spendableCardHours <= value.redeemableCardHours + value.rewardCardHours, {
-    message: 'spendable card hours cannot exceed qualified card hours',
-  })
+  .refine(
+    (value) => exactDecimalUnits(value.availableCardHours, 3) === exactDecimalUnits(value.spendableCardHours, 3),
+    {
+      message: 'available and spendable card hours must match',
+    }
+  )
+  .refine(
+    (value) =>
+      exactDecimalUnits(value.spendableCardHours, 3) <=
+      exactDecimalUnits(value.redeemableCardHours, 3) + exactDecimalUnits(value.rewardCardHours, 3),
+    { message: 'spendable card hours cannot exceed qualified card hours' }
+  )
 
 export const EmailInvitationSchema = z.object({
   id: contractLongId,

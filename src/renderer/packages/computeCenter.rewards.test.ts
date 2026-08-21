@@ -161,6 +161,43 @@ describe('reward referral and platform hosting contracts', () => {
     )
   })
 
+  it('compares qualified balances as integer thousandths', () => {
+    expect(
+      ComputeAccountSchema.parse({
+        ...computeAccount,
+        availableCardHours: '0.800',
+        spendableCardHours: '0.800',
+        redeemableCardHours: '0.700',
+        rewardCardHours: '0.100',
+      })
+    ).toMatchObject({ spendableCardHours: 0.8, redeemableCardHours: 0.7, rewardCardHours: 0.1 })
+    expect(() =>
+      ComputeAccountSchema.parse({
+        ...computeAccount,
+        availableCardHours: '0.801',
+        spendableCardHours: '0.801',
+        redeemableCardHours: '0.700',
+        rewardCardHours: '0.100',
+      })
+    ).toThrow()
+  })
+
+  it('parses four-place commission money without relaxing its exact range', () => {
+    const account = ComputeAccountSchema.parse({
+      ...computeAccount,
+      commissionIncome: '1.2345',
+      pendingCommission: '0.0001',
+    })
+    expect(account.commissionIncome.toFixed(4)).toBe('1.2345')
+    expect(account.pendingCommission.toFixed(4)).toBe('0.0001')
+    for (const commissionIncome of ['1.23456', '900719925474.0992']) {
+      expect(() => ComputeAccountSchema.parse({ ...computeAccount, commissionIncome })).toThrow()
+    }
+    expect(() =>
+      ComputeAccountSchema.parse({ ...computeAccount, commissionIncome: Number('549755813888.0001') })
+    ).toThrow()
+  })
+
   it('validates and transforms every platform-controlled decimal', () => {
     expect(PlatformServerSkuSchema.parse(platformSku)).toMatchObject({
       id: '42',
