@@ -113,7 +113,7 @@ export interface RemoteConfig {
     embedding: string
     vision: string
     rerank: string
-  }
+  } | null
 }
 
 export interface SessionRagConfig {

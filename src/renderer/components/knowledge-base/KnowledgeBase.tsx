@@ -29,6 +29,7 @@ import {
   KnowledgeBaseNameInput,
   KnowledgeBaseProviderModeSelect,
 } from './KnowledgeBaseForm'
+import { loadKnowledgeBaseModelConfig } from './knowledgeBaseModelConfig'
 
 interface ModelPillProps {
   modelValue: string | null | undefined
@@ -138,6 +139,7 @@ const KnowledgeBasePage: React.FC = () => {
     vision: string
     rerank: string
   } | null>(null)
+  const [managedModelConfigMessage, setManagedModelConfigMessage] = useState<string | null>(null)
 
   const canUseChatboxAIProvider = useMemo(() => {
     return !!(chatboxAIModels && licenseKey)
@@ -303,18 +305,18 @@ const KnowledgeBasePage: React.FC = () => {
 
   // Fetch Chatbox AI models configuration
   useEffect(() => {
+    let active = true
     const fetchChatboxAIModels = async () => {
-      try {
-        const config = await remote.getRemoteConfig('knowledge_base_models')
-        if (config.knowledge_base_models) {
-          setChatboxAIModels(config.knowledge_base_models)
-        }
-      } catch (error) {
-        toastError(t('Failed to fetch Chatbox AI models config, Error: {{error}}', { error: error }))
-      }
+      const state = await loadKnowledgeBaseModelConfig(() => remote.getRemoteConfig('knowledge_base_models'))
+      if (!active) return
+      setChatboxAIModels(state.models)
+      setManagedModelConfigMessage(state.message)
     }
-    fetchChatboxAIModels()
-  }, [t])
+    void fetchChatboxAIModels()
+    return () => {
+      active = false
+    }
+  }, [])
 
   const createKb = async () => {
     if (!newKbName) return
@@ -448,6 +450,12 @@ const KnowledgeBasePage: React.FC = () => {
             onChange={setNewProviderMode}
             isChatboxAIDisabled={!canUseChatboxAIProvider}
           />
+
+          {newProviderMode === 'custom' && managedModelConfigMessage && (
+            <Alert variant="light" color="blue" title="KOD AI 托管模型暂不可用">
+              <Text size="sm">{managedModelConfigMessage}</Text>
+            </Alert>
+          )}
 
           {newProviderMode === 'chatbox-ai' ? (
             <KnowledgeBaseChatboxAIInfo hasError={!chatboxAIModels} />
