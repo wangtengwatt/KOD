@@ -1,11 +1,11 @@
 import { Alert, Badge, Box, Button, Card, Group, Loader, Progress, Stack, Text, Title } from '@mantine/core'
 import { IconCheck, IconGift, IconPlayerPause, IconPlayerPlay, IconRefresh } from '@tabler/icons-react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { RewardedAdClaim, RewardedAdWatch } from '@/api/wallet'
 import { WalletApiError, walletApi } from '@/api/wallet'
 import { AdaptiveModal } from '@/components/common/AdaptiveModal'
-import { walletKeys } from '@/hooks/useWallet'
+import { invalidateRewardReceipt, walletKeys } from '@/hooks/useWallet'
 import { trackingEvent } from '@/packages/event'
 import platform from '@/platform'
 import { formatCardTime } from '@/utils/wallet.utils'
@@ -31,22 +31,17 @@ const monotonicNow = () => (typeof performance === 'undefined' ? Date.now() : pe
 
 const trackRewardedAd = (
   event: 'rewarded_ad_start' | 'rewarded_ad_complete' | 'rewarded_ad_claim' | 'rewarded_ad_abandon',
-  watch: RewardedAdWatch
+  watch: RewardedAdWatch,
+  rewardCardHours: number
 ) =>
   trackingEvent(event, {
     campaign_id: watch.campaignId,
     platform: platform.type,
-    reward_card_hours: String(watch.rewardCardHours),
+    reward_card_hours: String(rewardCardHours),
   })
 
-function formatCooldown(seconds: number) {
-  const safeSeconds = Math.max(0, Math.ceil(seconds))
-  const minutes = Math.floor(safeSeconds / 60)
-  const remainder = safeSeconds % 60
-  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
-}
-
 export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProps) {
+  const queryClient = useQueryClient()
   const titleId = useId()
   const descriptionId = useId()
   const watchHelpId = useId()
@@ -60,7 +55,6 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   const [videoError, setVideoError] = useState<string | null>(null)
   const [claimError, setClaimError] = useState<string | null>(null)
   const [claimResult, setClaimResult] = useState<RewardedAdClaim | null>(null)
-  const [clockSeconds, setClockSeconds] = useState(() => Date.now() / 1000)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const watchRef = useRef<RewardedAdWatch | null>(null)
@@ -76,6 +70,10 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   const completionTrackedRef = useRef(false)
   const abandonTrackedRef = useRef(false)
   const claimStateRef = useRef<'idle' | 'pending' | 'succeeded'>('idle')
+  const serverProgressPositionRef = useRef(0)
+  const serverProgressSequenceRef = useRef(0)
+  const progressTokenRef = useRef('')
+  const progressInFlightRef = useRef<Promise<boolean> | null>(null)
 
   const status = useQuery({
     queryKey: walletKeys.rewardedAdStatus(identity),
@@ -84,12 +82,25 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     retry: false,
     refetchOnWindowFocus: false,
   })
+  const account = useQuery({
+    queryKey: walletKeys.cardTimeAccount(identity),
+    queryFn: walletApi.getCardTimeAccount,
+    enabled: Boolean(identity),
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
   const start = useMutation({ mutationFn: walletApi.startRewardedAd })
+  const progress = useMutation({ mutationFn: walletApi.progressRewardedAd })
+  const complete = useMutation({
+    mutationFn: ({ watchId, progressToken }: { watchId: number; progressToken: string }) =>
+      walletApi.completeRewardedAd(watchId, progressToken),
+  })
   const claim = useMutation({ mutationFn: walletApi.claimRewardedAd })
 
-  const requiredSeconds = watch?.minWatchSeconds ?? status.data?.minWatchSeconds ?? MINIMUM_REWARDED_WATCH_SECONDS
+  const requiredSeconds = watch?.minimumSeconds ?? status.data?.minimumSeconds ?? MINIMUM_REWARDED_WATCH_SECONDS
+  const assetDurationSeconds = status.data?.durationSeconds ?? requiredSeconds
   const requiredMilliseconds = requiredSeconds * 1000
-  const watchExpired = Boolean(watch?.expiresAt && clockSeconds >= watch.expiresAt)
+  const watchExpired = Boolean(watch?.expiresAt && Date.now() / 1000 >= watch.expiresAt)
 
   const publishProgress = useCallback(
     (milliseconds: number) => {
@@ -160,6 +171,10 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     completionTrackedRef.current = false
     abandonTrackedRef.current = false
     claimStateRef.current = 'idle'
+    serverProgressPositionRef.current = 0
+    serverProgressSequenceRef.current = 0
+    progressTokenRef.current = ''
+    progressInFlightRef.current = null
     setWatch(null)
     setVideoSource(null)
     setValidMilliseconds(0)
@@ -170,8 +185,10 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     setClaimError(null)
     setClaimResult(null)
     start.reset()
+    progress.reset()
+    complete.reset()
     claim.reset()
-  }, [claim, start])
+  }, [claim, complete, progress, start])
 
   const attemptClaim = useCallback(async () => {
     const activeWatch = watchRef.current
@@ -187,9 +204,9 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     try {
       const result = await claim.mutateAsync(activeWatch.watchId)
       claimStateRef.current = 'succeeded'
-      trackRewardedAd('rewarded_ad_claim', activeWatch)
+      trackRewardedAd('rewarded_ad_claim', activeWatch, result.rewardCardHours)
       setClaimResult(result)
-      void status.refetch()
+      await invalidateRewardReceipt(queryClient, identity)
       if (onClaimed)
         void Promise.resolve()
           .then(() => onClaimed(result))
@@ -198,22 +215,21 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
       claimStateRef.current = 'idle'
       setClaimError(errorMessage(error))
     }
-  }, [claim, onClaimed, status])
+  }, [claim, identity, onClaimed, queryClient])
 
   const handleStart = useCallback(async () => {
     const currentStatus = status.data
-    if (!currentStatus?.enabled || currentStatus.remainingToday <= 0) return
-    if (currentStatus.nextAvailableAt && currentStatus.nextAvailableAt > Date.now() / 1000) return
+    if (!currentStatus?.eligible || currentStatus.remainingCount <= 0) return
 
     try {
       const activeWatch = await start.mutateAsync(currentStatus.campaignId)
       resetPlayback()
       watchRef.current = activeWatch
+      progressTokenRef.current = activeWatch.progressToken
       setWatch(activeWatch)
-      setVideoSource({ posterUrl: currentStatus.posterUrl, videoUrl: currentStatus.videoUrl })
-      setClockSeconds(Date.now() / 1000)
+      setVideoSource({ posterUrl: currentStatus.posterUrl ?? '', videoUrl: activeWatch.videoUrl })
       setOpened(true)
-      trackRewardedAd('rewarded_ad_start', activeWatch)
+      trackRewardedAd('rewarded_ad_start', activeWatch, currentStatus.rewardCardHours)
     } catch {
       // Mutation state renders the server-provided error below the action.
     }
@@ -224,11 +240,11 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     const activeWatch = watchRef.current
     if (activeWatch && claimStateRef.current !== 'succeeded' && !abandonTrackedRef.current) {
       abandonTrackedRef.current = true
-      trackRewardedAd('rewarded_ad_abandon', activeWatch)
+      trackRewardedAd('rewarded_ad_abandon', activeWatch, status.data?.rewardCardHours ?? 0)
     }
     setOpened(false)
     resetPlayback()
-  }, [resetPlayback])
+  }, [resetPlayback, status.data?.rewardCardHours])
 
   const handlePlay = useCallback(
     (event: React.SyntheticEvent<HTMLVideoElement>) => {
@@ -254,6 +270,45 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     [settleSegment]
   )
 
+  const reportServerProgress = useCallback(
+    (mediaTime: number): Promise<boolean> => {
+      if (progressInFlightRef.current) return progressInFlightRef.current
+      const activeWatch = watchRef.current
+      const nextPosition = serverProgressPositionRef.current + 1
+      const targetPosition = Math.min(assetDurationSeconds, Math.floor(mediaTime))
+      if (!activeWatch || targetPosition < nextPosition || !progressTokenRef.current) return Promise.resolve(false)
+
+      const nextSequence = serverProgressSequenceRef.current + 1
+      const request = progress
+        .mutateAsync({
+          watchId: activeWatch.watchId,
+          progressToken: progressTokenRef.current,
+          mediaPositionSeconds: nextPosition,
+          sequence: nextSequence,
+          focused: !document.hidden,
+        })
+        .then((receipt) => {
+          if (receipt.mediaPositionSeconds !== nextPosition || receipt.sequence !== nextSequence) {
+            throw new Error('服务端返回了不匹配的播放进度')
+          }
+          serverProgressPositionRef.current = receipt.mediaPositionSeconds
+          serverProgressSequenceRef.current = receipt.sequence
+          progressTokenRef.current = receipt.nextProgressToken
+          return true
+        })
+        .catch((error) => {
+          setClaimError(`播放进度回执失败：${errorMessage(error)}`)
+          return false
+        })
+        .finally(() => {
+          progressInFlightRef.current = null
+        })
+      progressInFlightRef.current = request
+      return request
+    },
+    [assetDurationSeconds, progress]
+  )
+
   const handleTimeUpdate = useCallback(
     (event: React.SyntheticEvent<HTMLVideoElement>) => {
       const video = event.currentTarget
@@ -269,8 +324,9 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
       segment.trustedMediaTime = video.currentTime
       trustedMediaTimeRef.current = video.currentTime
       publishProgress(creditedMillisecondsRef.current + segmentProgress(segment, video.currentTime, wallTime))
+      void reportServerProgress(video.currentTime)
     },
-    [publishProgress, segmentProgress, stopInvalidPlayback]
+    [publishProgress, reportServerProgress, segmentProgress, stopInvalidPlayback]
   )
 
   const handleSeeking = useCallback(
@@ -316,28 +372,57 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     [stopInvalidPlayback]
   )
 
+  const attemptCompletionAndClaim = useCallback(
+    async (video: HTMLVideoElement | null = videoRef.current) => {
+      const activeWatch = watchRef.current
+      if (!activeWatch || !endedRef.current) return
+      if (video) await reportServerProgress(video.currentTime)
+      if (
+        effectiveMillisecondsRef.current < requiredMilliseconds ||
+        serverProgressPositionRef.current < assetDurationSeconds
+      ) {
+        eligibleRef.current = false
+        autoClaimAttemptedRef.current = false
+        setPlaybackNotice('服务端尚未确认完整播放，本次不能领取奖励。')
+        return
+      }
+      setClaimError(null)
+      try {
+        const receipt = await complete.mutateAsync({
+          watchId: activeWatch.watchId,
+          progressToken: progressTokenRef.current,
+        })
+        if (receipt.watchId !== activeWatch.watchId) {
+          throw new Error('服务端返回了不匹配的播放完成回执')
+        }
+        eligibleRef.current = true
+        setPlaybackNotice(null)
+        if (!completionTrackedRef.current) {
+          completionTrackedRef.current = true
+          trackRewardedAd('rewarded_ad_complete', activeWatch, status.data?.rewardCardHours ?? 0)
+        }
+        await attemptClaim()
+      } catch (error) {
+        eligibleRef.current = false
+        autoClaimAttemptedRef.current = false
+        setClaimError(`完整播放确认失败：${errorMessage(error)}`)
+      }
+    },
+    [assetDurationSeconds, attemptClaim, complete, reportServerProgress, requiredMilliseconds, status.data]
+  )
+
   const handleEnded = useCallback(
     (event: React.SyntheticEvent<HTMLVideoElement>) => {
-      const finalMilliseconds = settleSegment(event.currentTarget)
+      settleSegment(event.currentTarget)
       endedRef.current = true
       setHasEnded(true)
       setIsPlaying(false)
-      eligibleRef.current = finalMilliseconds >= requiredMilliseconds
-      if (!eligibleRef.current) {
-        setPlaybackNotice(`有效观看不足 ${requiredSeconds} 秒，本次不能领取奖励。`)
-        return
-      }
-      if (!completionTrackedRef.current) {
-        completionTrackedRef.current = true
-        const activeWatch = watchRef.current
-        if (activeWatch) trackRewardedAd('rewarded_ad_complete', activeWatch)
-      }
       if (!autoClaimAttemptedRef.current) {
         autoClaimAttemptedRef.current = true
-        void attemptClaim()
+        void attemptCompletionAndClaim(event.currentTarget)
       }
     },
-    [attemptClaim, requiredMilliseconds, requiredSeconds, settleSegment]
+    [attemptCompletionAndClaim, settleSegment]
   )
 
   const handleVideoError = useCallback(
@@ -387,13 +472,6 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   }, [opened, publishProgress, segmentProgress])
 
   useEffect(() => {
-    const nextAvailableAt = status.data?.nextAvailableAt
-    if (!opened && (!nextAvailableAt || nextAvailableAt <= Date.now() / 1000)) return
-    const timer = window.setInterval(() => setClockSeconds(Date.now() / 1000), 1000)
-    return () => window.clearInterval(timer)
-  }, [opened, status.data?.nextAvailableAt])
-
-  useEffect(() => {
     if (!opened) return
     const pauseForInterruption = (message: string) => {
       const video = videoRef.current
@@ -428,18 +506,16 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     setPlaybackNotice('本次广告已过期，请关闭后重新观看。')
   }, [claimResult, opened, settleSegment, watchExpired])
 
-  const cooldownSeconds = status.data?.nextAvailableAt ? Math.max(0, status.data.nextAvailableAt - clockSeconds) : 0
-  const available = Boolean(status.data?.enabled && status.data.remainingToday > 0 && cooldownSeconds <= 0)
-  const reward = watch?.rewardCardHours ?? status.data?.rewardCardHours
+  const available = Boolean(status.data?.eligible && status.data.remainingCount > 0)
+  const reward = status.data?.rewardCardHours
+  const qualifiedAccount = account.data && 'spendableCardHours' in account.data ? account.data : null
   const progressPercent = Math.min(100, (validMilliseconds / requiredMilliseconds) * 100)
   const watchedSeconds = Math.min(requiredSeconds, Math.floor(validMilliseconds / 1000))
   const statusUnsupported = status.error instanceof WalletApiError && status.error.kind === 'unsupported'
 
   let actionLabel = reward ? '观看并领取' : '观看广告赚卡时'
   if (status.isPending && !status.data) actionLabel = '正在查询奖励…'
-  else if (status.data && !status.data.enabled) actionLabel = '活动暂未开放'
-  else if (status.data && status.data.remainingToday <= 0) actionLabel = '今日奖励已领完'
-  else if (cooldownSeconds > 0) actionLabel = `冷却中 ${formatCooldown(cooldownSeconds)}`
+  else if (status.data && !status.data.eligible) actionLabel = '今日奖励已领取'
 
   return (
     <>
@@ -456,7 +532,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
                 </Badge>
               </Group>
               <Text size="sm" c="kod-tertiary" id={descriptionId}>
-                完整观看 {status.data?.minWatchSeconds ?? MINIMUM_REWARDED_WATCH_SECONDS} 秒广告后领取奖励。
+                完整观看 {status.data?.minimumSeconds ?? MINIMUM_REWARDED_WATCH_SECONDS} 秒广告后领取奖励。
               </Text>
             </Stack>
             <IconGift size={24} aria-hidden="true" />
@@ -493,7 +569,9 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
                   +{formatCardTime(status.data.rewardCardHours)}
                 </Text>
                 <Text size="xs" c="kod-tertiary" aria-live="polite">
-                  今日剩余 {status.data.remainingToday}/{status.data.dailyLimit} 次
+                  {status.data.eligible
+                    ? `今日可领取 ${status.data.remainingCount} 次`
+                    : `下次可领取日期：${status.data.nextEligibleDate}`}
                 </Text>
               </Stack>
               <Button
@@ -513,6 +591,37 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
             <Text size="sm" c="red" role="alert">
               无法开始广告：{errorMessage(start.error)}
             </Text>
+          )}
+          {qualifiedAccount && (
+            <Stack gap={4}>
+              <Group justify="space-between">
+                <Text size="xs" c="kod-tertiary">
+                  可消费卡时
+                </Text>
+                <Text size="xs" fw={600}>
+                  {formatCardTime(qualifiedAccount.spendableCardHours)}
+                </Text>
+              </Group>
+              <Group justify="space-between">
+                <Text size="xs" c="kod-tertiary">
+                  可回购卡时
+                </Text>
+                <Text size="xs" fw={600}>
+                  {formatCardTime(qualifiedAccount.redeemableCardHours)}
+                </Text>
+              </Group>
+              <Group justify="space-between">
+                <Text size="xs" c="kod-tertiary">
+                  奖励卡时
+                </Text>
+                <Text size="xs" fw={600}>
+                  {formatCardTime(qualifiedAccount.rewardCardHours)}
+                </Text>
+              </Group>
+              <Text size="xs" c="kod-tertiary">
+                奖励卡时仅限平台使用，不可回购成人民币
+              </Text>
+            </Stack>
           )}
         </Stack>
       </Card>
@@ -539,14 +648,10 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
           </Group>
 
           {claimResult ? (
-            <Alert
-              color="green"
-              icon={<IconCheck size={18} />}
-              title={claimResult.duplicated ? '奖励已领取' : '领取成功'}
-            >
+            <Alert color="green" icon={<IconCheck size={18} />} title="领取成功">
               <Stack gap="xs">
-                <Text>本次获得 {formatCardTime(claimResult.rewardCardHours)}。</Text>
-                <Text size="sm">当前卡时余额：{formatCardTime(claimResult.availableCardHours)}</Text>
+                <Text>{formatCardTime(claimResult.rewardCardHours)}已到账</Text>
+                <Text size="sm">奖励卡时仅限平台使用，不可回购成人民币</Text>
               </Stack>
             </Alert>
           ) : (
@@ -643,9 +748,13 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
                 {isPlaying ? '暂停' : '开始播放'}
               </Button>
             )}
-            {!claimResult && hasEnded && eligibleRef.current && (
-              <Button loading={claim.isPending} disabled={claim.isPending} onClick={() => void attemptClaim()}>
-                {claim.isPending ? '正在领取…' : claimError ? '重试领取' : '领取奖励'}
+            {!claimResult && hasEnded && (
+              <Button
+                loading={claim.isPending || complete.isPending}
+                disabled={claim.isPending || complete.isPending}
+                onClick={() => void (eligibleRef.current ? attemptClaim() : attemptCompletionAndClaim())}
+              >
+                {claim.isPending || complete.isPending ? '正在领取…' : claimError ? '重试领取' : '领取奖励'}
               </Button>
             )}
           </AdaptiveModal.Actions>

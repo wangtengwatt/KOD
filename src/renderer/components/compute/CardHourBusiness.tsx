@@ -75,6 +75,7 @@ import {
   topUpCardHourRedemption,
 } from '@/packages/computeCenter'
 import { copyToClipboard } from '@/packages/navigator'
+import { formatCardTime } from '@/utils/wallet.utils'
 
 type RunAction = (key: string, action: () => Promise<unknown>, success: string) => Promise<boolean>
 type RunCardHourAction = (
@@ -223,6 +224,26 @@ export function CardHourMarketplace({
   )
 }
 
+export function CardHourBalanceSummary({
+  account,
+}: {
+  account?: Pick<ComputeAccount, 'spendableCardHours' | 'redeemableCardHours' | 'rewardCardHours'>
+}) {
+  if (!account) return null
+  return (
+    <Stack gap="xs">
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
+        <Metric label="可消费卡时" value={formatCardTime(account.spendableCardHours)} />
+        <Metric label="可回购卡时" value={formatCardTime(account.redeemableCardHours)} />
+        <Metric label="奖励卡时" value={formatCardTime(account.rewardCardHours)} />
+      </SimpleGrid>
+      <Text size="sm" c="dimmed">
+        奖励卡时仅限平台使用，不可回购成人民币
+      </Text>
+    </Stack>
+  )
+}
+
 export function CardHourBusiness({
   account,
   isLoggedIn,
@@ -288,6 +309,7 @@ export function CardHourBusiness({
       <Alert color="blue" title="卡时是平台内算力权益凭证">
         这里管理你已经拥有的卡时批次、托管、存入、转让和取出。购买、询价或发布商品请前往算力市场。
       </Alert>
+      <CardHourBalanceSummary account={account} />
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="sm">
         {businessEntries.map((entry) => {
           const Icon = entry.icon

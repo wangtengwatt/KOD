@@ -1,4 +1,5 @@
-﻿import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+﻿import type { QueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect } from 'react'
 import { walletApi } from '@/api/wallet'
 import { getKodApiOrigin } from '@/packages/kodApiOrigin'
@@ -19,9 +20,20 @@ export const walletKeys = {
   balance: (identity: WalletIdentity) => ['wallet', identity, 'balance'] as const,
   cardTimeAccount: (identity: WalletIdentity) => ['wallet', identity, 'card-time-account'] as const,
   rewardedAdStatus: (identity: WalletIdentity) => ['wallet', identity, 'rewarded-ad-status'] as const,
+  computeAccount: ['compute', 'account'] as const,
+  assetHistory: ['compute', 'ledger'] as const,
   historyRoot: (identity: WalletIdentity) => ['wallet', identity, 'history'] as const,
   history: (identity: WalletIdentity, page: number, pageSize: number) =>
     ['wallet', identity, 'history', page, pageSize] as const,
+}
+
+export function invalidateRewardReceipt(queryClient: QueryClient, identity: WalletIdentity) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: walletKeys.cardTimeAccount(identity) }),
+    queryClient.invalidateQueries({ queryKey: walletKeys.rewardedAdStatus(identity) }),
+    queryClient.invalidateQueries({ queryKey: walletKeys.computeAccount }),
+    queryClient.invalidateQueries({ queryKey: walletKeys.assetHistory }),
+  ])
 }
 
 export async function clearWalletCache() {
@@ -76,6 +88,8 @@ export function useWallet(page: number, pageSize: number) {
             queryClient.invalidateQueries({ queryKey: walletKeys.balance(identity) }),
             queryClient.invalidateQueries({ queryKey: walletKeys.cardTimeAccount(identity) }),
             queryClient.invalidateQueries({ queryKey: walletKeys.rewardedAdStatus(identity) }),
+            queryClient.invalidateQueries({ queryKey: walletKeys.computeAccount }),
+            queryClient.invalidateQueries({ queryKey: walletKeys.assetHistory }),
             queryClient.invalidateQueries({ queryKey: walletKeys.historyRoot(identity) }),
           ])
         : Promise.resolve([]),

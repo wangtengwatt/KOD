@@ -3,12 +3,16 @@
 import { MantineProvider } from '@mantine/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ComponentType } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WalletApiError } from '@/api/wallet'
 
 const mocks = vi.hoisted(() => ({
   claimRewardedAd: vi.fn(),
+  completeRewardedAd: vi.fn(),
+  getCardTimeAccount: vi.fn(),
   getRewardedAdStatus: vi.fn(),
+  progressRewardedAd: vi.fn(),
   startRewardedAd: vi.fn(),
   trackingEvent: vi.fn(),
 }))
@@ -20,7 +24,10 @@ vi.mock('@/api/wallet', async (importOriginal) => {
     walletApi: {
       ...original.walletApi,
       claimRewardedAd: mocks.claimRewardedAd,
+      completeRewardedAd: mocks.completeRewardedAd,
+      getCardTimeAccount: mocks.getCardTimeAccount,
       getRewardedAdStatus: mocks.getRewardedAdStatus,
+      progressRewardedAd: mocks.progressRewardedAd,
       startRewardedAd: mocks.startRewardedAd,
     },
   }
@@ -28,30 +35,29 @@ vi.mock('@/api/wallet', async (importOriginal) => {
 
 vi.mock('@/packages/event', () => ({ trackingEvent: mocks.trackingEvent }))
 
+import * as CardHourBusiness from '@/components/compute/CardHourBusiness'
+import { walletKeys } from '@/hooks/useWallet'
 import RewardedVideoCard from './RewardedVideoCard'
 
 let monotonicClock = 0
 
 const status = {
-  enabled: true,
   campaignId: 'kod-reward-2026-08',
-  rewardCardHours: 0.1,
-  dailyLimit: 3,
-  claimedToday: 1,
-  remainingToday: 2,
-  minWatchSeconds: 90,
-  nextAvailableAt: null,
+  rewardCardHours: 10,
+  remainingCount: 1,
+  durationSeconds: 3,
+  minimumSeconds: 3,
+  nextEligibleDate: '2026-08-21',
+  eligible: true,
   videoUrl: 'https://api.kod.test/assets/rewarded-ad.mp4',
   posterUrl: 'https://api.kod.test/assets/rewarded-ad-poster.jpg',
 }
 
 const claimResult = {
-  duplicated: false,
-  rewardCardHours: 0.1,
-  availableCardHours: 1.2,
-  claimedToday: 2,
-  remainingToday: 1,
-  nextAvailableAt: null,
+  watchId: 17,
+  rewardCardHours: 10,
+  remainingCount: 0,
+  nextEligibleDate: '2026-08-22',
 }
 
 function renderCard(onClaimed = vi.fn()) {
@@ -63,6 +69,7 @@ function renderCard(onClaimed = vi.fn()) {
   })
   return {
     onClaimed,
+    queryClient,
     ...render(
       <QueryClientProvider client={queryClient}>
         <MantineProvider>
@@ -87,17 +94,45 @@ function advancePlayback(video: HTMLVideoElement, seconds: number) {
   fireEvent.timeUpdate(video)
 }
 
+async function completeAdvertisement(video: HTMLVideoElement) {
+  for (let second = 1; second <= status.durationSeconds; second += 1) {
+    act(() => advancePlayback(video, second))
+    await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(second))
+  }
+  fireEvent.ended(video)
+}
+
 beforeEach(() => {
   monotonicClock = 0
   vi.clearAllMocks()
+  mocks.getCardTimeAccount.mockResolvedValue({
+    availableCardHours: 100,
+    spendableCardHours: 100,
+    redeemableCardHours: 90,
+    rewardCardHours: 10,
+  })
   mocks.getRewardedAdStatus.mockResolvedValue(status)
   mocks.startRewardedAd.mockImplementation(async () => ({
-    watchId: '11111111-1111-4111-8111-111111111111',
+    watchId: 17,
     campaignId: status.campaignId,
-    rewardCardHours: status.rewardCardHours,
-    minWatchSeconds: status.minWatchSeconds,
+    videoUrl: status.videoUrl,
+    minimumSeconds: status.minimumSeconds,
+    startedAt: Math.floor(Date.now() / 1000),
+    expiresAt: Math.floor(Date.now() / 1000) + 600,
+    progressToken: 'progress-0',
+  }))
+  mocks.progressRewardedAd.mockImplementation(async ({ watchId, mediaPositionSeconds, sequence }) => ({
+    watchId,
+    mediaPositionSeconds,
+    sequence,
+    nextProgressToken: `progress-${sequence}`,
     expiresAt: Math.floor(Date.now() / 1000) + 600,
   }))
+  mocks.completeRewardedAd.mockResolvedValue({
+    watchId: 17,
+    completedAt: Math.floor(Date.now() / 1000),
+    expiresAt: Math.floor(Date.now() / 1000) + 600,
+  })
   mocks.claimRewardedAd.mockResolvedValue(claimResult)
   vi.spyOn(performance, 'now').mockImplementation(() => monotonicClock)
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
@@ -152,24 +187,43 @@ describe('RewardedVideoCard', () => {
     expect(mocks.getRewardedAdStatus).toHaveBeenCalledTimes(1)
   })
 
-  it('renders only the server reward and requires both valid time and ended', async () => {
+  it('shows the three server account buckets and the non-redeemable reward policy', async () => {
     renderCard()
 
-    expect(await screen.findByText('+0.1 卡时')).toBeTruthy()
-    expect(screen.getByText('今日剩余 2/3 次')).toBeTruthy()
+    expect(await screen.findByText('100 卡时')).toBeTruthy()
+    expect(screen.getByText('90 卡时')).toBeTruthy()
+    expect(screen.getByText('10 卡时')).toBeTruthy()
+    expect(screen.getByText('奖励卡时仅限平台使用，不可回购成人民币')).toBeTruthy()
+  })
+
+  it('renders only the server campaign and requires verified progress plus completion before claim', async () => {
+    renderCard()
+
+    expect(await screen.findByText('+10 卡时')).toBeTruthy()
+    expect(screen.getByText('今日可领取 1 次')).toBeTruthy()
 
     const video = await openAd()
-    act(() => advancePlayback(video, 90))
+    act(() => advancePlayback(video, 1))
     expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
 
     fireEvent.ended(video)
+    expect(mocks.completeRewardedAd).not.toHaveBeenCalled()
+    expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
+    expect(await screen.findByText('服务端尚未确认完整播放，本次不能领取奖励。')).toBeTruthy()
+
+    fireEvent.play(video)
+    await completeAdvertisement(video)
+    await waitFor(() => expect(mocks.completeRewardedAd).toHaveBeenCalledWith(17, 'progress-3'))
     await waitFor(() => expect(mocks.claimRewardedAd).toHaveBeenCalledTimes(1))
-    expect(mocks.claimRewardedAd.mock.calls[0]?.[0]).toBe('11111111-1111-4111-8111-111111111111')
+    expect(mocks.claimRewardedAd.mock.calls[0]?.[0]).toBe(17)
+    expect(mocks.completeRewardedAd.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.claimRewardedAd.mock.invocationCallOrder[0]
+    )
     await waitFor(() => expect(mocks.trackingEvent).toHaveBeenCalledTimes(3))
     expect(mocks.trackingEvent.mock.calls).toEqual([
-      ['rewarded_ad_start', { campaign_id: 'kod-reward-2026-08', platform: 'web', reward_card_hours: '0.1' }],
-      ['rewarded_ad_complete', { campaign_id: 'kod-reward-2026-08', platform: 'web', reward_card_hours: '0.1' }],
-      ['rewarded_ad_claim', { campaign_id: 'kod-reward-2026-08', platform: 'web', reward_card_hours: '0.1' }],
+      ['rewarded_ad_start', { campaign_id: 'kod-reward-2026-08', platform: 'web', reward_card_hours: '10' }],
+      ['rewarded_ad_complete', { campaign_id: 'kod-reward-2026-08', platform: 'web', reward_card_hours: '10' }],
+      ['rewarded_ad_claim', { campaign_id: 'kod-reward-2026-08', platform: 'web', reward_card_hours: '10' }],
     ])
   })
 
@@ -182,7 +236,7 @@ describe('RewardedVideoCard', () => {
     expect(mocks.trackingEvent).toHaveBeenLastCalledWith('rewarded_ad_abandon', {
       campaign_id: 'kod-reward-2026-08',
       platform: 'web',
-      reward_card_hours: '0.1',
+      reward_card_hours: '10',
     })
     expect(Object.keys(mocks.trackingEvent.mock.calls.at(-1)?.[1] ?? {})).toEqual([
       'campaign_id',
@@ -191,31 +245,46 @@ describe('RewardedVideoCard', () => {
     ])
   })
 
-  it('does not claim when ended before 90 seconds of valid playback', async () => {
+  it('does not claim when ended before the full server asset duration', async () => {
     renderCard()
     const video = await openAd()
 
-    act(() => advancePlayback(video, 89))
+    act(() => advancePlayback(video, 1))
     fireEvent.ended(video)
 
     expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
-    expect(await screen.findByText('有效观看不足 90 秒，本次不能领取奖励。')).toBeTruthy()
+    expect(await screen.findByText('服务端尚未确认完整播放，本次不能领取奖励。')).toBeTruthy()
+  })
+
+  it('does not claim when the completion receipt belongs to another watch', async () => {
+    mocks.completeRewardedAd.mockResolvedValueOnce({
+      watchId: 99,
+      completedAt: Math.floor(Date.now() / 1000),
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+    })
+    renderCard()
+    const video = await openAd()
+
+    await completeAdvertisement(video)
+
+    expect(await screen.findByText('完整播放确认失败：服务端返回了不匹配的播放完成回执')).toBeTruthy()
+    expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
   })
 
   it('pauses on window blur and excludes unfocused time from eligibility', async () => {
     renderCard()
     const video = await openAd()
 
-    act(() => advancePlayback(video, 45))
+    act(() => advancePlayback(video, 1))
     fireEvent(window, new Event('blur'))
     expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled()
     expect(screen.getByText('窗口失去焦点时广告已暂停，离开期间不会累计时长。')).toBeTruthy()
 
-    act(() => advancePlayback(video, 90))
+    act(() => advancePlayback(video, 3))
     fireEvent.ended(video)
 
     expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
-    expect(await screen.findByText('有效观看不足 90 秒，本次不能领取奖励。')).toBeTruthy()
+    expect(await screen.findByText('服务端尚未确认完整播放，本次不能领取奖励。')).toBeTruthy()
   })
 
   it('deduplicates repeated ended events after becoming eligible', async () => {
@@ -223,7 +292,7 @@ describe('RewardedVideoCard', () => {
     renderCard(onClaimed)
     const video = await openAd()
 
-    act(() => advancePlayback(video, 90))
+    await completeAdvertisement(video)
     fireEvent.ended(video)
     fireEvent.ended(video)
 
@@ -238,8 +307,7 @@ describe('RewardedVideoCard', () => {
     renderCard(onClaimed)
     const video = await openAd()
 
-    act(() => advancePlayback(video, 90))
-    fireEvent.ended(video)
+    await completeAdvertisement(video)
 
     expect(await screen.findByText('临时网络错误')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '重试领取' }))
@@ -247,5 +315,38 @@ describe('RewardedVideoCard', () => {
     await waitFor(() => expect(mocks.claimRewardedAd).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(onClaimed).toHaveBeenCalledTimes(1))
     expect(await screen.findByText('领取成功')).toBeTruthy()
+  })
+
+  it('shows the exact server claim receipt and invalidates account, ad status, and asset history', async () => {
+    const { queryClient } = renderCard()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const video = await openAd()
+
+    await completeAdvertisement(video)
+
+    expect(await screen.findByText('10 卡时已到账')).toBeTruthy()
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: walletKeys.cardTimeAccount('member@kod.test') })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: walletKeys.rewardedAdStatus('member@kod.test') })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: walletKeys.computeAccount })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: walletKeys.assetHistory })
+    })
+  })
+
+  it('renders qualified balances in the compute card-hour business without merging reward into redeemable', () => {
+    expect(CardHourBusiness.CardHourBalanceSummary).toBeDefined()
+    const CardHourBalanceSummary = CardHourBusiness.CardHourBalanceSummary as ComponentType<{
+      account: { spendableCardHours: number; redeemableCardHours: number; rewardCardHours: number }
+    }>
+    render(
+      <MantineProvider>
+        <CardHourBalanceSummary account={{ spendableCardHours: 100, redeemableCardHours: 90, rewardCardHours: 10 }} />
+      </MantineProvider>
+    )
+
+    expect(screen.getByText('可消费卡时')).toBeTruthy()
+    expect(screen.getByText('可回购卡时')).toBeTruthy()
+    expect(screen.getByText('奖励卡时')).toBeTruthy()
+    expect(screen.getByText('奖励卡时仅限平台使用，不可回购成人民币')).toBeTruthy()
   })
 })
