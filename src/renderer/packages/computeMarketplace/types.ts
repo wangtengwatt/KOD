@@ -62,6 +62,7 @@ export interface ComputeHostingNode {
   nextBookingAt?: string | null
   lastBookingEnd?: string | null
   canAcceptOrders: boolean
+  platformManaged: number | boolean
   delistRequest?: {
     id: number
     status: string

@@ -87,9 +87,9 @@ type RunCardHourAction = (
 const businessEntries = [
   {
     value: 'custody',
-    title: '卡时托管',
-    text: '管理来源批次、有效期、冻结状态和托管记账',
-    button: '查看托管',
+    title: '卡时批次账本',
+    text: '管理来源批次、有效期、冻结状态和平台记账',
+    button: '查看账本',
     icon: IconDatabase,
   },
   {
@@ -336,7 +336,7 @@ export function CardHourBusiness({
 
       <Tabs value={tab} onChange={(value) => value && setTab(value)} keepMounted={false}>
         <Tabs.List>
-          <Tabs.Tab value="custody">托管账本</Tabs.Tab>
+          <Tabs.Tab value="custody">批次账本</Tabs.Tab>
           <Tabs.Tab value="deposit">存入</Tabs.Tab>
           <Tabs.Tab value="transfer">闲置转让</Tabs.Tab>
           <Tabs.Tab value="redeem">取出</Tabs.Tab>

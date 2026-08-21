@@ -49,6 +49,7 @@ import { AdminProductReviewCard, AdminReviewHistory } from '@/components/compute
 import { CardHourAdminPanel, CardHourBusiness, CardHourMarketplace } from '@/components/compute/CardHourBusiness'
 import { HostedComputePanel } from '@/components/compute/HostedComputePanel'
 import { MarketplaceOrderWorkspace } from '@/components/compute/MarketplaceOrderWorkspace'
+import { PlatformHostingPanel } from '@/components/compute/PlatformHostingPanel'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import {
@@ -188,7 +189,7 @@ const gpuAssetStatuses = [
   ['OFFLINE', '已关闭', 'gray'],
 ] as const
 
-function ComputeCenterPage() {
+export function ComputeCenterPage() {
   const search = Route.useSearch()
   const isSmallScreen = useIsSmallScreen()
   const navigate = useNavigate()
@@ -319,6 +320,7 @@ function ComputeCenterPage() {
   const tabs = [
     { value: 'market', label: '算力市场', icon: <IconBuildingStore size={16} /> },
     { value: 'card-hours', label: '卡时资产', icon: <IconDatabaseDollar size={16} /> },
+    { value: 'platform-hosting', label: '卡时托管', icon: <IconServer size={16} />, login: true },
     { value: 'account', label: '我的资产', icon: <IconWallet size={16} />, login: true },
     { value: 'purchases', label: '购买记录', icon: <IconReceipt size={16} />, login: true },
     { value: 'reservations', label: '租赁订单', icon: <IconServer size={16} />, login: true },
@@ -462,6 +464,9 @@ function ComputeCenterPage() {
 
             {isLoggedIn && (
               <>
+                <Tabs.Panel value="platform-hosting" pt="md">
+                  <PlatformHostingPanel />
+                </Tabs.Panel>
                 <Tabs.Panel value="account" pt="md">
                   <AccountPanel account={account} busy={busy} run={run} onOpen={setActiveTab} />
                 </Tabs.Panel>
@@ -2441,7 +2446,7 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
           label="累计卡时收益"
           value={formatCardHours(accountQuery.data?.lifetimeIncome)}
         />
-        <SummaryCard icon={<IconServer />} label="托管节点" value={String((nodesQuery.data || []).length)} />
+        <SummaryCard icon={<IconServer />} label="租赁节点" value={String((nodesQuery.data || []).length)} />
         <SummaryCard
           icon={<IconBuildingStore />}
           label="已发布商品"
@@ -2453,7 +2458,7 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
         <Tabs.List>
           <Tabs.Tab value="devices">资源资质</Tabs.Tab>
           <Tabs.Tab value="products">产品发布</Tabs.Tab>
-          <Tabs.Tab value="hosting">算力托管</Tabs.Tab>
+          <Tabs.Tab value="hosting">算力租赁</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="devices" pt="md">
@@ -2566,7 +2571,7 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                     placeholder="选择节点"
                     value={gpu.nodeId ? String(gpu.nodeId) : null}
                     data={(nodesQuery.data || [])
-                      .filter((item) => item.status === 'RUNNING')
+                      .filter((item) => item.status === 'RUNNING' && !item.platformManaged)
                       .map((item) => ({
                         value: String(item.id),
                         label: `${item.nodeName} · ${item.gpuModel} ${item.gpuMemoryGb}GB × ${item.gpuCount}`,

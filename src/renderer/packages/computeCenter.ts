@@ -821,6 +821,7 @@ export interface ComputeGpuNode {
   networkDescription: string
   status: string
   isTest: number | boolean
+  platformManaged: number | boolean
   reviewReason?: string
   verificationNote?: string
   verificationType?: string
