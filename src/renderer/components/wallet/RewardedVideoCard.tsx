@@ -88,6 +88,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   const serverProgressSequenceRef = useRef(0)
   const progressTokenRef = useRef('')
   const progressInFlightRef = useRef<Promise<boolean> | null>(null)
+  const previousIdentityRef = useRef(identity)
 
   const status = useQuery({
     queryKey: walletKeys.rewardedAdStatus(identity),
@@ -206,6 +207,14 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     complete.reset()
     claim.reset()
   }, [abandon, claim, complete, progress, start])
+
+  useEffect(() => {
+    if (previousIdentityRef.current === identity) return
+    previousIdentityRef.current = identity
+    setOpened(false)
+    setRecoveryNotice(null)
+    resetPlayback()
+  }, [identity, resetPlayback])
 
   const attemptClaim = useCallback(async () => {
     const activeWatch = watchRef.current

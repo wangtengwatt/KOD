@@ -21,18 +21,18 @@ export const videoGenerationStore = createStore<VideoGenerationUIState>(() => ({
   currentRecordId: null,
 }))
 
-function accountKey() {
-  const email = authInfoStore.getState().loginEmail
+function accountKey(ownerEmail: string | null = authInfoStore.getState().loginEmail) {
+  const email = ownerEmail
   return email ? deriveAccountKey(email) : 'anonymous'
 }
 
-function historyKey() {
-  return `kod-video-generation:v${VIDEO_HISTORY_VERSION}:${accountKey()}`
+function historyKey(ownerEmail?: string | null) {
+  return `kod-video-generation:v${VIDEO_HISTORY_VERSION}:${accountKey(ownerEmail)}`
 }
 
-function readRecords(): VideoGeneration[] {
+function readRecords(ownerEmail?: string | null): VideoGeneration[] {
   try {
-    const value = localStorage.getItem(historyKey())
+    const value = localStorage.getItem(historyKey(ownerEmail))
     if (!value) return []
     const parsed = JSON.parse(value) as unknown
     return Array.isArray(parsed) ? (parsed as VideoGeneration[]) : []
@@ -41,16 +41,16 @@ function readRecords(): VideoGeneration[] {
   }
 }
 
-function writeRecords(records: VideoGeneration[]) {
-  localStorage.setItem(historyKey(), JSON.stringify(records))
+function writeRecords(records: VideoGeneration[], ownerEmail?: string | null) {
+  localStorage.setItem(historyKey(ownerEmail), JSON.stringify(records))
 }
 
 export function listVideoRecords() {
   return readRecords().sort((left, right) => right.createdAt - left.createdAt)
 }
 
-export function getVideoRecord(id: string) {
-  return readRecords().find((record) => record.id === id) ?? null
+export function getVideoRecord(id: string, ownerEmail?: string | null) {
+  return readRecords(ownerEmail).find((record) => record.id === id) ?? null
 }
 
 export function createVideoRecord(input: Omit<VideoGeneration, 'id' | 'createdAt' | 'status' | 'generatedVideos'>) {
@@ -65,14 +65,14 @@ export function createVideoRecord(input: Omit<VideoGeneration, 'id' | 'createdAt
   return record
 }
 
-export function updateVideoRecord(id: string, updates: Partial<VideoGeneration>) {
+export function updateVideoRecord(id: string, updates: Partial<VideoGeneration>, ownerEmail?: string | null) {
   let updated: VideoGeneration | null = null
-  const records = readRecords().map((record) => {
+  const records = readRecords(ownerEmail).map((record) => {
     if (record.id !== id) return record
     updated = { ...record, ...updates }
     return updated
   })
-  if (updated) writeRecords(records)
+  if (updated) writeRecords(records, ownerEmail)
   return updated
 }
 

@@ -175,7 +175,119 @@ describe('official video generation actions', () => {
     expect(JSON.stringify(mocks.submit.mock.calls)).not.toMatch(/api[_-]?key|tokenstar|https?:\/\//i)
     expect(mocks.updateRecord).toHaveBeenCalledWith(
       record.id,
-      expect.objectContaining({ status: 'done', progress: 100 })
+      expect.objectContaining({ status: 'done', progress: 100 }),
+      null
+    )
+  })
+
+  it('aborts an in-flight task on account switch and marks only the owner history retryable', async () => {
+    authInfoStore.setState({
+      accessToken: 'account-a-access',
+      refreshToken: 'account-a-refresh',
+      loginEmail: 'account-a@kod.test',
+    })
+    mocks.availability.mockResolvedValue({
+      available: true,
+      reason: '',
+      models: ['seedance-2.0-asset-fast'],
+      durations: [5],
+      resolutions: ['720p'],
+      ratios: ['16:9'],
+      maxReferenceImages: 2,
+      maxReferenceImageBytes: 10_000_000,
+    })
+    mocks.submit.mockResolvedValue({ id: 'account-a-task', status: 'queued', progress: 0 })
+    mocks.poll.mockImplementation(
+      (_id: string, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), {
+            once: true,
+          })
+        })
+    )
+
+    await createAndGenerateVideo({
+      prompt: record.prompt,
+      referenceImages: record.referenceImages,
+      model: record.model,
+      duration: record.duration,
+      resolution: record.resolution,
+      ratio: record.ratio,
+    })
+    await vi.waitFor(() => expect(mocks.poll).toHaveBeenCalledTimes(1))
+
+    authInfoStore.setState({
+      accessToken: 'account-b-access',
+      refreshToken: 'account-b-refresh',
+      loginEmail: 'account-b@kod.test',
+    })
+
+    await vi.waitFor(() =>
+      expect(mocks.updateRecord).toHaveBeenCalledWith(
+        record.id,
+        expect.objectContaining({ status: 'error' }),
+        'account-a@kod.test'
+      )
+    )
+    expect(mocks.download).not.toHaveBeenCalled()
+    expect(mocks.updateRecord.mock.calls.every((call) => call[2] === 'account-a@kod.test')).toBe(true)
+    expect(mocks.state.currentGeneratingId).toBeNull()
+  })
+
+  it('keeps the owner task running when only that account tokens rotate', async () => {
+    authInfoStore.setState({
+      accessToken: 'account-a-access',
+      refreshToken: 'account-a-refresh',
+      loginEmail: 'account-a@kod.test',
+    })
+    mocks.availability.mockResolvedValue({
+      available: true,
+      reason: '',
+      models: ['seedance-2.0-asset-fast'],
+      durations: [5],
+      resolutions: ['720p'],
+      ratios: ['16:9'],
+      maxReferenceImages: 2,
+      maxReferenceImageBytes: 10_000_000,
+    })
+    mocks.submit.mockResolvedValue({ id: 'account-a-task', status: 'queued', progress: 0 })
+    let resolvePoll: ((task: { id: string; status: 'completed'; progress: number }) => void) | undefined
+    mocks.poll.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePoll = resolve
+        })
+    )
+    mocks.download.mockResolvedValue('data:video/mp4;base64,dmlkZW8=')
+
+    await createAndGenerateVideo({
+      prompt: record.prompt,
+      referenceImages: record.referenceImages,
+      model: record.model,
+      duration: record.duration,
+      resolution: record.resolution,
+      ratio: record.ratio,
+    })
+    await vi.waitFor(() => expect(mocks.poll).toHaveBeenCalledTimes(1))
+
+    authInfoStore.setState({
+      accessToken: 'account-a-access-refreshed',
+      refreshToken: 'account-a-refresh-refreshed',
+      loginEmail: 'account-a@kod.test',
+    })
+    resolvePoll?.({ id: 'account-a-task', status: 'completed', progress: 100 })
+
+    await vi.waitFor(() =>
+      expect(mocks.updateRecord).toHaveBeenCalledWith(
+        record.id,
+        expect.objectContaining({ status: 'done' }),
+        'account-a@kod.test'
+      )
+    )
+    expect(mocks.updateRecord).not.toHaveBeenCalledWith(
+      record.id,
+      expect.objectContaining({ status: 'error' }),
+      'account-a@kod.test'
     )
   })
 })

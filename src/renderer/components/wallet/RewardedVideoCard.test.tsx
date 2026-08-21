@@ -62,23 +62,32 @@ const claimResult = {
   nextEligibleDate: '2026-08-22',
 }
 
-function renderCard(onClaimed = vi.fn()) {
+function renderCard(onClaimed = vi.fn(), identity = 'member@kod.test') {
   const queryClient = new QueryClient({
     defaultOptions: {
       mutations: { retry: false },
       queries: { retry: false },
     },
   })
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <MantineProvider>
+        <RewardedVideoCard identity={identity} onClaimed={onClaimed} />
+      </MantineProvider>
+    </QueryClientProvider>
+  )
   return {
     onClaimed,
     queryClient,
-    ...render(
-      <QueryClientProvider client={queryClient}>
-        <MantineProvider>
-          <RewardedVideoCard identity="member@kod.test" onClaimed={onClaimed} />
-        </MantineProvider>
-      </QueryClientProvider>
-    ),
+    ...view,
+    rerenderCard: (nextIdentity: string) =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <MantineProvider>
+            <RewardedVideoCard identity={nextIdentity} onClaimed={onClaimed} />
+          </MantineProvider>
+        </QueryClientProvider>
+      ),
   }
 }
 
@@ -173,6 +182,28 @@ afterEach(() => {
 })
 
 describe('RewardedVideoCard', () => {
+  it('closes an active watch locally when the authenticated account changes', async () => {
+    const { rerenderCard } = renderCard()
+    const video = await openAd()
+
+    act(() => advancePlayback(video, 1))
+    await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(1))
+
+    rerenderCard('other@kod.test')
+
+    await waitFor(() => expect(mocks.getRewardedAdStatus).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(screen.queryByLabelText('濂栧姳骞垮憡瑙嗛')).toBeNull()
+    expect(mocks.abandonRewardedAd).not.toHaveBeenCalled()
+    fireEvent.timeUpdate(video)
+    fireEvent.ended(video)
+    expect(mocks.completeRewardedAd).not.toHaveBeenCalled()
+    expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
+  })
+
   it('labels the placement as an ad in the card and player', async () => {
     renderCard()
 
