@@ -33,7 +33,8 @@ const rewardAssetUrl = z
 const optionalRewardAssetUrl = z
   .string()
   .max(2048)
-  .transform((value) => (value.trim() === '' ? null : rewardAssetUrl.parse(value)))
+  .transform((value) => value.trim())
+  .pipe(z.union([z.literal('').transform(() => null), rewardAssetUrl]))
 const rewardedAdDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const rewardedAdInstant = z
   .string()
@@ -304,6 +305,15 @@ export const RewardedAdCompletionSchema = z
   .passthrough()
 export type RewardedAdCompletion = z.infer<typeof RewardedAdCompletionSchema>
 
+export const RewardedAdAbandonmentSchema = z.object({
+  watchId: rewardedAdWatchId,
+  abandonedAt: rewardedAdInstant,
+})
+export type RewardedAdAbandonment = z.infer<typeof RewardedAdAbandonmentSchema>
+
+export const REWARDED_AD_PROGRESS_WINDOW_ELAPSED_CODE = 409
+export const REWARDED_AD_PROGRESS_WINDOW_ELAPSED_MESSAGE = 'Advertisement progress window has elapsed'
+
 export interface RewardedAdProgressInput {
   watchId: number
   progressToken: string
@@ -494,6 +504,12 @@ export const walletApi = {
         sequence: z.number().int().positive().safe().parse(input.sequence),
         focused: z.boolean().parse(input.focused),
       },
+      retry: 0,
+    }),
+  abandonRewardedAd: (watchId: number) =>
+    request('/api/compute/ad-reward/abandon', RewardedAdAbandonmentSchema, {
+      method: 'POST',
+      body: { watchId: rewardedAdWatchId.parse(watchId) },
       retry: 0,
     }),
   completeRewardedAd: (watchId: number, progressToken: string) =>

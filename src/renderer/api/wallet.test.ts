@@ -537,6 +537,10 @@ describe('wallet contracts', () => {
         expect(JSON.parse(String(init?.body))).toEqual({ watchId: 17, progressToken: 'next-token' })
         return ok({ watchId: 17, completedAt: '2026-08-21T10:00:25Z', expiresAt: '2026-08-21T10:05:00Z' })
       }
+      if (path.endsWith('/abandon')) {
+        expect(JSON.parse(String(init?.body))).toEqual({ watchId: 17 })
+        return ok({ watchId: 17, abandonedAt: '2026-08-21T10:00:06Z' })
+      }
       expect(path).toMatch(/\/claim$/)
       expect(JSON.parse(String(init?.body))).toEqual({ watchId: 17 })
       return ok({ watchId: 17, rewardCardHours: 10, remainingCount: 0, nextEligibleDate: '2026-08-22' })
@@ -553,11 +557,33 @@ describe('wallet contracts', () => {
       focused: true,
     })
     expect(progress.nextProgressToken).toBe('next-token')
+    await expect(walletApi.abandonRewardedAd(17)).resolves.toMatchObject({ watchId: 17 })
     await expect(walletApi.completeRewardedAd(17, progress.nextProgressToken)).resolves.toMatchObject({ watchId: 17 })
     await expect(walletApi.claimRewardedAd(17)).resolves.toMatchObject({
       rewardCardHours: 10,
     })
-    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(fetchMock).toHaveBeenCalledTimes(5)
+  })
+  it('classifies an unsafe optional poster as a schema failure instead of a network failure', async () => {
+    authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret' })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        ok({
+          campaignId: 'kod-reward-2026-08',
+          assetPath: '/api/ads/kod-reward-2026-08.mp4',
+          posterPath: 'https://attacker.example/poster.jpg',
+          durationSeconds: 25,
+          minimumSeconds: 25,
+          rewardCardHours: 10,
+          remainingCount: 1,
+          nextEligibleDate: '2026-08-21',
+          eligible: true,
+        })
+      )
+    )
+
+    await expect(walletApi.getRewardedAdStatus()).rejects.toMatchObject({ kind: 'schema' })
   })
   it('loads qualified balances from the real compute account route', async () => {
     authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret' })

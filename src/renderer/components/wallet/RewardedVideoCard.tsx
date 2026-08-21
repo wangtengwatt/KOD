@@ -3,7 +3,12 @@ import { IconCheck, IconGift, IconPlayerPause, IconPlayerPlay, IconRefresh } fro
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { RewardedAdClaim, RewardedAdWatch } from '@/api/wallet'
-import { WalletApiError, walletApi } from '@/api/wallet'
+import {
+  REWARDED_AD_PROGRESS_WINDOW_ELAPSED_CODE,
+  REWARDED_AD_PROGRESS_WINDOW_ELAPSED_MESSAGE,
+  WalletApiError,
+  walletApi,
+} from '@/api/wallet'
 import { AdaptiveModal } from '@/components/common/AdaptiveModal'
 import { invalidateRewardReceipt, walletKeys } from '@/hooks/useWallet'
 import { trackingEvent } from '@/packages/event'
@@ -26,6 +31,12 @@ export interface RewardedVideoCardProps {
 }
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : '请求失败，请稍后重试')
+
+const isElapsedProgressWindow = (error: unknown) =>
+  error instanceof WalletApiError &&
+  error.kind === 'business' &&
+  error.businessCode === REWARDED_AD_PROGRESS_WINDOW_ELAPSED_CODE &&
+  error.message === REWARDED_AD_PROGRESS_WINDOW_ELAPSED_MESSAGE
 
 const monotonicNow = () => (typeof performance === 'undefined' ? Date.now() : performance.now())
 
@@ -55,6 +66,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   const [videoError, setVideoError] = useState<string | null>(null)
   const [claimError, setClaimError] = useState<string | null>(null)
   const [claimResult, setClaimResult] = useState<RewardedAdClaim | null>(null)
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const watchRef = useRef<RewardedAdWatch | null>(null)
@@ -91,6 +103,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   })
   const start = useMutation({ mutationFn: walletApi.startRewardedAd })
   const progress = useMutation({ mutationFn: walletApi.progressRewardedAd })
+  const abandon = useMutation({ mutationFn: walletApi.abandonRewardedAd })
   const complete = useMutation({
     mutationFn: ({ watchId, progressToken }: { watchId: number; progressToken: string }) =>
       walletApi.completeRewardedAd(watchId, progressToken),
@@ -186,9 +199,10 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     setClaimResult(null)
     start.reset()
     progress.reset()
+    abandon.reset()
     complete.reset()
     claim.reset()
-  }, [claim, complete, progress, start])
+  }, [abandon, claim, complete, progress, start])
 
   const attemptClaim = useCallback(async () => {
     const activeWatch = watchRef.current
@@ -224,6 +238,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     try {
       const activeWatch = await start.mutateAsync(currentStatus.campaignId)
       resetPlayback()
+      setRecoveryNotice(null)
       watchRef.current = activeWatch
       progressTokenRef.current = activeWatch.progressToken
       setWatch(activeWatch)
@@ -235,16 +250,38 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     }
   }, [resetPlayback, start, status.data])
 
-  const handleClose = useCallback(() => {
-    if (claimStateRef.current === 'pending') return
+  const abandonWatch = useCallback(
+    async (activeWatch: RewardedAdWatch, notice: string | null) => {
+      try {
+        const receipt = await abandon.mutateAsync(activeWatch.watchId)
+        if (receipt.watchId !== activeWatch.watchId) throw new Error('服务端返回了不匹配的放弃回执')
+        if (!abandonTrackedRef.current) {
+          abandonTrackedRef.current = true
+          trackRewardedAd('rewarded_ad_abandon', activeWatch, status.data?.rewardCardHours ?? 0)
+        }
+        setOpened(false)
+        resetPlayback()
+        setRecoveryNotice(notice)
+        await queryClient.invalidateQueries({ queryKey: walletKeys.rewardedAdStatus(identity) })
+        return true
+      } catch (error) {
+        setClaimError(`放弃本次观看失败：${errorMessage(error)}`)
+        return false
+      }
+    },
+    [abandon, identity, queryClient, resetPlayback, status.data?.rewardCardHours]
+  )
+
+  const handleClose = useCallback(async () => {
+    if (claimStateRef.current === 'pending' || abandon.isPending) return
     const activeWatch = watchRef.current
-    if (activeWatch && claimStateRef.current !== 'succeeded' && !abandonTrackedRef.current) {
-      abandonTrackedRef.current = true
-      trackRewardedAd('rewarded_ad_abandon', activeWatch, status.data?.rewardCardHours ?? 0)
+    if (activeWatch && claimStateRef.current !== 'succeeded') {
+      await abandonWatch(activeWatch, null)
+      return
     }
     setOpened(false)
     resetPlayback()
-  }, [resetPlayback, status.data?.rewardCardHours])
+  }, [abandon.isPending, abandonWatch, resetPlayback])
 
   const handlePlay = useCallback(
     (event: React.SyntheticEvent<HTMLVideoElement>) => {
@@ -266,6 +303,15 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     (event: React.SyntheticEvent<HTMLVideoElement>) => {
       settleSegment(event.currentTarget)
       setIsPlaying(false)
+    },
+    [settleSegment]
+  )
+
+  const handleBuffering = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      settleSegment(event.currentTarget)
+      setIsPlaying(false)
+      setPlaybackNotice('广告正在缓冲，缓冲期间不会累计观看时长。')
     },
     [settleSegment]
   )
@@ -296,7 +342,17 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
           progressTokenRef.current = receipt.nextProgressToken
           return true
         })
-        .catch((error) => {
+        .catch(async (error) => {
+          if (isElapsedProgressWindow(error) && watchRef.current?.watchId === activeWatch.watchId) {
+            const video = videoRef.current
+            if (video) {
+              settleSegment(video)
+              video.pause()
+            }
+            setIsPlaying(false)
+            await abandonWatch(activeWatch, '观看中断超过 5 秒，本次未发放奖励，请重新开始。')
+            return false
+          }
           setClaimError(`播放进度回执失败：${errorMessage(error)}`)
           return false
         })
@@ -306,7 +362,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
       progressInFlightRef.current = request
       return request
     },
-    [assetDurationSeconds, progress]
+    [abandonWatch, assetDurationSeconds, progress, settleSegment]
   )
 
   const handleTimeUpdate = useCallback(
@@ -592,6 +648,11 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
               无法开始广告：{errorMessage(start.error)}
             </Text>
           )}
+          {recoveryNotice && (
+            <Alert color="yellow" role="status">
+              {recoveryNotice}
+            </Alert>
+          )}
           {qualifiedAccount && (
             <Stack gap={4}>
               <Group justify="space-between">
@@ -628,7 +689,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
 
       <AdaptiveModal
         opened={opened}
-        onClose={handleClose}
+        onClose={() => void handleClose()}
         title="观看广告得卡时"
         centered
         size="lg"
@@ -678,7 +739,10 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
                     aria-label="奖励广告视频"
                     className="block h-full w-full object-contain"
                     onPlay={handlePlay}
+                    onPlaying={handlePlay}
                     onPause={handlePause}
+                    onWaiting={handleBuffering}
+                    onStalled={handleBuffering}
                     onTimeUpdate={handleTimeUpdate}
                     onSeeking={handleSeeking}
                     onSeeked={handleSeeked}
@@ -735,7 +799,10 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
                 完成
               </Button>
             ) : (
-              <AdaptiveModal.CloseButton disabled={claim.isPending} onClick={handleClose}>
+              <AdaptiveModal.CloseButton
+                disabled={claim.isPending || abandon.isPending}
+                onClick={() => void handleClose()}
+              >
                 关闭并放弃
               </AdaptiveModal.CloseButton>
             )}

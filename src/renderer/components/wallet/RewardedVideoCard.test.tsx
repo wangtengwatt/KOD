@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WalletApiError } from '@/api/wallet'
 
 const mocks = vi.hoisted(() => ({
+  abandonRewardedAd: vi.fn(),
   claimRewardedAd: vi.fn(),
   completeRewardedAd: vi.fn(),
   getCardTimeAccount: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('@/api/wallet', async (importOriginal) => {
     ...original,
     walletApi: {
       ...original.walletApi,
+      abandonRewardedAd: mocks.abandonRewardedAd,
       claimRewardedAd: mocks.claimRewardedAd,
       completeRewardedAd: mocks.completeRewardedAd,
       getCardTimeAccount: mocks.getCardTimeAccount,
@@ -112,6 +114,10 @@ beforeEach(() => {
     rewardCardHours: 10,
   })
   mocks.getRewardedAdStatus.mockResolvedValue(status)
+  mocks.abandonRewardedAd.mockImplementation(async (watchId: number) => ({
+    watchId,
+    abandonedAt: Math.floor(Date.now() / 1000),
+  }))
   mocks.startRewardedAd.mockImplementation(async () => ({
     watchId: 17,
     campaignId: status.campaignId,
@@ -233,6 +239,7 @@ describe('RewardedVideoCard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '关闭并放弃' }))
 
+    await waitFor(() => expect(mocks.abandonRewardedAd.mock.calls[0]?.[0]).toBe(17))
     expect(mocks.trackingEvent).toHaveBeenLastCalledWith('rewarded_ad_abandon', {
       campaign_id: 'kod-reward-2026-08',
       platform: 'web',
@@ -244,6 +251,78 @@ describe('RewardedVideoCard', () => {
       'reward_card_hours',
     ])
   })
+
+  it.each(['pause', 'visibility', 'buffering'] as const)(
+    'abandons a stale watch after more than five seconds of %s and starts a fresh watch',
+    async (interruption) => {
+      let startCount = 0
+      mocks.startRewardedAd.mockImplementation(() => {
+        startCount += 1
+        return {
+          watchId: startCount === 1 ? 17 : 18,
+          campaignId: status.campaignId,
+          videoUrl: status.videoUrl,
+          minimumSeconds: status.minimumSeconds,
+          startedAt: Math.floor(Date.now() / 1000),
+          expiresAt: Math.floor(Date.now() / 1000) + 600,
+          progressToken: `watch-${startCount}-progress-0`,
+        }
+      })
+      mocks.progressRewardedAd
+        .mockResolvedValueOnce({
+          watchId: 17,
+          mediaPositionSeconds: 1,
+          sequence: 1,
+          nextProgressToken: 'watch-1-progress-1',
+          expiresAt: Math.floor(Date.now() / 1000) + 600,
+        })
+        .mockRejectedValueOnce(new WalletApiError('Advertisement progress window has elapsed', 'business', 409))
+      renderCard()
+      const video = await openAd()
+
+      act(() => advancePlayback(video, 1))
+      await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(1))
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      if (interruption === 'pause') {
+        fireEvent.pause(video)
+      } else if (interruption === 'visibility') {
+        let hidden = true
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+        fireEvent(document, new Event('visibilitychange'))
+        hidden = false
+        fireEvent(document, new Event('visibilitychange'))
+      } else {
+        fireEvent.waiting(video)
+      }
+
+      monotonicClock = 8_000
+      fireEvent.play(video)
+      video.currentTime = 2
+      monotonicClock = 9_000
+      fireEvent.timeUpdate(video)
+
+      await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(2))
+      await waitFor(() => expect(mocks.abandonRewardedAd.mock.calls[0]?.[0]).toBe(17))
+      expect(await screen.findByText('观看中断超过 5 秒，本次未发放奖励，请重新开始。')).toBeTruthy()
+      await waitFor(() => expect(screen.queryByLabelText('奖励广告视频')).toBeNull())
+
+      fireEvent.click(screen.getByRole('button', { name: '观看并领取' }))
+      const replacement = (await screen.findByLabelText('奖励广告视频')) as HTMLVideoElement
+      expect(mocks.startRewardedAd).toHaveBeenCalledTimes(2)
+      fireEvent.play(replacement)
+      replacement.currentTime = 1
+      monotonicClock = 10_000
+      fireEvent.timeUpdate(replacement)
+      await waitFor(() =>
+        expect(mocks.progressRewardedAd.mock.calls.at(-1)?.[0]).toEqual(
+          expect.objectContaining({ watchId: 18, progressToken: 'watch-2-progress-0' })
+        )
+      )
+    }
+  )
 
   it('does not claim when ended before the full server asset duration', async () => {
     renderCard()
