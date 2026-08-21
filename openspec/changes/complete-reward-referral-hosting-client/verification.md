@@ -274,6 +274,17 @@ Fresh client verification used Node `v22.23.2` and Corepack pnpm `10.33.0`. The 
 
 Strict OpenSpec validation, protected realtime-price checks, client production video/upstream-key checks, added-line secret scans, and both repository range whitespace checks are rerun after documentation updates below. No real upstream submit/status/download was attempted because no server-side upstream API key was provided.
 
+## Nineteenth independent cross-branch review repair
+
+A nineteenth completely fresh read-only reviewer covered client `f97c615..3aacf4a` and backend `f37e8cb..42957d7`; it did not inherit an earlier verdict. It reported zero Critical and two Important client owner-partition findings. The reviewer independently confirmed the complete eighteenth backend repair and disproved a reward-transfer laundering candidate because transfers reserve only redeemable qualified lots before crediting the recipient.
+
+- video history and single-record React Query functions now capture the rendered `loginEmail` that is embedded in their query key. A root invalidation after an A-to-B switch can no longer read B's current namespace and place B's private local history under A's cache key;
+- card-hour actions repeat the captured-owner check after their awaited query invalidation and before returning success. A delayed A invalidation can no longer resolve `true` and let a stale continuation close or reset B's newly opened reservation/RFQ workflow.
+
+Both regressions were demonstrated RED before production repair: the A-key history query returned B's record, and releasing A's delayed invalidation removed B's populated GPU purchase modal. After repair, the direct two-file set passes 6/6 and the complete 12-file reward/referral/hosting/video set passes 130/130. TypeScript check and the four changed-file Biome check pass. The production build succeeds after transforming 5,352 main, 82 preload, and 15,029 renderer modules.
+
+The fresh full client suite now contains 155 files: 148 passed, 5 failed, 2 skipped; 1,538 tests: 1,478 passed, the same six classified baseline failures, and 54 skipped. The two added regressions account for the exact increase from the eighteenth run. Full Biome checks 922 files and remains the unchanged baseline of 13 errors and 1,010 warnings. Strict OpenSpec, protected realtime-price, production-video/key, added-secret, and range whitespace checks are rerun after this documentation update.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.

@@ -9,6 +9,7 @@ import type { ComputeAccount, ComputeGpuNode, ComputeProduct, PlatformServerSku 
 const mocks = vi.hoisted(() => ({
   activateComputeApi: vi.fn(),
   bindComputeReferral: vi.fn(),
+  createComputeReservation: vi.fn(),
   getComputeAccount: vi.fn(),
   getComputeConfig: vi.fn(),
   getComputeIdentity: vi.fn(),
@@ -99,6 +100,7 @@ vi.mock('@/packages/computeCenter', async (importOriginal) => {
     ...original,
     activateComputeApi: mocks.activateComputeApi,
     bindComputeReferral: mocks.bindComputeReferral,
+    createComputeReservation: mocks.createComputeReservation,
     getComputeAccount: mocks.getComputeAccount,
     getComputeConfig: mocks.getComputeConfig,
     getComputeIdentity: mocks.getComputeIdentity,
@@ -391,6 +393,72 @@ it('discards a delayed card-hour top-up quote when the authenticated account cha
   })
   expect(screen.queryByRole('dialog')).toBeNull()
   expect(mocks.activateComputeApi).toHaveBeenCalledTimes(1)
+})
+
+it('does not let an old card-hour invalidation close the new account purchase modal', async () => {
+  const product = {
+    id: 101,
+    productType: 'GPU',
+    name: 'Owner-scoped GPU package',
+    description: 'test package',
+    region: 'cn',
+    status: 'PUBLISHED',
+    gpuModel: 'RTX 4090',
+    gpuMemoryGb: 24,
+    gpuCount: 1,
+    packageDurationHours: 1,
+    deliveryDeadlineHours: 1,
+    packagePriceCardHours: 1,
+    createTime: '2026-08-01T12:00:00',
+  } satisfies ComputeProduct
+  mocks.listComputeProducts.mockResolvedValue([product])
+  mocks.createComputeReservation.mockResolvedValue({ id: 1 })
+  let releaseInvalidation: (() => void) | undefined
+  const invalidationBlocked = new Promise<void>((resolve) => {
+    releaseInvalidation = resolve
+  })
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(() => invalidationBlocked)
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MantineProvider>
+        <ComputeCenterPage />
+      </MantineProvider>
+    </QueryClientProvider>
+  )
+
+  fireEvent.click(await screen.findByRole('button', { name: '购买 GPU 套餐' }))
+  fireEvent.change(screen.getByRole('textbox', { name: /SSH 公钥/ }), {
+    target: { value: 'ssh-ed25519 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA account-a' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: '确认购买并冻结卡时' }))
+  await waitFor(() => expect(queryClient.invalidateQueries).toHaveBeenCalled())
+
+  act(() => {
+    auth.setState({
+      accessToken: 'second-token',
+      refreshToken: 'second-refresh-token',
+      loginEmail: 'second@example.com',
+    })
+  })
+  const closeButton = screen.getByRole('dialog').querySelector('button.mantine-Modal-close')
+  expect(closeButton).toBeTruthy()
+  fireEvent.click(closeButton as HTMLButtonElement)
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  fireEvent.click(await screen.findByRole('button', { name: '购买 GPU 套餐' }))
+  fireEvent.change(screen.getByRole('textbox', { name: /SSH 公钥/ }), {
+    target: { value: 'ssh-ed25519 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB account-b' },
+  })
+
+  await act(async () => {
+    releaseInvalidation?.()
+    await invalidationBlocked
+  })
+
+  expect(screen.getByRole('dialog')).toBeTruthy()
+  expect((screen.getByRole('textbox', { name: /SSH 公钥/ }) as HTMLTextAreaElement).value).toBe(
+    'ssh-ed25519 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB account-b'
+  )
 })
 
 it('does not bind an old invitation with the new account after a mounted account switch', async () => {

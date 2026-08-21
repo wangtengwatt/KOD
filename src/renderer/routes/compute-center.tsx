@@ -309,6 +309,7 @@ export function ComputeCenterPage() {
         if (currentIdentityRef.current !== ownerIdentity) return false
         setMessage({ color: 'green', text: success })
         await queryClient.invalidateQueries({ queryKey: computeQueryKey() })
+        if (currentIdentityRef.current !== ownerIdentity) return false
         return true
       } catch (error) {
         if (currentIdentityRef.current !== ownerIdentity) return false

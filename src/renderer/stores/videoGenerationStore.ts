@@ -45,8 +45,8 @@ function writeRecords(records: VideoGeneration[], ownerEmail?: string | null) {
   localStorage.setItem(historyKey(ownerEmail), JSON.stringify(records))
 }
 
-export function listVideoRecords() {
-  return readRecords().sort((left, right) => right.createdAt - left.createdAt)
+export function listVideoRecords(ownerEmail?: string | null) {
+  return readRecords(ownerEmail).sort((left, right) => right.createdAt - left.createdAt)
 }
 
 export function getVideoRecord(id: string, ownerEmail?: string | null) {
@@ -98,7 +98,7 @@ export function useVideoGenerationHistory() {
   const loginEmail = useAuthInfoStore((state) => state.loginEmail)
   return useQuery({
     queryKey: [VIDEO_GEN_LIST_QUERY_KEY, loginEmail || 'anonymous'],
-    queryFn: listVideoRecords,
+    queryFn: () => listVideoRecords(loginEmail),
   })
 }
 
@@ -106,7 +106,7 @@ export function useVideoGenerationRecord(id: string | null) {
   const loginEmail = useAuthInfoStore((state) => state.loginEmail)
   return useQuery({
     queryKey: [VIDEO_GEN_QUERY_KEY, loginEmail || 'anonymous', id],
-    queryFn: () => (id ? getVideoRecord(id) : null),
+    queryFn: () => (id ? getVideoRecord(id, loginEmail) : null),
     enabled: Boolean(id),
   })
 }
