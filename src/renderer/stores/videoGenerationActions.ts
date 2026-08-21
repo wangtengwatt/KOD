@@ -43,6 +43,21 @@ export interface GenerateVideoParams {
 }
 
 let activeController: AbortController | null = null
+let activeStartup: symbol | null = null
+const ACCOUNT_CHANGED_ERROR = '账号已切换，请切回原账号后重试。'
+
+function reserveGenerationStartup() {
+  if (activeStartup || videoGenerationStore.getState().currentGeneratingId) {
+    throw new Error('已有视频正在生成，请等待当前任务完成。')
+  }
+  const startup = Symbol('video-generation-startup')
+  activeStartup = startup
+  return startup
+}
+
+function releaseGenerationStartup(startup: symbol) {
+  if (activeStartup === startup) activeStartup = null
+}
 
 function currentAuthIdentity() {
   const { accessToken, refreshToken, loginEmail } = authInfoStore.getState()
@@ -138,7 +153,7 @@ async function runGeneration(record: VideoGeneration, ownerEmail: string | null,
   } catch (error) {
     const aborted = error instanceof Error && error.name === 'AbortError'
     if (aborted && currentAuthIdentity() !== ownerIdentity) {
-      await updateVideoRecord(record.id, { status: 'error', error: '账号已切换，请切回原账号后重试。' }, ownerEmail)
+      await updateVideoRecord(record.id, { status: 'error', error: ACCOUNT_CHANGED_ERROR }, ownerEmail)
     } else if (!aborted) {
       await updateVideoRecord(record.id, { status: 'error', error: getVideoServiceErrorMessage(error) }, ownerEmail)
     }
@@ -153,43 +168,64 @@ async function runGeneration(record: VideoGeneration, ownerEmail: string | null,
 }
 
 export async function createAndGenerateVideo(params: GenerateVideoParams) {
-  if (videoGenerationStore.getState().currentGeneratingId) throw new Error('已有视频正在生成，请等待当前任务完成。')
+  const startup = reserveGenerationStartup()
   const ownerIdentity = currentAuthIdentity()
   const ownerEmail = authInfoStore.getState().loginEmail
-  await assertOfficialVideoAvailable()
-  if (currentAuthIdentity() !== ownerIdentity) throw accountChangedAbort()
-  const record = await createVideoRecord(params)
-  videoGenerationStore.setState({ currentGeneratingId: record.id, currentRecordId: record.id })
-  queryClient.setQueryData([VIDEO_GEN_QUERY_KEY, ownerEmail || 'anonymous', record.id], record)
-  void runGeneration(record, ownerEmail, ownerIdentity)
-  return record.id
+  try {
+    await assertOfficialVideoAvailable()
+    if (activeStartup !== startup || currentAuthIdentity() !== ownerIdentity) throw accountChangedAbort()
+    const record = await createVideoRecord(params)
+    if (activeStartup !== startup || currentAuthIdentity() !== ownerIdentity) {
+      await updateVideoRecord(record.id, { status: 'error', error: ACCOUNT_CHANGED_ERROR }, ownerEmail)
+      throw accountChangedAbort()
+    }
+    videoGenerationStore.setState({ currentGeneratingId: record.id, currentRecordId: record.id })
+    queryClient.setQueryData([VIDEO_GEN_QUERY_KEY, ownerEmail || 'anonymous', record.id], record)
+    releaseGenerationStartup(startup)
+    void runGeneration(record, ownerEmail, ownerIdentity)
+    return record.id
+  } catch (error) {
+    releaseGenerationStartup(startup)
+    throw error
+  }
 }
 
 export async function retryVideoGeneration(id: string) {
-  if (videoGenerationStore.getState().currentGeneratingId) throw new Error('已有视频正在生成，请等待当前任务完成。')
+  const startup = reserveGenerationStartup()
   const ownerIdentity = currentAuthIdentity()
   const ownerEmail = authInfoStore.getState().loginEmail
-  await assertOfficialVideoAvailable()
-  if (currentAuthIdentity() !== ownerIdentity) throw accountChangedAbort()
-  const record = await getVideoRecord(id, ownerEmail)
-  if (!record) throw new Error('找不到这条视频历史记录。')
-  const reset = await updateVideoRecord(
-    id,
-    {
-      status: 'pending',
-      progress: undefined,
-      error: undefined,
-      taskId: undefined,
-      generatedVideos: [],
-    },
-    ownerEmail
-  )
-  if (!reset) throw new Error('无法更新视频历史记录。')
-  videoGenerationStore.setState({ currentGeneratingId: id, currentRecordId: id })
-  void runGeneration(reset, ownerEmail, ownerIdentity)
+  try {
+    await assertOfficialVideoAvailable()
+    if (activeStartup !== startup || currentAuthIdentity() !== ownerIdentity) throw accountChangedAbort()
+    const record = await getVideoRecord(id, ownerEmail)
+    if (!record) throw new Error('找不到这条视频历史记录。')
+    const reset = await updateVideoRecord(
+      id,
+      {
+        status: 'pending',
+        progress: undefined,
+        error: undefined,
+        taskId: undefined,
+        generatedVideos: [],
+      },
+      ownerEmail
+    )
+    if (!reset) throw new Error('无法更新视频历史记录。')
+    if (activeStartup !== startup || currentAuthIdentity() !== ownerIdentity) {
+      await updateVideoRecord(id, { status: 'error', error: ACCOUNT_CHANGED_ERROR }, ownerEmail)
+      throw accountChangedAbort()
+    }
+    videoGenerationStore.setState({ currentGeneratingId: id, currentRecordId: id })
+    releaseGenerationStartup(startup)
+    void runGeneration(reset, ownerEmail, ownerIdentity)
+  } catch (error) {
+    releaseGenerationStartup(startup)
+    throw error
+  }
 }
 
 export function cancelVideoGeneration() {
+  activeStartup = null
   activeController?.abort()
   activeController = null
   videoGenerationStore.setState({ currentGeneratingId: null })

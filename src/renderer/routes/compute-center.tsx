@@ -201,6 +201,10 @@ export function ComputeCenterPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<FeedbackMessage | null>(null)
   const [cardHourPrompt, setCardHourPrompt] = useState<CardHourPrompt | null>(null)
+  const currentIdentityRef = useRef(identity)
+  currentIdentityRef.current = identity
+  const previousIdentityRef = useRef(identity)
+  const promptOwnerRef = useRef<{ identity: string; resolve: (result: boolean) => void } | null>(null)
   const previousUnreadOrderMessages = useRef<number | null>(null)
   const closeMessage = useCallback(() => setMessage(null), [])
 
@@ -218,6 +222,17 @@ export function ComputeCenterPage() {
     enabled: isLoggedIn && Boolean(search.invite),
     retry: false,
   })
+
+  useEffect(() => {
+    if (previousIdentityRef.current === identity) return
+    previousIdentityRef.current = identity
+    const stalePrompt = promptOwnerRef.current
+    promptOwnerRef.current = null
+    stalePrompt?.resolve(false)
+    setCardHourPrompt(null)
+    setBusy(null)
+    setMessage(null)
+  }, [identity])
 
   useEffect(() => {
     if (isLoggedIn && search.invite) setActiveTab('account')
@@ -273,15 +288,20 @@ export function ComputeCenterPage() {
   }
 
   const runCardHourAction: RunCardHourAction = (key, action, success) => {
+    const ownerIdentity = identity
+    if (!ownerIdentity) return Promise.resolve(false)
     const attempt = async (autoTopUp: boolean): Promise<boolean> => {
+      if (currentIdentityRef.current !== ownerIdentity) return false
       setBusy(key)
       setMessage(null)
       try {
         await action(autoTopUp)
+        if (currentIdentityRef.current !== ownerIdentity) return false
         setMessage({ color: 'green', text: success })
         await queryClient.invalidateQueries({ queryKey: computeQueryKey() })
         return true
       } catch (error) {
+        if (currentIdentityRef.current !== ownerIdentity) return false
         if (
           error instanceof ComputeCenterApiError &&
           (error.code === 4601 || error.code === 4602) &&
@@ -290,9 +310,17 @@ export function ComputeCenterPage() {
           setBusy(null)
           const quote = error.data
           return await new Promise<boolean>((resolve) => {
+            promptOwnerRef.current = { identity: ownerIdentity, resolve }
             setCardHourPrompt({
               quote,
               onConfirm: () => {
+                if (currentIdentityRef.current !== ownerIdentity) {
+                  promptOwnerRef.current = null
+                  setCardHourPrompt(null)
+                  resolve(false)
+                  return
+                }
+                promptOwnerRef.current = null
                 setCardHourPrompt(null)
                 if (quote.canAutoTopUp) {
                   void attempt(true).then(resolve)
@@ -302,6 +330,7 @@ export function ComputeCenterPage() {
                 }
               },
               onCancel: () => {
+                promptOwnerRef.current = null
                 setCardHourPrompt(null)
                 resolve(false)
               },
@@ -311,7 +340,7 @@ export function ComputeCenterPage() {
         setMessage({ color: 'red', text: error instanceof Error ? error.message : '操作失败' })
         return false
       } finally {
-        setBusy(null)
+        if (currentIdentityRef.current === ownerIdentity) setBusy(null)
       }
     }
 

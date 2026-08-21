@@ -128,6 +128,39 @@ describe('official video generation actions', () => {
     expect(mocks.submit).not.toHaveBeenCalled()
   })
 
+  it('atomically reserves the single generation slot while availability is pending', async () => {
+    authInfoStore.getState().setTokens({ accessToken: 'kod-access', refreshToken: 'kod-refresh' })
+    const availabilityResolvers: Array<(availability: { available: boolean; reason: string }) => void> = []
+    mocks.availability.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          availabilityResolvers.push(resolve)
+        })
+    )
+    const params = {
+      prompt: record.prompt,
+      referenceImages: record.referenceImages,
+      model: record.model,
+      duration: record.duration,
+      resolution: record.resolution,
+      ratio: record.ratio,
+    } as const
+
+    const first = createAndGenerateVideo(params)
+    await vi.waitFor(() => expect(mocks.availability).toHaveBeenCalledTimes(1))
+    const second = createAndGenerateVideo(params)
+    await Promise.resolve()
+
+    for (const resolve of availabilityResolvers) {
+      resolve({ available: false, reason: 'video unavailable' })
+    }
+    await expect(first).rejects.toThrow('video unavailable')
+    await expect(second).rejects.toThrow()
+    expect(mocks.availability).toHaveBeenCalledTimes(1)
+    expect(mocks.createRecord).not.toHaveBeenCalled()
+    expect(mocks.submit).not.toHaveBeenCalled()
+  })
+
   it('uses the backend task flow after availability succeeds and stores only the downloaded result locally', async () => {
     authInfoStore.getState().setTokens({ accessToken: 'kod-access', refreshToken: 'kod-refresh' })
     mocks.availability.mockResolvedValue({

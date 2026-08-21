@@ -4,9 +4,10 @@ import { MantineProvider } from '@mantine/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import type { ComputeAccount, ComputeGpuNode, PlatformServerSku } from '@/packages/computeCenter'
+import type { ComputeAccount, ComputeGpuNode, ComputeProduct, PlatformServerSku } from '@/packages/computeCenter'
 
 const mocks = vi.hoisted(() => ({
+  activateComputeApi: vi.fn(),
   getComputeAccount: vi.fn(),
   getComputeConfig: vi.fn(),
   getComputeIdentity: vi.fn(),
@@ -77,6 +78,7 @@ vi.mock('@/packages/computeCenter', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/packages/computeCenter')>()
   return {
     ...original,
+    activateComputeApi: mocks.activateComputeApi,
     getComputeAccount: mocks.getComputeAccount,
     getComputeConfig: mocks.getComputeConfig,
     getComputeIdentity: mocks.getComputeIdentity,
@@ -295,4 +297,69 @@ it('switches a mounted compute center to identity-scoped account data', async ()
   expect(queryClient.getQueryData(['compute', 'second@example.com', 'account'])).toEqual(
     expect.objectContaining({ email: 'second@example.com', availableCardHours: 25 })
   )
+})
+
+it('discards a delayed card-hour top-up quote when the authenticated account changes', async () => {
+  const product = {
+    id: 99,
+    productType: 'API',
+    name: 'Owner-scoped API package',
+    description: 'test package',
+    region: 'global',
+    status: 'PUBLISHED',
+    modelId: 'owner-scoped-model',
+    packagePromptTokens: 1_000,
+    packageCompletionTokens: 1_000,
+    packagePriceCardHours: 10,
+    upstreamKeyId: 5,
+    createTime: '2026-08-01T12:00:00',
+  } satisfies ComputeProduct
+  mocks.listComputeProducts.mockResolvedValue([product])
+  let rejectFirst: ((error: Error) => void) | undefined
+  mocks.activateComputeApi.mockImplementation(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectFirst = reject
+      })
+  )
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MantineProvider>
+        <ComputeCenterPage />
+      </MantineProvider>
+    </QueryClientProvider>
+  )
+
+  fireEvent.click(screen.getByRole('tab', { name: /API/ }))
+  fireEvent.click(await screen.findByRole('button', { name: '用卡时购买套餐' }))
+  await waitFor(() => expect(mocks.activateComputeApi).toHaveBeenCalledTimes(1))
+  act(() => {
+    auth.setState({
+      accessToken: 'second-token',
+      refreshToken: 'second-refresh-token',
+      loginEmail: 'second@example.com',
+    })
+  })
+  const { ComputeCenterApiError } = await import('@/packages/computeCenter')
+  rejectFirst?.(
+    new ComputeCenterApiError(4601, 'card hours are insufficient', {
+      requiredCardHours: 10,
+      availableCardHours: 0,
+      shortageCardHours: 10,
+      purchaseCardHours: 10,
+      cardHourCnyRate: 1,
+      cnyCost: 10,
+      cnyBalance: 10,
+      cnyShortfall: 0,
+      canAutoTopUp: true,
+    })
+  )
+
+  await act(async () => {
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(mocks.activateComputeApi).toHaveBeenCalledTimes(1)
 })
