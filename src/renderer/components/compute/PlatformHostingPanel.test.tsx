@@ -176,6 +176,45 @@ describe('PlatformHostingPanel', () => {
     expect(mocks.rentPlatformServer).not.toHaveBeenCalled()
   })
 
+  it('does not let an account-a rent callback close account-b checkout after an awaited refresh', async () => {
+    authInfoStore.setState({
+      accessToken: 'account-a-access',
+      refreshToken: 'account-a-refresh',
+      loginEmail: 'account-a@kod.test',
+    })
+    mocks.listPlatformServerLeases.mockResolvedValue([])
+    let releaseRefresh: (() => void) | undefined
+    const refreshBlocked = new Promise<void>((resolve) => {
+      releaseRefresh = resolve
+    })
+    const { queryClient } = renderPanel()
+    vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(() => refreshBlocked)
+
+    fireEvent.click(await screen.findByRole('button', { name: '租用一个月' }))
+    fireEvent.click(await screen.findByRole('button', { name: '确认租用' }))
+    await waitFor(() => expect(queryClient.invalidateQueries).toHaveBeenCalled())
+
+    act(() =>
+      authInfoStore.setState({
+        accessToken: 'account-b-access',
+        refreshToken: 'account-b-refresh',
+        loginEmail: 'account-b@kod.test',
+      })
+    )
+    await waitFor(() => expect(screen.queryByText('确认月租')).toBeNull())
+    fireEvent.click(await screen.findByRole('button', { name: '租用一个月' }))
+    expect(await screen.findByText('确认月租')).toBeTruthy()
+
+    releaseRefresh?.()
+    await act(async () => {
+      await refreshBlocked
+      await Promise.resolve()
+    })
+
+    expect(screen.getByText('确认月租')).toBeTruthy()
+    expect(screen.queryByText('月租成功，服务器已按平台统一价格上架')).toBeNull()
+  })
+
   it('shows the server available redeemable balance instead of frozen redeemable hours', async () => {
     mocks.getComputeAccount.mockResolvedValue({
       ...account,

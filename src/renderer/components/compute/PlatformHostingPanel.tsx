@@ -85,6 +85,7 @@ export function PlatformHostingPanel() {
       }
       await refreshAfterRent(createdLease)
       clearRentRequestId(variables.userId, variables.skuId)
+      if (currentIdentityRef.current !== variables.identity) return
       setCheckout(null)
       setFeedback({ color: 'green', text: '月租成功，服务器已按平台统一价格上架' })
     },
@@ -103,9 +104,11 @@ export function PlatformHostingPanel() {
       } catch {
         // Preserve the original mutation error when reconciliation is also unavailable.
       }
+      if (currentIdentityRef.current !== variables.identity) return
       if (recoveredLease) {
         await refreshAfterRent(recoveredLease)
         clearRentRequestId(variables.userId, variables.skuId)
+        if (currentIdentityRef.current !== variables.identity) return
         setCheckout(null)
         setFeedback({ color: 'green', text: '月租结果已从服务端确认，服务器已按平台统一价格上架' })
         return
@@ -115,6 +118,7 @@ export function PlatformHostingPanel() {
         queryClient.invalidateQueries({ queryKey: computeKeys.legacyAccount }),
         queryClient.invalidateQueries({ queryKey: PLATFORM_SKUS_QUERY_KEY }),
       ])
+      if (currentIdentityRef.current !== variables.identity) return
       setRentError(errorMessage(error))
     },
   })
