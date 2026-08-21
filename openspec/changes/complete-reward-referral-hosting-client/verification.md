@@ -83,6 +83,19 @@ The repaired client component set passes 37/37 tests and the complete 11-file fe
 
 The backend security/lock-order plus lease focused set passes 27/27 tests, the full backend suite passes 136/136, and the repackaged JAR is 121,126,358 bytes. The self-owned GPU regression uses a reward-only qualified balance and proves reward, redeemable, frozen, and reservation state remain unchanged. The lock-order regression verifies the legacy `FOR UPDATE` occurs before `creditRedeemable`.
 
+## Fifth independent cross-branch review repair
+
+A fifth fresh read-only review covered client `f97c615..58e957b` and backend `f37e8cb..324c60b`; it did not reuse the fourth verdict. It requested changes for one Critical and three Important findings. The repaired code heads are client `18090d7` and backend `0a470ec`:
+
+- every card-hour action now captures its authenticated owner. Await continuations, insufficient-balance prompts, and confirmation retries recheck a render-synchronous identity ref; mounted account changes resolve and remove the old prompt and clear stale busy/message state. The regression delays A's 4601 response until after switching to B and proves B sees no A dialog and no B-credential retry;
+- all legacy/qualified dual-ledger mutations now enter through one sorted legacy-account lock helper before qualified mutations. Market listing delivery, redemption settlement, exact/standard freeze, release, credit/debit/frozen flows, transfers, and lot expiry follow L -> Q. Expiry first selects candidates without row locks, then locks L, re-locks/revalidates the lot, and mutates Q, avoiding the old lot -> Q -> L path. Production-path order tests cover credit, listing freeze/release/delivery, redemption settlement, and expiry;
+- rewarded-ad start completion compares its captured owner with a ref updated synchronously during render, closing the B-render-to-passive-effect window that could install A's watch;
+- official video generation and retry atomically reserve a module startup token before the availability await. A second concurrent create cannot reach availability or local task creation, cancellation invalidates the token, and owner changes before record launch mark only the captured owner's record retryable.
+
+The final 11-file client feature/video command passes 121/121 tests. `corepack pnpm run check` passes. The production build passes after transforming 5,352 main, 82 preload, and 15,029 renderer modules, with only the documented non-fatal baseline warnings. The final full client run contains 154 files: 147 passed, 5 failed, 2 skipped; 1,526 tests: 1,466 passed, the same 6 classified baseline failures, and 54 skipped. No failing test, its production file, test configuration, `package.json`, or `pnpm-lock.yaml` changed in the fifth repair.
+
+Changed-client-file Biome is clean. Full Biome checks 921 files and still reports exactly the documented 13 baseline errors in the same six unchanged files. The paired backend focused qualified-market suite passes 7/7, its final full suite passes 138/138, and the repackaged JAR is 121,126,776 bytes. Both strict OpenSpec validations pass. Client production video-sensitive matches, protected realtime-price added lines, client/backend added-secret matches, backend realtime-price files, and backend video-production files are all zero; both range diff checks pass.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
