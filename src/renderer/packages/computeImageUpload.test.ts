@@ -29,8 +29,16 @@ describe('compute image upload preparation', () => {
 
   it('rejects unsupported files before uploading', async () => {
     await expect(prepareComputeImageUpload(imageFile(100, 'proof.gif', 'image/gif'))).rejects.toThrow(
-      '仅支持 JPG、JPEG 或 PNG 图片'
+      '仅支持 JPG、JPEG、PNG 或 WebP 图片'
     )
+  })
+
+  it('accepts WebP order-chat images without recompressing when already small', async () => {
+    const file = imageFile(100, 'order.webp', 'image/webp')
+    const compressor = vi.fn()
+
+    await expect(prepareComputeImageUpload(file, 200, compressor)).resolves.toBe(file)
+    expect(compressor).not.toHaveBeenCalled()
   })
 
   it('rejects a compressor result that still exceeds the target', async () => {

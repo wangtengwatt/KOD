@@ -7,6 +7,7 @@ import {
 } from '@/packages/computeImageUpload'
 import { getKodApiOrigin } from '@/packages/remote'
 import { authInfoStore } from '@/stores/authInfoStore'
+import type { ComputeEscrowProjection, ComputeFundsEvent } from './computeMarketplace/types'
 
 export type ProductType = 'API' | 'GPU'
 export type ProductStatus = 'DRAFT' | 'PENDING' | 'PUBLISHED' | 'PAUSED' | 'REJECTED' | 'OFFLINE'
@@ -21,6 +22,7 @@ export interface ComputeProduct {
   description: string
   region: string
   status: ProductStatus
+  intakeStopped?: number | boolean
   modelId?: string | null
   promptRatePerMillion?: number | null
   completionRatePerMillion?: number | null
@@ -76,6 +78,7 @@ export interface ComputeAccount {
   unitName: string
   currency: string
   unreadNotifications: number
+  unreadOrderMessages?: number
 }
 
 export interface ComputeLedgerEntry {
@@ -133,8 +136,11 @@ export interface ComputeReservation {
   deliveryInfo?: string
   deliveredAt?: string | null
   tradeMode?: 'LEGACY_RESERVATION' | 'MARKETPLACE_FIXED'
+  workflowVersion?: number
   packageDurationHours?: number | null
   buyerPublicKey?: string
+  scheduleDeadlineAt?: string | null
+  scheduleConfirmedAt?: string | null
   deliveryDeadlineAt?: string | null
   autoConfirmAt?: string | null
   buyerConfirmedAt?: string | null
@@ -144,6 +150,9 @@ export interface ComputeReservation {
   productName: string
   gpuModel: string
   coverImageId?: number | null
+  escrow?: ComputeEscrowProjection
+  fundsEvents?: ComputeFundsEvent[]
+  unreadMessages?: number
   createTime: string
 }
 
@@ -662,6 +671,8 @@ async function request<T>(path: string, options?: FetchOptions<'json'>, authenti
   }
   return json.data
 }
+
+export const computeMarketplaceRequest = request
 
 export function getComputeConfig() {
   return request<{

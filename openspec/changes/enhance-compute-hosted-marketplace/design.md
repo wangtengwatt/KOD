@@ -31,7 +31,7 @@
 
 ### 2. 将新增界面拆成聚焦组件
 
-保留现有路由外壳，新增 `components/compute/marketplace/` 下的审核中心、订单会话、租赁订单和算力托管组件；新增 `packages/computeMarketplace/` 下的类型、API 和状态投影。旧 `computeCenter.ts` 继续承载兼容接口，避免一次性重构整个算力中心。
+保留现有路由外壳，新增 `components/compute/` 下的审核中心、订单会话和算力托管聚焦组件；新增 `packages/computeMarketplace/` 下的类型、API 和状态投影。旧 `computeCenter.ts` 继续承载兼容接口，避免一次性重构整个算力中心。
 
 ### 3. 审核基于不可变版本
 

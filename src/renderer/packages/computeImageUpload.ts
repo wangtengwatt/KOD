@@ -2,7 +2,7 @@ export const COMPUTE_IMAGE_UPLOAD_MAX_BYTES = 800 * 1024
 export const COMPUTE_IMAGE_UPLOAD_RETRY_BYTES = 350 * 1024
 export const COMPUTE_IMAGE_UPLOAD_MAX_LABEL = '800 KB'
 
-const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png'])
+const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 type ImageCompressor = (file: File, maxBytes: number) => Promise<Blob>
 
@@ -77,7 +77,7 @@ export async function prepareComputeImageUpload(
   compressor: ImageCompressor = compressImage
 ) {
   if (!SUPPORTED_IMAGE_TYPES.has(file.type.toLowerCase())) {
-    throw new Error('仅支持 JPG、JPEG 或 PNG 图片')
+    throw new Error('仅支持 JPG、JPEG、PNG 或 WebP 图片')
   }
   if (file.size <= maxBytes) return file
 

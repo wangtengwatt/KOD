@@ -46,7 +46,10 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { zodValidator } from '@tanstack/zod-adapter'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
+import { AdminProductReviewCard, AdminReviewHistory } from '@/components/compute/AdminMarketplaceReview'
 import { CardHourAdminPanel, CardHourBusiness, CardHourMarketplace } from '@/components/compute/CardHourBusiness'
+import { HostedComputePanel } from '@/components/compute/HostedComputePanel'
+import { MarketplaceOrderWorkspace } from '@/components/compute/MarketplaceOrderWorkspace'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import {
@@ -145,6 +148,7 @@ import {
   withdrawComputeCardHours,
 } from '@/packages/computeCenter'
 import { addHoursToLocalDateTime, resolvePackageDurationHours } from '@/packages/computeDeliveryTime'
+import { ORDER_MESSAGE_NOTIFICATION, shouldNotifyOrderUnread } from '@/packages/computeMarketplace/projections'
 import { copyToClipboard } from '@/packages/navigator'
 import platform from '@/platform'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
@@ -197,6 +201,7 @@ function ComputeCenterPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<FeedbackMessage | null>(null)
   const [cardHourPrompt, setCardHourPrompt] = useState<CardHourPrompt | null>(null)
+  const previousUnreadOrderMessages = useRef<number | null>(null)
   const closeMessage = useCallback(() => setMessage(null), [])
 
   const configQuery = useQuery({ queryKey: ['compute', 'config'], queryFn: getComputeConfig })
@@ -205,6 +210,7 @@ function ComputeCenterPage() {
     queryKey: ['compute', 'account'],
     queryFn: getComputeAccount,
     enabled: isLoggedIn,
+    refetchInterval: 5000,
   })
   const referralPreviewQuery = useQuery({
     queryKey: ['compute', 'referral-preview', search.invite],
@@ -216,6 +222,25 @@ function ComputeCenterPage() {
   useEffect(() => {
     if (isLoggedIn && search.invite) setActiveTab('account')
   }, [isLoggedIn, search.invite])
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      previousUnreadOrderMessages.current = null
+      return
+    }
+    const unread = accountQuery.data?.unreadOrderMessages
+    if (unread === undefined) return
+    const previous = previousUnreadOrderMessages.current
+    previousUnreadOrderMessages.current = unread
+    if (
+      shouldNotifyOrderUnread(previous, unread) &&
+      typeof window !== 'undefined' &&
+      'Notification' in window &&
+      Notification.permission === 'granted'
+    ) {
+      new Notification(ORDER_MESSAGE_NOTIFICATION.title, { body: ORDER_MESSAGE_NOTIFICATION.body })
+    }
+  }, [accountQuery.data?.unreadOrderMessages, isLoggedIn])
 
   useEffect(() => {
     if (!isLoggedIn) return
@@ -299,7 +324,7 @@ function ComputeCenterPage() {
     { value: 'card-hours', label: '卡时资产', icon: <IconDatabaseDollar size={16} /> },
     { value: 'account', label: '我的资产', icon: <IconWallet size={16} />, login: true },
     { value: 'purchases', label: '购买记录', icon: <IconReceipt size={16} />, login: true },
-    { value: 'reservations', label: '我的订单', icon: <IconServer size={16} />, login: true },
+    { value: 'reservations', label: '租赁订单', icon: <IconServer size={16} />, login: true },
     { value: 'supplier', label: '我的设备', icon: <IconCpu size={16} />, login: true },
     { value: 'notifications', label: '通知', icon: <IconBell size={16} />, login: true },
   ]
@@ -359,6 +384,11 @@ function ComputeCenterPage() {
                   .map((tab) => (
                     <Tabs.Tab key={tab.value} value={tab.value} leftSection={tab.icon}>
                       {tab.label}
+                      {tab.value === 'reservations' && (account?.unreadOrderMessages || 0) > 0 && (
+                        <Badge size="xs" ml={6} circle color="orange">
+                          {account?.unreadOrderMessages}
+                        </Badge>
+                      )}
                       {tab.value === 'notifications' && (account?.unreadNotifications || 0) > 0 && (
                         <Badge size="xs" ml={6} circle>
                           {account?.unreadNotifications}
@@ -442,7 +472,7 @@ function ComputeCenterPage() {
                   <PurchasesPanel />
                 </Tabs.Panel>
                 <Tabs.Panel value="reservations" pt="md">
-                  <ReservationsPanel busy={busy} run={run} />
+                  <ReservationsPanel currentUserId={account?.userId} busy={busy} run={run} />
                 </Tabs.Panel>
                 <Tabs.Panel value="supplier" pt="md">
                   <SupplierPanel busy={busy} run={run} />
@@ -849,7 +879,7 @@ function AssetDashboard({
             ['card-hours', '卡时资产'],
             ['supplier', supplierEntryLabel],
             ['market', '购买算力'],
-            ['reservations', '我的订单'],
+            ['reservations', '租赁订单'],
             ['purchases', '购买记录'],
             ['notifications', '通知中心'],
           ].map(([value, label]) => (
@@ -1535,7 +1565,7 @@ function ReservationModal({
             runCardHourAction(
               key,
               (autoTopUp) => createComputeReservation({ productId: product.id, buyerPublicKey }, autoTopUp),
-              'GPU 套餐购买成功，卡时已冻结并等待商家交付'
+              'GPU 套餐购买成功，卡时已冻结；请到“租赁订单”与商家确认排期'
             ).then((succeeded) => succeeded && onClose())
           }
         >
@@ -1565,14 +1595,6 @@ function AccountPanel({
   const referralRewardsQuery = useQuery({
     queryKey: ['compute', 'referrals', 'rewards'],
     queryFn: listComputeReferralRewards,
-  })
-  const buyerRentalsQuery = useQuery({
-    queryKey: ['compute', 'reservations', 'buyer'],
-    queryFn: () => listComputeReservations('buyer'),
-  })
-  const supplierRentalsQuery = useQuery({
-    queryKey: ['compute', 'reservations', 'supplier'],
-    queryFn: () => listComputeReservations('supplier'),
   })
   const [amount, setAmount] = useState(10)
   const [withdrawalAmount, setWithdrawalAmount] = useState(0.1)
@@ -1604,7 +1626,6 @@ function AccountPanel({
       <Tabs defaultValue="exchange" keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab value="exchange">资产兑换</Tabs.Tab>
-          <Tabs.Tab value="rentals">租赁订单</Tabs.Tab>
           <Tabs.Tab value="buybacks">回购记录</Tabs.Tab>
           <Tabs.Tab value="rewards">邀请佣金明细</Tabs.Tab>
           <Tabs.Tab value="packages">Token 套餐</Tabs.Tab>
@@ -1668,13 +1689,6 @@ function AccountPanel({
               </Stack>
             </Paper>
           </SimpleGrid>
-        </Tabs.Panel>
-
-        <Tabs.Panel value="rentals" pt="md">
-          <RentalAssetsTable
-            buyerEntries={buyerRentalsQuery.data || []}
-            supplierEntries={supplierRentalsQuery.data || []}
-          />
         </Tabs.Panel>
 
         <Tabs.Panel value="buybacks" pt="md">
@@ -1870,33 +1884,6 @@ function TokenPackageAssets({
   )
 }
 
-function RentalAssetsTable({
-  buyerEntries,
-  supplierEntries,
-}: {
-  buyerEntries: ComputeReservation[]
-  supplierEntries: ComputeReservation[]
-}) {
-  const rows = [
-    ...supplierEntries.map((item) => ({ ...item, directionLabel: '我出租' })),
-    ...buyerEntries.map((item) => ({ ...item, directionLabel: '我购买' })),
-  ].sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime())
-  return (
-    <SimpleTable
-      columns={['方向', 'GPU 商品', '规格', '交易状态', '卡时', '使用时间']}
-      rows={rows.map((item) => [
-        item.directionLabel,
-        item.productName,
-        `${item.gpuModel} × ${item.gpuCount}`,
-        statusLabel(item.status),
-        formatCardHours(item.frozenCardHours),
-        item.deliveredAt ? `${formatDate(item.startTime)} 至 ${formatDate(item.endTime)}` : '等待商家交付',
-      ])}
-      empty="暂无 GPU 租赁订单"
-    />
-  )
-}
-
 function ReferralRewardsTable({ entries }: { entries: ComputeReferralReward[] }) {
   const rewardStatus: Record<ComputeReferralReward['status'], string> = {
     WAITING: '7 天确认期',
@@ -1936,25 +1923,71 @@ function WithdrawalTable({ entries }: { entries: ComputeWithdrawal[] }) {
   )
 }
 
-function ReservationsPanel({ busy, run }: { busy: string | null; run: RunAction }) {
-  const reservationsQuery = useQuery({
+function ReservationsPanel({
+  currentUserId,
+  busy,
+  run,
+}: {
+  currentUserId?: number
+  busy: string | null
+  run: RunAction
+}) {
+  const buyerQuery = useQuery({
     queryKey: ['compute', 'reservations', 'buyer'],
     queryFn: () => listComputeReservations('buyer'),
   })
-  const reservations = reservationsQuery.data || []
+  const supplierQuery = useQuery({
+    queryKey: ['compute', 'reservations', 'supplier'],
+    queryFn: () => listComputeReservations('supplier'),
+  })
   return (
     <Stack>
       <Alert color="blue" title="卡时担保规则">
-        购买时冻结全部卡时；商家标记交付后，买家可确认收货或在 24
-        小时内发起争议。无争议将自动确认，并把全部卡时一次性结算给商家。
+        买家付款后卡时由平台冻结，不会立即进入卖家账户；双方先在订单内沟通并确认结构化排期。商家交付后，
+        买家可确认收货或在 24 小时内发起争议；无争议才自动结算。你可以同时是购买方和已认证供应方。
       </Alert>
-      {reservations.length === 0 ? (
-        <EmptyState title="暂无 GPU 订单" description="请从算力市场选择商家发布的固定 GPU 套餐。" />
-      ) : (
-        reservations.map((reservation) => (
-          <ReservationCard key={reservation.id} reservation={reservation} busy={busy} run={run} view="buyer" />
-        ))
-      )}
+      <Tabs defaultValue="buyer" keepMounted={false}>
+        <Tabs.List>
+          <Tabs.Tab value="buyer">我购买的（{buyerQuery.data?.length || 0}）</Tabs.Tab>
+          <Tabs.Tab value="supplier">我出租的（{supplierQuery.data?.length || 0}）</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="buyer" pt="md">
+          <Stack>
+            {(buyerQuery.data || []).length === 0 ? (
+              <EmptyState title="暂无买方订单" description="请从算力市场选择商家发布的固定 GPU 套餐。" />
+            ) : (
+              (buyerQuery.data || []).map((reservation) => (
+                <ReservationCard
+                  key={reservation.id}
+                  reservation={reservation}
+                  currentUserId={currentUserId}
+                  busy={busy}
+                  run={run}
+                  view="buyer"
+                />
+              ))
+            )}
+          </Stack>
+        </Tabs.Panel>
+        <Tabs.Panel value="supplier" pt="md">
+          <Stack>
+            {(supplierQuery.data || []).length === 0 ? (
+              <EmptyState title="暂无出租订单" description="已认证供应方发布商品并成交后，订单会显示在这里。" />
+            ) : (
+              (supplierQuery.data || []).map((reservation) => (
+                <ReservationCard
+                  key={reservation.id}
+                  reservation={reservation}
+                  currentUserId={currentUserId}
+                  busy={busy}
+                  run={run}
+                  view="supplier"
+                />
+              ))
+            )}
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
     </Stack>
   )
 }
@@ -1964,12 +1997,14 @@ function ReservationCard({
   busy,
   run,
   view,
+  currentUserId,
   productPackageDurationHours,
 }: {
   reservation: ComputeReservation
   busy: string | null
   run: RunAction
   view: 'buyer' | 'supplier'
+  currentUserId?: number
   productPackageDurationHours?: number | null
 }) {
   const [sshDelivery, setSshDelivery] = useState({
@@ -1982,9 +2017,13 @@ function ReservationCard({
   const [dispute, setDispute] = useState({ reason: '', evidence: '' })
   const key = `${view}-reservation-${reservation.id}`
   const marketplace = reservation.tradeMode === 'MARKETPLACE_FIXED'
-  const cancellable = marketplace && reservation.status === 'PENDING_DELIVERY'
+  const cancellable = marketplace && ['PENDING_SCHEDULE', 'PENDING_DELIVERY'].includes(reservation.status)
   const packageDurationHours = resolvePackageDurationHours(reservation, productPackageDurationHours)
-  const actualEnd = addHoursToLocalDateTime(sshDelivery.actualStart, packageDurationHours)
+  const structuredSchedule = Number(reservation.workflowVersion || 1) >= 2
+  const deliveryStart = structuredSchedule ? reservation.startTime : sshDelivery.actualStart
+  const actualEnd = structuredSchedule
+    ? reservation.endTime
+    : addHoursToLocalDateTime(sshDelivery.actualStart, packageDurationHours)
   return (
     <Paper withBorder p="md" radius="md">
       <Stack gap="sm">
@@ -1998,11 +2037,13 @@ function ReservationCard({
               </Group>
               <Text size="sm" c="chatbox-tertiary">
                 {reservation.gpuModel} × {reservation.gpuCount}
-                {marketplace && reservation.deliveredAt
+                {marketplace && reservation.scheduleConfirmedAt
                   ? ` · 商定使用时间 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`
-                  : marketplace
-                    ? ` · 交付截止 ${formatDate(reservation.deliveryDeadlineAt)}`
-                    : ` · 历史预订 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`}
+                  : marketplace && reservation.status === 'PENDING_SCHEDULE'
+                    ? ` · 排期确认截止 ${formatDate(reservation.scheduleDeadlineAt)}`
+                    : marketplace
+                      ? ` · 交付截止 ${formatDate(reservation.deliveryDeadlineAt)}`
+                      : ` · 历史预订 ${formatDate(reservation.startTime)} 至 ${formatDate(reservation.endTime)}`}
               </Text>
             </Box>
             <Text fw={700}>{formatCardHours(reservation.frozenCardHours)} 卡时</Text>
@@ -2013,6 +2054,9 @@ function ReservationCard({
           <Alert color="red">异常原因：{reservation.incidentReason}，等待管理员处理。</Alert>
         )}
         {!marketplace && <Alert color="gray">这是旧版预订记录，仅保留查看，不再使用旧版凭证交付功能。</Alert>}
+        {marketplace && (
+          <MarketplaceOrderWorkspace reservation={reservation} currentUserId={currentUserId} busy={busy} run={run} />
+        )}
         {reservation.deliveryInfo && (
           <Alert color="teal" title="交付信息">
             <Text style={{ whiteSpace: 'pre-wrap' }}>{reservation.deliveryInfo}</Text>
@@ -2024,9 +2068,12 @@ function ReservationCard({
             </Text>
           </Alert>
         )}
-        {view === 'buyer' && marketplace && reservation.status === 'PENDING_DELIVERY' && !reservation.deliveryInfo && (
-          <Alert color="yellow">卡时已冻结，正在等待商家按承诺时限配置你的公钥并提交 SSH 地址。</Alert>
-        )}
+        {view === 'buyer' &&
+          marketplace &&
+          ['PENDING_SCHEDULE', 'PENDING_DELIVERY'].includes(reservation.status) &&
+          !reservation.deliveryInfo && (
+            <Alert color="yellow">卡时已冻结，正在等待商家按承诺时限配置你的公钥并提交 SSH 地址。</Alert>
+          )}
         {view === 'buyer' && cancellable && (
           <Button
             variant="light"
@@ -2128,21 +2175,25 @@ function ReservationCard({
                 value={sshDelivery.username}
                 onChange={(event) => setSshDelivery({ ...sshDelivery, username: event.target.value })}
               />
-              <TextInput
-                label="商定开通时间"
-                type="datetime-local"
-                value={sshDelivery.actualStart}
-                onChange={(event) => setSshDelivery({ ...sshDelivery, actualStart: event.target.value })}
-              />
+              {structuredSchedule ? (
+                <TextInput label="已确认开通时间" value={formatDate(reservation.startTime)} readOnly />
+              ) : (
+                <TextInput
+                  label="商定开通时间"
+                  type="datetime-local"
+                  value={sshDelivery.actualStart}
+                  onChange={(event) => setSshDelivery({ ...sshDelivery, actualStart: event.target.value })}
+                />
+              )}
               <TextInput
                 label="商定到期时间"
-                type="datetime-local"
+                type={structuredSchedule ? 'text' : 'datetime-local'}
                 description={
                   packageDurationHours
                     ? `按该订单 ${packageDurationHours} 小时套餐自动计算，无需手工填写`
                     : '未能读取套餐时长，请刷新订单后重试'
                 }
-                value={actualEnd}
+                value={structuredSchedule ? formatDate(actualEnd) : actualEnd}
                 readOnly
               />
             </SimpleGrid>
@@ -2155,9 +2206,7 @@ function ReservationCard({
             />
             <Button
               loading={busy === key}
-              disabled={
-                !sshDelivery.host.trim() || !sshDelivery.username.trim() || !sshDelivery.actualStart || !actualEnd
-              }
+              disabled={!sshDelivery.host.trim() || !sshDelivery.username.trim() || !deliveryStart || !actualEnd}
               onClick={() =>
                 run(
                   key,
@@ -2166,7 +2215,7 @@ function ReservationCard({
                       sshHost: sshDelivery.host,
                       sshPort: sshDelivery.port,
                       sshUsername: sshDelivery.username,
-                      actualStart: sshDelivery.actualStart,
+                      actualStart: deliveryStart,
                       actualEnd,
                       deliveryNote: sshDelivery.deliveryNote,
                     }),
@@ -2336,10 +2385,6 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
   const accountQuery = useQuery({ queryKey: ['compute', 'account'], queryFn: getComputeAccount })
   const nodesQuery = useQuery({ queryKey: ['compute', 'supplier-nodes'], queryFn: listSupplierNodes })
   const productsQuery = useQuery({ queryKey: ['compute', 'supplier-products'], queryFn: listSupplierProducts })
-  const reservationsQuery = useQuery({
-    queryKey: ['compute', 'reservations', 'supplier'],
-    queryFn: () => listComputeReservations('supplier'),
-  })
   const supplier = supplierQuery.data
   const identity = identityQuery.data
   const approvedIdentity = identity?.status === 'APPROVED' || identity?.status === 'TEST_APPROVED'
@@ -2493,7 +2538,7 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
         <Tabs.List>
           <Tabs.Tab value="devices">资源资质</Tabs.Tab>
           <Tabs.Tab value="products">产品发布</Tabs.Tab>
-          <Tabs.Tab value="orders">出租订单</Tabs.Tab>
+          <Tabs.Tab value="hosting">算力托管</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="devices" pt="md">
@@ -2593,21 +2638,6 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
                 </Button>
               </Section>
             )}
-
-            <Section title="我的托管节点">
-              <SimpleTable
-                columns={['资源', '规格', '区域', '类型', '状态', '审核说明']}
-                rows={(nodesQuery.data || []).map((item) => [
-                  item.nodeName,
-                  `${item.gpuModel} ${item.gpuMemoryGb}GB × ${item.gpuCount}`,
-                  item.region,
-                  item.isTest ? '仅内测' : '正式',
-                  statusLabel(item.status),
-                  item.verificationNote || item.reviewReason || '-',
-                ])}
-                empty="尚未提交 GPU 节点"
-              />
-            </Section>
           </Stack>
         </Tabs.Panel>
 
@@ -2756,28 +2786,8 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
           </Stack>
         </Tabs.Panel>
 
-        <Tabs.Panel value="orders" pt="md">
-          <Section title="待交付与历史订单">
-            <Stack>
-              {(reservationsQuery.data || []).length === 0 ? (
-                <Text c="chatbox-tertiary">暂无买方订单</Text>
-              ) : (
-                (reservationsQuery.data || []).map((reservation) => (
-                  <ReservationCard
-                    key={reservation.id}
-                    reservation={reservation}
-                    busy={busy}
-                    run={run}
-                    view="supplier"
-                    productPackageDurationHours={
-                      (productsQuery.data || []).find((product) => product.id === reservation.productId)
-                        ?.packageDurationHours
-                    }
-                  />
-                ))
-              )}
-            </Stack>
-          </Section>
+        <Tabs.Panel value="hosting" pt="md">
+          <HostedComputePanel busy={busy} run={run} />
         </Tabs.Panel>
       </Tabs>
     </Stack>
@@ -3018,6 +3028,7 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
             <AdminNodeReviews nodes={nodesQuery.data || []} busy={busy} run={run} />
             <AdminProductReviews products={productsQuery.data || []} busy={busy} run={run} />
             <AdminTransferReviews transfers={transfersQuery.data || []} busy={busy} run={run} />
+            <AdminReviewHistory />
           </Stack>
         </Tabs.Panel>
 
@@ -3660,26 +3671,26 @@ function AdminProductReviews({
   const pending = products.filter((product) => product.status === 'PENDING')
   return (
     <Section title={`商品审核（${pending.length}）`}>
-      <ReviewList
-        empty="暂无待审核商品"
-        items={pending.map((product) => ({
-          key: `product-${product.id}`,
-          title: `${product.name} · ${product.productType}`,
-          description:
-            product.productType === 'GPU'
-              ? product.tradeMode === 'MARKETPLACE_FIXED'
-                ? `${product.gpuModel} ${product.gpuMemoryGb}GB × ${product.gpuCount}，${product.packageDurationHours || 0} 小时，${formatCardHours(product.packagePriceCardHours)} 卡时`
-                : `${product.gpuModel} ${product.gpuMemoryGb}GB × ${product.gpuCount}，旧版商品只保留记录`
-              : `${product.modelId}`,
-          onReview: (approved, reason) =>
-            run(
-              `admin-product-${product.id}`,
-              () => reviewAdminProduct(product.id, approved, reason),
-              approved ? '商品已上架' : '商品已拒绝'
-            ),
-          loading: busy === `admin-product-${product.id}`,
-        }))}
-      />
+      {pending.length === 0 ? (
+        <Text c="chatbox-tertiary">暂无待审核商品</Text>
+      ) : (
+        <Stack>
+          {pending.map((product) => (
+            <AdminProductReviewCard
+              key={product.id}
+              product={product}
+              loading={busy === `admin-product-${product.id}`}
+              onReview={(approved, reason) =>
+                run(
+                  `admin-product-${product.id}`,
+                  () => reviewAdminProduct(product.id, approved, reason),
+                  approved ? '商品已上架，审核记录已保存' : '商品已拒绝，审核原因已保存'
+                )
+              }
+            />
+          ))}
+        </Stack>
+      )}
     </Section>
   )
 }
@@ -3933,6 +3944,7 @@ const STATUS_LABELS: Record<string, string> = {
   CANCELLED: '已取消',
   EXPIRED: '已过期',
   PENDING_REVIEW: '待管理员审核',
+  PENDING_SCHEDULE: '待双方确认排期',
   PENDING_RECIPIENT: '待接收方确认',
   PENDING_DELIVERY: '待供应方交付',
   DELIVERED: '已交付，待买家确认',
