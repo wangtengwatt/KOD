@@ -249,6 +249,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
 
     try {
       const activeWatch = await start.mutateAsync(currentStatus.campaignId)
+      if (previousIdentityRef.current !== identity) return
       resetPlayback()
       setRecoveryNotice(null)
       watchRef.current = activeWatch
@@ -260,7 +261,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     } catch {
       // Mutation state renders the server-provided error below the action.
     }
-  }, [resetPlayback, start, status.data])
+  }, [identity, resetPlayback, start, status.data])
 
   const abandonWatch = useCallback(
     async (activeWatch: RewardedAdWatch, notice: string | null) => {

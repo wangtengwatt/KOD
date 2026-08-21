@@ -1,6 +1,6 @@
 import { Alert, Badge, Button, Card, Group, Modal, Paper, SimpleGrid, Stack, Switch, Text, Title } from '@mantine/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { computeKeys, getWalletIdentity } from '@/hooks/useWallet'
 import {
@@ -30,9 +30,21 @@ export function PlatformHostingPanel() {
     sku: PlatformServerSku
     requestId: string
     userId: number
+    identity: string
   } | null>(null)
   const [rentError, setRentError] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<{ color: 'green' | 'red'; text: string } | null>(null)
+  const previousIdentityRef = useRef(queryIdentity)
+  const currentIdentityRef = useRef(queryIdentity)
+  currentIdentityRef.current = queryIdentity
+
+  useEffect(() => {
+    if (previousIdentityRef.current === queryIdentity) return
+    previousIdentityRef.current = queryIdentity
+    setCheckout(null)
+    setRentError(null)
+    setFeedback(null)
+  }, [queryIdentity])
   const skusQuery = useQuery({
     queryKey: PLATFORM_SKUS_QUERY_KEY,
     queryFn: listPlatformServerSkus,
@@ -63,16 +75,21 @@ export function PlatformHostingPanel() {
   }
 
   const rentMutation = useMutation({
-    mutationFn: ({ skuId, requestId }: { skuId: string; requestId: string; userId: number }) =>
+    mutationFn: ({ skuId, requestId }: { skuId: string; requestId: string; userId: number; identity: string }) =>
       rentPlatformServer(skuId, requestId),
     onMutate: () => setRentError(null),
     onSuccess: async (createdLease, variables) => {
+      if (currentIdentityRef.current !== variables.identity) {
+        clearRentRequestId(variables.userId, variables.skuId)
+        return
+      }
       await refreshAfterRent(createdLease)
       clearRentRequestId(variables.userId, variables.skuId)
       setCheckout(null)
       setFeedback({ color: 'green', text: '月租成功，服务器已按平台统一价格上架' })
     },
     onError: async (error, variables) => {
+      if (currentIdentityRef.current !== variables.identity) return
       let recoveredLease: PlatformServerLease | undefined
       try {
         const serverLeases = await queryClient.fetchQuery({
@@ -103,19 +120,25 @@ export function PlatformHostingPanel() {
   })
 
   const renewMutation = useMutation({
-    mutationFn: ({ leaseId, enabled }: { leaseId: string; enabled: boolean }) => setLeaseAutoRenew(leaseId, enabled),
-    onSuccess: (updatedLease) => {
+    mutationFn: ({ leaseId, enabled }: { leaseId: string; enabled: boolean; identity: string }) =>
+      setLeaseAutoRenew(leaseId, enabled),
+    onSuccess: (updatedLease, variables) => {
+      if (currentIdentityRef.current !== variables.identity) return
       queryClient.setQueryData<PlatformServerLease[]>(platformLeasesQueryKey, (current = []) =>
         upsertLease(current, updatedLease)
       )
       setFeedback({ color: 'green', text: updatedLease.autoRenew ? '已开启下期自动续租' : '已关闭下期自动续租' })
     },
-    onError: (error) => setFeedback({ color: 'red', text: errorMessage(error) }),
+    onError: (error, variables) => {
+      if (currentIdentityRef.current === variables.identity) {
+        setFeedback({ color: 'red', text: errorMessage(error) })
+      }
+    },
   })
 
   const loadError = skusQuery.error || leasesQuery.error || accountQuery.error
   const accountUserId = accountQuery.data?.userId
-  const redeemableBalance = accountQuery.data?.redeemableCardHours
+  const redeemableBalance = accountQuery.data?.withdrawableCardHours
   const skus = skusQuery.data || []
   const leases = leasesQuery.data || []
 
@@ -183,7 +206,12 @@ export function PlatformHostingPanel() {
                       setFeedback(null)
                       setRentError(null)
                       if (accountUserId === undefined) return
-                      setCheckout({ sku, requestId: rentRequestId(accountUserId, sku.id), userId: accountUserId })
+                      setCheckout({
+                        sku,
+                        requestId: rentRequestId(accountUserId, sku.id),
+                        userId: accountUserId,
+                        identity: queryIdentity,
+                      })
                     }}
                   >
                     {sku.availableInventory <= 0 ? '已售罄' : '租用一个月'}
@@ -210,7 +238,7 @@ export function PlatformHostingPanel() {
               changing={renewMutation.isPending && renewMutation.variables?.leaseId === lease.id}
               onAutoRenew={(enabled) => {
                 setFeedback(null)
-                renewMutation.mutate({ leaseId: lease.id, enabled })
+                renewMutation.mutate({ leaseId: lease.id, enabled, identity: queryIdentity })
               }}
             />
           ))
@@ -249,13 +277,18 @@ export function PlatformHostingPanel() {
               </Button>
               <Button
                 loading={rentMutation.isPending}
-                onClick={() =>
+                onClick={() => {
+                  if (checkout.identity !== queryIdentity) {
+                    setCheckout(null)
+                    return
+                  }
                   rentMutation.mutate({
                     skuId: checkout.sku.id,
                     requestId: checkout.requestId,
                     userId: checkout.userId,
+                    identity: checkout.identity,
                   })
-                }
+                }}
               >
                 确认租用
               </Button>

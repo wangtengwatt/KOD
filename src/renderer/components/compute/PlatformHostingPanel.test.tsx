@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComputeAccount, PlatformServerLease, PlatformServerSku } from '@/packages/computeCenter'
+import { authInfoStore } from '@/stores/authInfoStore'
 
 const mocks = vi.hoisted(() => ({
   getComputeAccount: vi.fn(),
@@ -87,6 +88,7 @@ const lease = {
 const account = {
   userId: 7,
   redeemableCardHours: 90,
+  withdrawableCardHours: 90,
   rewardCardHours: 50,
 } as ComputeAccount
 
@@ -146,11 +148,47 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  authInfoStore.getState().clearTokens()
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
 describe('PlatformHostingPanel', () => {
+  it('closes an account-owned checkout when the authenticated account changes in place', async () => {
+    authInfoStore.setState({
+      accessToken: 'account-a-access',
+      refreshToken: 'account-a-refresh',
+      loginEmail: 'account-a@kod.test',
+    })
+    renderPanel()
+    fireEvent.click(await screen.findByRole('button', { name: '租用一个月' }))
+    expect(await screen.findByText('确认月租')).toBeTruthy()
+
+    act(() =>
+      authInfoStore.setState({
+        accessToken: 'account-b-access',
+        refreshToken: 'account-b-refresh',
+        loginEmail: 'account-b@kod.test',
+      })
+    )
+
+    await waitFor(() => expect(screen.queryByText('确认月租')).toBeNull())
+    expect(mocks.rentPlatformServer).not.toHaveBeenCalled()
+  })
+
+  it('shows the server available redeemable balance instead of frozen redeemable hours', async () => {
+    mocks.getComputeAccount.mockResolvedValue({
+      ...account,
+      redeemableCardHours: 90,
+      withdrawableCardHours: 60,
+      frozenCardHours: 30,
+    })
+    renderPanel()
+
+    expect(await screen.findByText('可回购卡时余额 60.000')).toBeTruthy()
+    expect(screen.queryByText('可回购卡时余额 90.000')).toBeNull()
+  })
+
   it('shows server-authoritative SKU, redeemable balance, lease pricing, and renewal state', async () => {
     renderPanel()
 
@@ -190,6 +228,7 @@ describe('PlatformHostingPanel', () => {
       availableCardHours: 100,
       spendableCardHours: 100,
       redeemableCardHours: 0,
+      withdrawableCardHours: 0,
       rewardCardHours: 100,
     })
     mocks.listPlatformServerLeases.mockResolvedValue([])

@@ -182,6 +182,48 @@ afterEach(() => {
 })
 
 describe('RewardedVideoCard', () => {
+  it('ignores a delayed start receipt after the authenticated account changes', async () => {
+    let resolveStart: ((watch: Awaited<ReturnType<typeof mocks.startRewardedAd>>) => void) | undefined
+    let resolveStatusB: ((nextStatus: typeof status) => void) | undefined
+    mocks.getRewardedAdStatus.mockResolvedValueOnce(status).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStatusB = resolve
+        })
+    )
+    mocks.startRewardedAd.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve
+        })
+    )
+    const { rerenderCard } = renderCard()
+    fireEvent.click(await screen.findByRole('button', { name: '观看并领取' }))
+    await waitFor(() => expect(mocks.startRewardedAd).toHaveBeenCalledTimes(1))
+
+    rerenderCard('other@kod.test')
+    resolveStart?.({
+      watchId: 17,
+      campaignId: status.campaignId,
+      videoUrl: status.videoUrl,
+      minimumSeconds: status.minimumSeconds,
+      startedAt: Math.floor(Date.now() / 1000),
+      expiresAt: Math.floor(Date.now() / 1000) + 600,
+      progressToken: 'account-a-progress-0',
+    })
+
+    await waitFor(() => expect(mocks.getRewardedAdStatus).toHaveBeenCalledTimes(2))
+    resolveStatusB?.(status)
+    await screen.findByRole('button', { name: '观看并领取' })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(screen.queryByLabelText('奖励广告视频')).toBeNull()
+    expect(mocks.progressRewardedAd).not.toHaveBeenCalled()
+    expect(mocks.completeRewardedAd).not.toHaveBeenCalled()
+  })
+
   it('closes an active watch locally when the authenticated account changes', async () => {
     const { rerenderCard } = renderCard()
     const video = await openAd()
