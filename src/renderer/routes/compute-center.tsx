@@ -11,9 +11,11 @@ import {
   Flex,
   Group,
   Modal,
+  MultiSelect,
   NumberInput,
   Paper,
   ScrollArea,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -24,11 +26,13 @@ import {
   TextInput,
   ThemeIcon,
   Title,
+  UnstyledButton,
 } from '@mantine/core'
 import {
   IconBell,
   IconBuildingStore,
   IconChartLine,
+  IconChevronDown,
   IconCopy,
   IconCpu,
   IconDatabaseDollar,
@@ -39,12 +43,13 @@ import {
   IconRefresh,
   IconServer,
   IconShieldCheck,
+  IconThumbUp,
   IconWallet,
 } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { zodValidator } from '@tanstack/zod-adapter'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 import { AdminProductReviewCard, AdminReviewHistory } from '@/components/compute/AdminMarketplaceReview'
 import { CardHourAdminPanel, CardHourBusiness, CardHourMarketplace } from '@/components/compute/CardHourBusiness'
@@ -65,9 +70,11 @@ import {
   type ComputeGpuNode,
   type ComputeIdentity,
   type ComputeLedgerEntry,
-  type ComputeMarketPriceHistory,
   type ComputeMarketPricePoint,
   type ComputeMarketPriceQuote,
+  type ComputeMarketPriceRange,
+  type ComputeMarketPriceSource,
+  type ComputeMarketRentalTerm,
   type ComputeNodeInput,
   type ComputeNotification,
   type ComputeOrder,
@@ -149,6 +156,33 @@ import {
 } from '@/packages/computeCenter'
 import { addHoursToLocalDateTime, resolvePackageDurationHours } from '@/packages/computeDeliveryTime'
 import { ORDER_MESSAGE_NOTIFICATION, shouldNotifyOrderUnread } from '@/packages/computeMarketplace/projections'
+import {
+  COMPUTE_MARKET_DEFAULT_REGION,
+  type ComputeMarketComparisonPoint,
+  type ComputeMarketGetDeployingVastComparison,
+  compareGetDeployingAndVastPrices,
+  buildComputeMarketMonotoneSvgPath,
+  deriveComputeMarketRegions,
+  filterComputeMarketPricePoints,
+  getComputeMarketDisplayCnyPrice,
+  getComputeMarketExactSpecKey,
+  getComputeMarketRegionCode,
+  getComputeMarketRegionLabel,
+  getComputeMarketRentalTerm,
+  groupComputeMarketPricePointsBySource,
+  mergeComputeMarketPricePoints,
+} from '@/packages/computeMarketPriceComparison'
+import {
+  COMPUTE_PRODUCT_LIKE_COUNTS_KEY,
+  COMPUTE_PRODUCT_SORT_OPTIONS,
+  type ComputeProductLikeCounts,
+  type ComputeProductSortMode,
+  filterAndSortComputeProducts,
+  getComputeProductLikeCount,
+  incrementComputeProductLikeCount,
+  normalizeComputeProductLikeCounts,
+} from '@/packages/computeMarketState'
+import { classifyComputeReservationReview } from '@/packages/computeReservationReview'
 import { copyToClipboard } from '@/packages/navigator'
 import platform from '@/platform'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
@@ -202,10 +236,51 @@ function ComputeCenterPage() {
   const [message, setMessage] = useState<FeedbackMessage | null>(null)
   const [cardHourPrompt, setCardHourPrompt] = useState<CardHourPrompt | null>(null)
   const previousUnreadOrderMessages = useRef<number | null>(null)
+  const [productLikeCounts, setProductLikeCounts] = useState<ComputeProductLikeCounts>({})
+  const [productLikeCountsLoaded, setProductLikeCountsLoaded] = useState(false)
+  const productLikeCountsRef = useRef<ComputeProductLikeCounts>({})
+  const productLikeWriteQueueRef = useRef<Promise<void>>(Promise.resolve())
   const closeMessage = useCallback(() => setMessage(null), [])
 
+  useEffect(() => {
+    let cancelled = false
+    void platform
+      .getStoreValue(COMPUTE_PRODUCT_LIKE_COUNTS_KEY)
+      .then((value) => {
+        if (cancelled) return
+        const storedCounts = normalizeComputeProductLikeCounts(value)
+        productLikeCountsRef.current = storedCounts
+        setProductLikeCounts(storedCounts)
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setProductLikeCountsLoaded(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const handleProductLike = useCallback((productId: number) => {
+    const nextCounts = incrementComputeProductLikeCount(productLikeCountsRef.current, productId)
+    productLikeCountsRef.current = nextCounts
+    setProductLikeCounts(nextCounts)
+
+    productLikeWriteQueueRef.current = productLikeWriteQueueRef.current
+      .catch(() => undefined)
+      .then(() => platform.setStoreValue(COMPUTE_PRODUCT_LIKE_COUNTS_KEY, nextCounts))
+      .catch((error) => {
+        console.error('Failed to persist compute product like counts:', error)
+      })
+  }, [])
+
   const configQuery = useQuery({ queryKey: ['compute', 'config'], queryFn: getComputeConfig })
-  const productsQuery = useQuery({ queryKey: ['compute', 'products'], queryFn: () => listComputeProducts() })
+  const productsQuery = useQuery({
+    queryKey: ['compute', 'products'],
+    queryFn: () => listComputeProducts(),
+    retry: 1,
+  })
   const accountQuery = useQuery({
     queryKey: ['compute', 'account'],
     queryFn: getComputeAccount,
@@ -401,36 +476,48 @@ function ComputeCenterPage() {
 
             <Tabs.Panel value="market" pt="md">
               <Tabs defaultValue="gpu-products" keepMounted={false}>
-                <Tabs.List>
-                  <Tabs.Tab value="gpu-products" leftSection={<IconCpu size={15} />}>
-                    GPU 算力商品
-                  </Tabs.Tab>
-                  <Tabs.Tab value="api-products" leftSection={<IconGauge size={15} />}>
-                    模型 API 套餐
-                  </Tabs.Tab>
-                  <Tabs.Tab value="live-prices" leftSection={<IconChartLine size={15} />}>
-                    实时行情
-                  </Tabs.Tab>
-                  <Tabs.Tab value="card-hour-market">卡时现货与询价</Tabs.Tab>
-                </Tabs.List>
+                <ScrollArea type="never" offsetScrollbars>
+                  <Tabs.List style={{ flexWrap: 'nowrap' }}>
+                    <Tabs.Tab value="gpu-products" leftSection={<IconCpu size={15} />}>
+                      GPU 算力商品
+                    </Tabs.Tab>
+                    <Tabs.Tab value="api-products" leftSection={<IconGauge size={15} />}>
+                      模型 API 套餐
+                    </Tabs.Tab>
+                    <Tabs.Tab value="live-prices" leftSection={<IconChartLine size={15} />}>
+                      实时行情
+                    </Tabs.Tab>
+                    <Tabs.Tab value="card-hour-market">卡时现货与询价</Tabs.Tab>
+                  </Tabs.List>
+                </ScrollArea>
                 <Tabs.Panel value="gpu-products" pt="md">
                   <MarketPanel
                     products={productsQuery.data || []}
                     loading={productsQuery.isLoading}
+                    error={productsQuery.error}
                     productType="GPU"
                     isLoggedIn={isLoggedIn}
                     busy={busy}
                     runCardHourAction={runCardHourAction}
+                    likeCounts={productLikeCounts}
+                    likeCountsLoaded={productLikeCountsLoaded}
+                    onLike={handleProductLike}
+                    onRetry={() => void productsQuery.refetch()}
                   />
                 </Tabs.Panel>
                 <Tabs.Panel value="api-products" pt="md">
                   <MarketPanel
                     products={productsQuery.data || []}
                     loading={productsQuery.isLoading}
+                    error={productsQuery.error}
                     productType="API"
                     isLoggedIn={isLoggedIn}
                     busy={busy}
                     runCardHourAction={runCardHourAction}
+                    likeCounts={productLikeCounts}
+                    likeCountsLoaded={productLikeCountsLoaded}
+                    onLike={handleProductLike}
+                    onRetry={() => void productsQuery.refetch()}
                   />
                 </Tabs.Panel>
                 <Tabs.Panel value="live-prices" pt="md">
@@ -909,40 +996,55 @@ function Metric({ label, value }: { label: string; value: string }) {
 function MarketPanel({
   products,
   loading,
+  error,
   productType,
   isLoggedIn,
   busy,
   runCardHourAction,
+  likeCounts,
+  likeCountsLoaded,
+  onLike,
+  onRetry,
 }: {
   products: ComputeProduct[]
   loading: boolean
+  error: Error | null
   productType: ProductType
   isLoggedIn: boolean
   busy: string | null
   runCardHourAction: RunCardHourAction
+  likeCounts: ComputeProductLikeCounts
+  likeCountsLoaded: boolean
+  onLike: (productId: number) => void
+  onRetry: () => void
 }) {
+  const isSmallScreen = useIsSmallScreen()
   const [keyword, setKeyword] = useState('')
+  const [sortMode, setSortMode] = useState<ComputeProductSortMode>('heat')
   const [reservationProduct, setReservationProduct] = useState<ComputeProduct | null>(null)
-  const visible = useMemo(() => {
-    const normalizedKeyword = keyword.trim().toLocaleLowerCase('zh-CN')
-    return products.filter((product) => {
-      if (product.productType !== productType) return false
-      if (!normalizedKeyword) return true
-      return [
-        product.name,
-        product.description,
-        product.region,
-        product.modelId,
-        product.gpuModel,
-        product.supplierName,
-      ].some((value) => value?.toLocaleLowerCase('zh-CN').includes(normalizedKeyword))
-    })
-  }, [keyword, productType, products])
+
+  const visible = useMemo(
+    () =>
+      filterAndSortComputeProducts({
+        products,
+        productType,
+        keyword,
+        sortMode,
+        likeCounts,
+      }),
+    [keyword, likeCounts, productType, products, sortMode]
+  )
 
   return (
     <Stack gap="md">
-      <Flex justify="space-between" align="center" wrap="wrap" gap="sm">
-        <Box>
+      <Flex
+        justify="space-between"
+        align={isSmallScreen ? 'stretch' : 'center'}
+        direction={isSmallScreen ? 'column' : 'row'}
+        wrap="wrap"
+        gap="sm"
+      >
+        <Box style={{ flex: isSmallScreen ? undefined : '1 1 420px', minWidth: 0 }}>
           <Title order={4}>算力市场</Title>
           <Text size="sm" c="chatbox-tertiary">
             {productType === 'GPU'
@@ -950,18 +1052,47 @@ function MarketPanel({
               : '购买指定模型的固定 Token 套餐，交付独立代理地址与密钥，不影响 KOD 原有对话和生图链路。'}
           </Text>
         </Box>
-        <Group gap="sm">
+        <Group
+          gap="sm"
+          wrap="nowrap"
+          w={isSmallScreen ? '100%' : undefined}
+          style={{ flex: isSmallScreen ? undefined : '0 1 396px', minWidth: 0 }}
+        >
           <TextInput
+            aria-label="搜索算力商品"
             placeholder="搜索商品、模型或供应方"
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            w={240}
+            style={{ flex: '1 1 240px', minWidth: 0 }}
+          />
+          <Select
+            aria-label="商品排序方式"
+            data={COMPUTE_PRODUCT_SORT_OPTIONS}
+            value={sortMode}
+            onChange={(value) => value && setSortMode(value as ComputeProductSortMode)}
+            allowDeselect={false}
+            w={isSmallScreen ? 132 : 144}
           />
         </Group>
       </Flex>
 
+      {!loading && !(error && products.length === 0) && (
+        <Text size="xs" c="chatbox-tertiary" aria-live="polite">
+          共 {visible.length} 个商品
+        </Text>
+      )}
+
       {loading ? (
         <Text c="chatbox-tertiary">正在加载市场商品…</Text>
+      ) : error && products.length === 0 ? (
+        <Alert color="red" title="商品加载失败">
+          <Flex align="center" justify="space-between" gap="md" wrap="wrap">
+            <Text size="sm">暂时无法连接算力服务，请检查网络或稍后重试。</Text>
+            <Button size="xs" variant="light" color="red" onClick={onRetry}>
+              重新加载
+            </Button>
+          </Flex>
+        </Alert>
       ) : visible.length === 0 ? (
         <EmptyState title="暂无已上架商品" description="管理员或已审核供应方发布并审核通过后，商品会显示在这里。" />
       ) : (
@@ -973,6 +1104,9 @@ function MarketPanel({
               isLoggedIn={isLoggedIn}
               busy={busy}
               runCardHourAction={runCardHourAction}
+              likeCount={getComputeProductLikeCount(product, likeCounts)}
+              likeDisabled={!likeCountsLoaded}
+              onLike={() => onLike(product.id)}
               onReserve={() => setReservationProduct(product)}
             />
           ))}
@@ -994,12 +1128,18 @@ function ProductCard({
   isLoggedIn,
   busy,
   runCardHourAction,
+  likeCount,
+  likeDisabled,
+  onLike,
   onReserve,
 }: {
   product: ComputeProduct
   isLoggedIn: boolean
   busy: string | null
   runCardHourAction: RunCardHourAction
+  likeCount: number
+  likeDisabled: boolean
+  onLike: () => void
   onReserve: () => void
 }) {
   const actionKey = `product-${product.id}`
@@ -1095,6 +1235,23 @@ function ProductCard({
           <Text size="xs" c="chatbox-tertiary" lineClamp={2}>
             供应方：{product.supplierName || 'KOD 官方'} · {product.slaDescription || 'SLA 待确认'}
           </Text>
+          <Group justify="flex-end">
+            <Button
+              type="button"
+              variant="light"
+              color={isApi ? 'blue' : 'cyan'}
+              size="compact-sm"
+              leftSection={<IconThumbUp size={16} aria-hidden="true" />}
+              aria-label={`为${product.name}点赞，当前${likeCount}次`}
+              disabled={likeDisabled}
+              onClick={(event) => {
+                event.stopPropagation()
+                onLike()
+              }}
+            >
+              {likeCount}
+            </Button>
+          </Group>
           {isApi && !product.upstreamKeyId && <Alert color="orange">管理员尚未配置零售站上游，当前不可购买。</Alert>}
           <Button
             mt="auto"
@@ -1132,137 +1289,423 @@ function ProductSpec({ label, value }: { label: string; value: string }) {
   )
 }
 
-type MarketPriceRange = '1h' | '6h' | '24h' | '7d'
+type MarketTrendGranularity = 'hour' | 'day' | 'week' | 'month'
+
+interface MarketTrendGranularityOption {
+  value: MarketTrendGranularity
+  label: string
+  range: ComputeMarketPriceRange
+  rangeLabel: string
+  bucketMilliseconds: number
+}
+
+const MARKET_TREND_GRANULARITIES: MarketTrendGranularityOption[] = [
+  { value: 'hour', label: '每小时', range: '24h', rangeLabel: '近 24 小时', bucketMilliseconds: 60 * 60_000 },
+  { value: 'day', label: '每天', range: '30d', rangeLabel: '近 30 天', bucketMilliseconds: 24 * 60 * 60_000 },
+  { value: 'week', label: '每周', range: '90d', rangeLabel: '近 12 周', bucketMilliseconds: 7 * 24 * 60 * 60_000 },
+  { value: 'month', label: '每月', range: '365d', rangeLabel: '近 12 个月', bucketMilliseconds: 30 * 24 * 60 * 60_000 },
+]
+
+const MARKET_RENTAL_TERMS: Array<{ value: ComputeMarketRentalTerm; label: string }> = [
+  { value: 'HOURLY', label: '按小时 / 按量' },
+  { value: 'DAILY', label: '包日' },
+  { value: 'WEEKLY', label: '包周' },
+  { value: 'MONTHLY', label: '包月' },
+]
+
+const MARKET_COMPARISON_RENTAL_TERMS = MARKET_RENTAL_TERMS.filter((option) => option.value === 'HOURLY')
+
+interface MarketModelOption {
+  value: string
+  label: string
+  queryModel: string
+  vramMiB?: number
+  formFactor?: string | null
+}
+
+const MARKET_DEFAULT_MODELS: MarketModelOption[] = [
+  { value: 'nvidia-a100-pcie-40gb', label: 'A100 PCIe 40GB', queryModel: 'nvidia-a100-pcie-40gb' },
+  { value: 'nvidia-v100-32gb', label: 'V100 32GB', queryModel: 'nvidia-v100-32gb' },
+  { value: 'nvidia-t4-16gb', label: 'Tesla T4 16GB', queryModel: 'nvidia-t4-16gb' },
+]
+
+const MARKET_COMPARISON_SOURCES: ComputeMarketPriceSource[] = ['GETDEPLOYING', 'VAST_AI']
 
 function MarketPricePanel() {
-  const [gpuModel, setGpuModel] = useState('H100')
-  const [range, setRange] = useState<MarketPriceRange>('24h')
+  const [gpuModel, setGpuModel] = useState(MARKET_DEFAULT_MODELS[0].value)
+  const [rentalTerm, setRentalTerm] = useState<ComputeMarketRentalTerm>('HOURLY')
+  const [regions, setRegions] = useState<string[]>([])
+  const [trendGranularity, setTrendGranularity] = useState<MarketTrendGranularity>('hour')
+  const [knownRegionsByModel, setKnownRegionsByModel] = useState<
+    Record<string, Array<{ value: string; label: string }>>
+  >({})
   const latestQuery = useQuery({
     queryKey: ['compute', 'market-prices', 'latest'],
     queryFn: getComputeMarketPrices,
-    refetchInterval: 5000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
-  })
-  const historyQuery = useQuery({
-    queryKey: ['compute', 'market-prices', 'history', gpuModel, range],
-    queryFn: () => getComputeMarketPriceHistory(gpuModel, range),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: false,
+    retry: 1,
   })
   const snapshot = latestQuery.data
-  const selectedQuotes = (snapshot?.quotes || []).filter((quote) => quote.gpuModel === gpuModel)
-  const chartPoints = useMemo(
-    () => mergeLivePricePoints(historyQuery.data, selectedQuotes),
-    [historyQuery.data, selectedQuotes]
+  const trendOption =
+    MARKET_TREND_GRANULARITIES.find((option) => option.value === trendGranularity) || MARKET_TREND_GRANULARITIES[0]
+  const range = trendOption.range
+  const snapshotRefreshFailed = Boolean(snapshot && latestQuery.error)
+  const modelOptions = useMemo(() => buildMarketModelOptions(snapshot), [snapshot])
+  const rentalTermOptions = useMemo(() => {
+    if (!snapshot?.availableRentalTerms?.length) return MARKET_COMPARISON_RENTAL_TERMS
+    const supported = new Set(
+      snapshot.availableRentalTerms.map((term) =>
+        String(term).toLocaleUpperCase('en-US') === 'PAYG' ? 'HOURLY' : term
+      )
+    )
+    const supportedHourlyTerms = MARKET_COMPARISON_RENTAL_TERMS.filter((option) => supported.has(option.value))
+    return supportedHourlyTerms.length > 0 ? supportedHourlyTerms : MARKET_COMPARISON_RENTAL_TERMS
+  }, [snapshot?.availableRentalTerms])
+  useEffect(() => {
+    if (rentalTermOptions.some((option) => option.value === rentalTerm)) return
+    setRentalTerm(rentalTermOptions[0]?.value || 'HOURLY')
+  }, [rentalTerm, rentalTermOptions])
+  const selectedModelOption =
+    modelOptions.find((option) => sameMarketDimension(option.value, gpuModel)) || MARKET_DEFAULT_MODELS[0]
+  const regionKey = [...regions].sort().join('|')
+  const historyQuery = useQuery({
+    queryKey: ['compute', 'market-prices', 'history', gpuModel, rentalTerm, regionKey, range],
+    queryFn: () =>
+      getComputeMarketPriceHistory(selectedModelOption.queryModel, range, {
+        rentalTerm,
+        regions,
+        vramMiB: selectedModelOption.vramMiB,
+        formFactor: selectedModelOption.formFactor,
+      }),
+    enabled: Boolean(gpuModel),
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    retry: 1,
+  })
+  const effectiveUsdCnyRate = snapshot?.usdCnyRate ?? historyQuery.data?.usdCnyRate
+
+  useEffect(() => {
+    if (modelOptions.some((option) => sameMarketDimension(option.value, gpuModel))) return
+    setGpuModel(findSharedMarketModel(snapshot) || modelOptions[0]?.value || MARKET_DEFAULT_MODELS[0].value)
+  }, [gpuModel, modelOptions, snapshot])
+
+  const modelRecords = useMemo(
+    () =>
+      [...(snapshot?.quotes || []), ...(historyQuery.data?.points || [])].filter(
+        (record) =>
+          MARKET_COMPARISON_SOURCES.includes(record.source) && sameMarketDimension(getMarketModelKey(record), gpuModel)
+      ),
+    [gpuModel, historyQuery.data?.points, snapshot?.quotes]
   )
+  const discoveredRegionOptions = useMemo(
+    () => buildMarketRegionOptions(snapshot, modelRecords),
+    [modelRecords, snapshot]
+  )
+  useEffect(() => {
+    setKnownRegionsByModel((current) => {
+      const merged = mergeMarketRegionOptions(current[gpuModel] || [], discoveredRegionOptions)
+      const previous = current[gpuModel] || []
+      if (
+        merged.length === previous.length &&
+        merged.every(
+          (option, index) => option.value === previous[index]?.value && option.label === previous[index]?.label
+        )
+      ) {
+        return current
+      }
+      return { ...current, [gpuModel]: merged }
+    })
+  }, [discoveredRegionOptions, gpuModel])
+  const regionOptions = mergeMarketRegionOptions(knownRegionsByModel[gpuModel] || [], discoveredRegionOptions)
+  const selectedQuotes = useMemo(
+    () =>
+      (snapshot?.quotes || []).filter(
+        (quote) =>
+          MARKET_COMPARISON_SOURCES.includes(quote.source) &&
+          sameMarketDimension(getMarketModelKey(quote), gpuModel) &&
+          getComputeMarketRentalTerm(quote) === rentalTerm &&
+          (regions.length === 0 ||
+            regions.some((region) => sameMarketDimension(region, getComputeMarketRegionCode(quote))))
+      ),
+    [gpuModel, regions, rentalTerm, snapshot?.quotes]
+  )
+  const chartPoints = useMemo(
+    () =>
+      filterComputeMarketPricePoints(
+        mergeComputeMarketPricePoints(
+          historyQuery.data?.points || [],
+          snapshotRefreshFailed
+            ? selectedQuotes.map((quote) => ({ ...quote, status: 'STALE' as const }))
+            : selectedQuotes
+        ).filter(
+          (point) =>
+            MARKET_COMPARISON_SOURCES.includes(point.source) && sameMarketDimension(getMarketModelKey(point), gpuModel)
+        ),
+        { rentalTerm, regions }
+      ),
+    [gpuModel, historyQuery.data?.points, regions, rentalTerm, selectedQuotes, snapshotRefreshFailed]
+  )
+  const currentQuotes = useMemo(
+    () =>
+      MARKET_COMPARISON_SOURCES.map((source) => {
+        const sourceQuotes = selectedQuotes.filter((quote) => quote.source === source)
+        return pickLowestMarketQuote(sourceQuotes, effectiveUsdCnyRate) || sourceQuotes[0]
+      }).filter((quote): quote is ComputeMarketPriceQuote => Boolean(quote)),
+    [effectiveUsdCnyRate, selectedQuotes]
+  )
+  const refreshSeconds = Math.max(snapshot?.refreshIntervalSeconds || 60, 30)
+  const hasInitialError = Boolean(latestQuery.error && !snapshot)
+  const historyRefreshFailedWithCache = Boolean(historyQuery.error && historyQuery.data?.points?.length)
 
   return (
-    <Stack gap="md">
-      <Paper
-        withBorder
-        radius="lg"
-        p="lg"
-        style={{ background: 'linear-gradient(135deg, var(--mantine-color-blue-0), var(--mantine-color-cyan-0))' }}
-      >
+    <Stack gap="md" aria-busy={latestQuery.isLoading || historyQuery.isLoading}>
+      <Paper withBorder radius="lg" p={{ base: 'md', sm: 'lg' }}>
         <Flex justify="space-between" align="flex-start" gap="md" wrap="wrap">
-          <Box>
+          <Box style={{ flex: '1 1 560px', minWidth: 0 }}>
             <Group gap="xs">
               <ThemeIcon variant="light" color="blue" radius="xl">
                 <IconChartLine size={18} />
               </ThemeIcon>
-              <Title order={3}>全球 GPU 参考行情</Title>
+              <Title order={3}>GetDeploying 与 Vast.ai 同 GPU 规格行情</Title>
             </Group>
-            <Text size="sm" c="chatbox-tertiary" mt={6} maw={760}>
-              Vast.ai 为已验证、当前可租的按需实例中位价；Akamai 为官方公开 GPU
-              类型的起步小时标价。第三方数据仅供比价，不能在 KOD 直接下单。
+            <Text size="sm" c="chatbox-secondary" mt={6} maw={760}>
+              按规范型号、显存与板型对应两个数据来源，统一折算为人民币 / GPU·小时。GetDeploying
+              展示跨供应商聚合价格，Vast.ai 展示当前已验证可租报价；这不是同一云实例产品的比较。
             </Text>
           </Box>
-          <Group gap="xs">
-            <Badge color={latestQuery.isError ? 'red' : latestQuery.isFetching ? 'blue' : 'green'} variant="light">
-              {latestQuery.isError ? '刷新失败' : latestQuery.isFetching ? '正在刷新' : '每 5 秒刷新'}
+          <Stack gap={4} align="flex-end">
+            <Badge
+              color={
+                snapshotRefreshFailed
+                  ? 'orange'
+                  : latestQuery.isError
+                    ? 'red'
+                    : latestQuery.isFetching
+                      ? 'blue'
+                      : 'green'
+              }
+              variant="light"
+            >
+              {snapshotRefreshFailed
+                ? '刷新失败，展示缓存'
+                : latestQuery.isError
+                  ? '刷新失败'
+                  : latestQuery.isFetching
+                    ? '正在刷新'
+                    : `服务约 ${refreshSeconds} 秒刷新`}
             </Badge>
-            <Text size="xs" c="chatbox-tertiary">
+            <Text size="xs" c="chatbox-secondary">
               更新时间：{formatDate(snapshot?.generatedAt)}
             </Text>
-          </Group>
+          </Stack>
         </Flex>
       </Paper>
 
-      {latestQuery.isError && (
-        <Alert color="red" title="行情暂不可用">
-          {latestQuery.error instanceof Error ? latestQuery.error.message : '无法连接行情服务，请检查后端与环境变量。'}
+      {hasInitialError && (
+        <Alert color="red" title="行情服务尚未接通">
+          <Flex justify="space-between" align="center" gap="md" wrap="wrap">
+            <Text size="sm">{marketPriceErrorMessage(latestQuery.error)}</Text>
+            <Button
+              size="xs"
+              variant="light"
+              color="red"
+              leftSection={<IconRefresh size={14} />}
+              onClick={() => void Promise.all([latestQuery.refetch(), historyQuery.refetch()])}
+            >
+              重新加载
+            </Button>
+          </Flex>
         </Alert>
       )}
 
-      <Flex justify="space-between" align="end" gap="md" wrap="wrap">
-        <Group align="end" gap="sm">
-          <Select
-            label="GPU 型号"
-            data={snapshot?.trackedModels || ['H100', 'H200', 'A100', 'RTX 4090']}
-            value={gpuModel}
-            onChange={(value) => value && setGpuModel(value)}
-            searchable
-            w={240}
-          />
-          <Select
-            label="时间范围"
-            data={[
-              { value: '1h', label: '近 1 小时' },
-              { value: '6h', label: '近 6 小时' },
-              { value: '24h', label: '近 24 小时' },
-              { value: '7d', label: '近 7 天' },
-            ]}
-            value={range}
-            onChange={(value) => value && setRange(value as MarketPriceRange)}
-            w={150}
-          />
-        </Group>
-        <Text size="xs" c="chatbox-tertiary">
-          汇率：1 USD ≈ ¥{formatNumber(snapshot?.usdCnyRate, 4)}；1 卡时 ≈ ¥{formatNumber(snapshot?.cardHourCnyRate, 3)}
-        </Text>
-      </Flex>
+      {snapshotRefreshFailed && (
+        <Alert color="orange" title="最新行情刷新失败，当前展示上次成功缓存" aria-live="polite">
+          缓存报价不会用于计算 GetDeploying / Vast.ai 比例或相对百分比；请稍后重试刷新。
+        </Alert>
+      )}
 
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-        {selectedQuotes.map((quote) => (
-          <MarketPriceQuoteCard key={`${quote.source}-${quote.gpuModel}`} quote={quote} />
-        ))}
-      </SimpleGrid>
-
-      <Paper withBorder radius="lg" p="lg">
-        <Flex justify="space-between" align="center" gap="sm" wrap="wrap" mb="md">
+      <Paper withBorder radius="lg" p={{ base: 'md', sm: 'lg' }}>
+        <Flex justify="space-between" align="flex-start" gap="sm" wrap="wrap" mb="md">
           <Box>
-            <Title order={4}>{gpuModel} 价格走势</Title>
-            <Text size="xs" c="chatbox-tertiary">
-              页面读取实时缓存，历史数据每分钟采样；最多保留 {snapshot?.historyRetentionDays || 30} 天。
+            <Title order={4}>{marketModelLabel(modelOptions, gpuModel)} 价格走势</Title>
+            <Text size="xs" c="chatbox-secondary">
+              每个数据来源一条平滑主线；当前每个点表示{trendOption.label}
+              时段内的最低折算小时价。标记点来自真实数据，曲线不会越过相邻价格。 历史数据最多保留{' '}
+              {snapshot?.historyRetentionDays || 365} 天。
             </Text>
           </Box>
-          <Group gap="md">
-            <ChartLegend color="#228be6" label="Vast.ai 可租实例中位价" />
-            <ChartLegend color="#12b886" label="Akamai 官方起步价" />
+          <Group gap="md" wrap="wrap" aria-label="网站折线样式">
+            <ChartLegend color="#e8590c" dash="10 5" label="GetDeploying（长虚线 / 方点）" />
+            <ChartLegend color="#1971c2" dash="2 5" label="Vast.ai（短虚线 / 圆点）" />
           </Group>
         </Flex>
-        {historyQuery.isLoading && chartPoints.length === 0 ? (
-          <Text c="chatbox-tertiary">正在加载行情历史…</Text>
-        ) : (
-          <MarketPriceChart points={chartPoints} />
+        <Box component="section" aria-label="行情趋势筛选" mb="md">
+          <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="sm">
+            <Select
+              label="GPU 型号"
+              data={modelOptions}
+              value={gpuModel}
+              onChange={(value) => {
+                if (!value) return
+                setGpuModel(value)
+                setRegions([])
+              }}
+              searchable
+              allowDeselect={false}
+            />
+            <Select
+              label="租赁计费周期（仅按小时）"
+              data={rentalTermOptions}
+              value={rentalTerm}
+              onChange={(value) => value && setRentalTerm(value as ComputeMarketRentalTerm)}
+              allowDeselect={false}
+            />
+            <MultiSelect
+              label="供应商 / 地区"
+              data={regionOptions}
+              value={regions}
+              onChange={setRegions}
+              placeholder="全部供应商 / 地区"
+              searchable
+              clearable
+              hidePickedOptions
+              nothingFoundMessage="暂无可选供应商或地区"
+            />
+            <Stack gap={5}>
+              <Text size="sm" fw={500}>
+                趋势粒度
+              </Text>
+              <SegmentedControl
+                value={trendGranularity}
+                onChange={(value) => setTrendGranularity(value as MarketTrendGranularity)}
+                data={MARKET_TREND_GRANULARITIES.map(({ value, label }) => ({ value, label }))}
+                aria-label="趋势粒度"
+                fullWidth
+                size="md"
+              />
+            </Stack>
+          </SimpleGrid>
+          <Flex justify="space-between" align="center" gap="sm" wrap="wrap" mt="sm">
+            <Text size="xs" c="chatbox-secondary">
+              {regions.length === 0
+                ? '每个数据来源显示一条主线；每次采样取该来源最低可用价'
+                : `已筛选 ${regions.length} 个供应商或地区；每次采样取所选范围内该来源的最低可用价`}
+            </Text>
+            <Text size="xs" c="chatbox-secondary">
+              汇率：1 USD ≈ ¥{formatOptionalNumber(effectiveUsdCnyRate, 4)}；1 卡时 ≈ ¥
+              {formatOptionalNumber(snapshot?.cardHourCnyRate, 3)}
+              {snapshot?.usdCnyRateUpdatedAt ? `（汇率日期：${formatDate(snapshot.usdCnyRateUpdatedAt)}）` : ''}
+            </Text>
+          </Flex>
+          <Text size="xs" c="chatbox-secondary" mt={4}>
+            筛选项按数据来源区分：GetDeploying 项表示供应商及其总部国家，不代表 GPU 所在机房；Vast.ai
+            项表示实例地区。两项比较仅使用按小时 / 按量报价。
+          </Text>
+          <Text size="xs" c="chatbox-secondary" mt={4}>
+            当前按{trendOption.label}分组，查看{trendOption.rangeLabel}
+            ；每个点取该时段内真实最低可用价，平滑曲线仅作连接，不改变采样数值。
+          </Text>
+        </Box>
+        {historyQuery.error ? (
+          <Alert
+            color="orange"
+            title={
+              historyRefreshFailedWithCache
+                ? '历史行情刷新失败，继续展示上次成功历史'
+                : chartPoints.length > 0
+                  ? '历史行情加载失败，仅展示当前报价'
+                  : '历史行情加载失败'
+            }
+            mb="md"
+          >
+            {marketPriceErrorMessage(historyQuery.error)}
+          </Alert>
+        ) : null}
+        {historyQuery.isLoading && chartPoints.length > 0 && (
+          <Alert color="blue" variant="light" mb="md" aria-live="polite">
+            正在加载历史行情，图中暂时仅展示当前报价。
+          </Alert>
+        )}
+        <MarketPriceChart
+          points={chartPoints}
+          usdCnyRate={effectiveUsdCnyRate}
+          loading={historyQuery.isLoading}
+          granularity={trendGranularity}
+          bucketMilliseconds={trendOption.bucketMilliseconds}
+          emptyDescription={
+            regions.length > 0
+              ? '所选型号、供应商或地区暂无历史报价，请更换筛选条件。'
+              : '服务端开始采样后会在这里显示 GetDeploying 与 Vast.ai 的同 GPU 规格走势。'
+          }
+        />
+        {historyQuery.isFetching && !historyQuery.isLoading && (
+          <Text size="xs" c="chatbox-secondary" mt="xs" aria-live="polite">
+            正在后台刷新历史行情…
+          </Text>
         )}
       </Paper>
 
-      <MarketPriceMatrix snapshot={snapshot} />
+      {currentQuotes.length > 0 && (
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          {currentQuotes.map((quote) => (
+            <MarketPriceQuoteCard
+              key={`${quote.source}-${getMarketModelKey(quote)}-${getComputeMarketRegionCode(quote)}-${getComputeMarketRentalTerm(quote)}`}
+              quote={quote}
+              usdCnyRate={effectiveUsdCnyRate}
+              clientStale={snapshotRefreshFailed}
+            />
+          ))}
+        </SimpleGrid>
+      )}
+
+      <MarketPriceDetailsTable points={chartPoints} usdCnyRate={effectiveUsdCnyRate} />
+      <MarketPriceMatrix snapshot={snapshot} clientStale={snapshotRefreshFailed} />
+
+      <Alert color="blue" variant="light" title="数据口径与使用说明">
+        <Text size="sm">
+          GetDeploying 是跨供应商聚合数据，通常每日更新；其供应商国家表示总部所在地，不是机房地区。Vast.ai
+          精确规格由服务端查询当前已验证可租实例。两者只按同 GPU
+          型号、显存、板型和按小时口径对应，其他主机规格并未对齐。为避免自比较，服务端会从 GetDeploying 聚合中排除
+          Vast.ai 报价。第三方价格仅供参考，不能在 KOD 直接下单。
+        </Text>
+      </Alert>
     </Stack>
   )
 }
 
-function MarketPriceQuoteCard({ quote }: { quote: ComputeMarketPriceQuote }) {
-  const available = quote.priceUsdPerGpuHour != null
-  const status = marketPriceStatus(quote)
+function MarketPriceQuoteCard({
+  quote,
+  usdCnyRate,
+  clientStale,
+}: {
+  quote: ComputeMarketPriceQuote
+  usdCnyRate?: number
+  clientStale: boolean
+}) {
+  const cnyPrice = getComputeMarketDisplayCnyPrice(quote, usdCnyRate)
+  const available =
+    cnyPrice !== undefined ||
+    quote.originalBillingPrice != null ||
+    quote.originalPricePerGpuHour != null ||
+    quote.priceUsdPerGpuHour != null
+  const status = clientStale ? { label: '缓存报价', color: 'orange' } : marketPriceStatus(quote)
+  const originalPrice = marketOriginalPrice(quote)
   return (
-    <Paper withBorder radius="lg" p="lg">
+    <Paper withBorder radius="lg" p={{ base: 'md', sm: 'lg' }}>
       <Flex justify="space-between" align="flex-start" gap="md">
         <Box>
-          <Text fw={700}>{quote.sourceLabel}</Text>
-          <Text size="xs" c="chatbox-tertiary">
-            {quote.quoteType === 'MEDIAN_AVAILABLE' ? '当前可租实例中位价' : '官方公开起步小时标价'}
+          <Group gap="xs" wrap="wrap">
+            <Text fw={700}>{marketSourceLabel(quote.source, quote.sourceLabel)}</Text>
+            {quote.priceCondition && (
+              <Badge size="xs" variant="outline">
+                {quote.priceCondition}
+              </Badge>
+            )}
+          </Group>
+          <Text size="xs" c="chatbox-secondary">
+            {marketQuoteTypeLabel(quote)} · {marketSupplierOrRegionLabel(quote)} ·{' '}
+            {marketRentalTermLabel(getComputeMarketRentalTerm(quote))}
           </Text>
         </Box>
         <Badge color={status.color} variant="light">
@@ -1271,31 +1714,52 @@ function MarketPriceQuoteCard({ quote }: { quote: ComputeMarketPriceQuote }) {
       </Flex>
       {available ? (
         <Stack gap={4} mt="md">
-          <Group gap={6} align="baseline">
-            <Text size="32px" fw={800}>
-              ${formatNumber(quote.priceUsdPerGpuHour, 4)}
+          <Group gap={6} align="baseline" wrap="wrap">
+            <Text fz={{ base: 26, sm: 32 }} fw={800}>
+              {originalPrice}
             </Text>
-            <Text size="sm" c="chatbox-tertiary">
-              / GPU·小时
+            <Text size="sm" c="chatbox-secondary">
+              {quote.originalBillingPrice != null
+                ? `/ GPU·${marketBillingUnitLabel(quote.originalBillingUnit)}`
+                : '/ GPU·小时'}
             </Text>
           </Group>
           <Text size="sm">
-            约 ¥{formatNumber(quote.priceCnyPerGpuHour, 4)} / GPU·小时 · {formatNumber(quote.cardHoursPerGpuHour, 4)}{' '}
-            卡时 / GPU·小时
+            {cnyPrice === undefined
+              ? '汇率暂不可用，当前仅展示来源原币报价'
+              : `折算 ¥${formatOptionalNumber(cnyPrice, 4)} / GPU·小时${
+                  quote.cardHoursPerGpuHour != null
+                    ? ` · ${formatOptionalNumber(quote.cardHoursPerGpuHour, 4)} 卡时 / GPU·小时`
+                    : ''
+                }`}
           </Text>
-          <Text size="xs" c="chatbox-tertiary">
-            {quote.quoteType === 'MEDIAN_AVAILABLE' ? `样本 ${quote.sampleSize || 0} 个可租实例 · ` : ''}
+          <Text size="xs" c="chatbox-secondary">
+            {quote.availableGpuCount != null
+              ? `可租 ${quote.availableGpuCount} 张 · `
+              : quote.sampleSize != null
+                ? `样本 ${quote.sampleSize} 个 · `
+                : ''}
             采样：{formatDate(quote.sampledAt)}
           </Text>
+          {quote.providerUpdatedAt && (
+            <Text size="xs" c="chatbox-secondary">
+              来源核验：{formatDate(quote.providerUpdatedAt)}
+            </Text>
+          )}
+          {(clientStale || quote.status === 'STALE') && (
+            <Text size="xs" c="orange">
+              当前显示上次成功数据：{formatDate(quote.lastSuccessAt || quote.sampledAt)}
+            </Text>
+          )}
         </Stack>
       ) : (
         <Stack gap={4} mt="lg" mb="sm">
-          <Text size="xl" fw={700} c="chatbox-tertiary">
+          <Text size="xl" fw={700} c="chatbox-secondary">
             暂无报价
           </Text>
-          <Text size="xs" c="chatbox-tertiary">
+          <Text size="xs" c="chatbox-secondary">
             {quote.status === 'UNCONFIGURED'
-              ? '后端尚未配置 Vast.ai API Key。'
+              ? `${marketSourceLabel(quote.source, quote.sourceLabel)} 服务端采集凭据尚未配置。`
               : quote.errorMessage || '该平台未提供此型号。'}
           </Text>
         </Stack>
@@ -1306,6 +1770,7 @@ function MarketPriceQuoteCard({ quote }: { quote: ComputeMarketPriceQuote }) {
         px={0}
         mt="sm"
         rightSection={<IconExternalLink size={14} />}
+        aria-label={`打开 ${marketSourceLabel(quote.source, quote.sourceLabel)} 官方来源`}
         onClick={() => void platform.openLink(quote.sourceUrl)}
       >
         查看官方来源
@@ -1314,39 +1779,72 @@ function MarketPriceQuoteCard({ quote }: { quote: ComputeMarketPriceQuote }) {
   )
 }
 
-function MarketPriceMatrix({ snapshot }: { snapshot?: Awaited<ReturnType<typeof getComputeMarketPrices>> }) {
+function MarketPriceMatrix({
+  snapshot,
+  clientStale,
+}: {
+  snapshot?: Awaited<ReturnType<typeof getComputeMarketPrices>>
+  clientStale: boolean
+}) {
+  const titleId = useId()
   if (!snapshot) return null
-  const byKey = new Map(snapshot.quotes.map((quote) => [`${quote.gpuModel}:${quote.source}`, quote]))
+  const rows = buildMarketExactComparisonRows(snapshot.quotes)
   return (
-    <Paper withBorder radius="lg" p="lg">
-      <Title order={4} mb="xs">
-        主流型号价格速览
+    <Paper withBorder radius="lg" p={{ base: 'md', sm: 'lg' }}>
+      <Title order={4} mb="xs" id={titleId}>
+        同 GPU 规格价格对照
       </Title>
-      <Text size="xs" c="chatbox-tertiary" mb="md">
-        “暂无报价”表示来源平台没有该型号或当前没有可租样本，不以 0 元代替。
+      <Text size="xs" c="chatbox-secondary" mb="md">
+        {clientStale ? '最新刷新失败，表内为上次成功缓存；' : ''}
+        仅按相同 GPU 型号、显存、板型和按小时口径配对；这不表示 CPU、内存、磁盘等云实例规格相同。比例为 GetDeploying /
+        Vast.ai，相对百分比以 Vast.ai 为基准；缺少任一来源、价格非正数或含缓存时不计算。
       </Text>
-      <ScrollArea>
-        <Table striped highlightOnHover miw={700}>
+      <ScrollArea
+        type="auto"
+        offsetScrollbars
+        viewportProps={{ tabIndex: 0, 'aria-label': '同 GPU 规格价格对照表横向滚动区域' }}
+      >
+        <Table striped highlightOnHover miw={1180} aria-labelledby={titleId}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>GPU 型号</Table.Th>
-              <Table.Th>Vast.ai 中位价</Table.Th>
-              <Table.Th>Akamai 官方起步价</Table.Th>
-              <Table.Th>Vast 样本量</Table.Th>
+              <Table.Th>GPU 规格</Table.Th>
+              <Table.Th>GetDeploying 报价</Table.Th>
+              <Table.Th>Vast.ai 报价</Table.Th>
+              <Table.Th>GetDeploying / Vast.ai</Table.Th>
+              <Table.Th>相对 Vast.ai</Table.Th>
+              <Table.Th>供应商 / 地区样本</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {snapshot.trackedModels.map((model) => {
-              const vast = byKey.get(`${model}:VAST_AI`)
-              const akamai = byKey.get(`${model}:AKAMAI`)
+            {rows.length === 0 && (
+              <Table.Tr>
+                <Table.Td colSpan={6}>
+                  <Text c="chatbox-secondary">暂无同时包含型号、显存与板型信息的按小时报价。</Text>
+                </Table.Td>
+              </Table.Tr>
+            )}
+            {rows.map((row) => {
+              const getDeploying = pickLowestMarketQuote(
+                row.quotes.filter((quote) => quote.source === 'GETDEPLOYING'),
+                snapshot.usdCnyRate
+              )
+              const vast = pickLowestMarketQuote(
+                row.quotes.filter((quote) => quote.source === 'VAST_AI'),
+                snapshot.usdCnyRate
+              )
+              const comparison = compareGetDeployingAndVastPrices(getDeploying, vast, snapshot.usdCnyRate, {
+                clientStale,
+              })
               return (
-                <Table.Tr key={model}>
+                <Table.Tr key={row.key}>
                   <Table.Td>
-                    <Text fw={600}>{model}</Text>
+                    <Text fw={600}>{row.label}</Text>
                   </Table.Td>
-                  <Table.Td>{formatMarketPrice(vast)}</Table.Td>
-                  <Table.Td>{formatMarketPrice(akamai)}</Table.Td>
-                  <Table.Td>{vast?.priceUsdPerGpuHour != null ? `${vast.sampleSize || 0} 个` : '-'}</Table.Td>
+                  <Table.Td>{formatMarketPrice(getDeploying, snapshot.usdCnyRate, clientStale)}</Table.Td>
+                  <Table.Td>{formatMarketPrice(vast, snapshot.usdCnyRate, clientStale)}</Table.Td>
+                  <Table.Td>{formatMarketRatio(comparison)}</Table.Td>
+                  <Table.Td>{formatMarketPercentVsVast(comparison)}</Table.Td>
+                  <Table.Td>{formatMarketCoverage(getDeploying, vast)}</Table.Td>
                 </Table.Tr>
               )
             })}
@@ -1357,18 +1855,99 @@ function MarketPriceMatrix({ snapshot }: { snapshot?: Awaited<ReturnType<typeof 
   )
 }
 
-function MarketPriceChart({ points }: { points: ComputeMarketPricePoint[] }) {
+interface MarketChartDatum {
+  key: string
+  point: ComputeMarketComparisonPoint
+  seriesKey: string
+  color: string
+  dash?: string
+  time: number
+  value: number
+  x: number
+  y: number
+}
+
+function MarketPriceChart({
+  points,
+  usdCnyRate,
+  loading,
+  granularity,
+  bucketMilliseconds,
+  emptyDescription,
+}: {
+  points: ComputeMarketComparisonPoint[]
+  usdCnyRate?: number
+  loading: boolean
+  granularity: MarketTrendGranularity
+  bucketMilliseconds: number
+  emptyDescription: string
+}) {
+  const chartId = useId()
+  const [activeKey, setActiveKey] = useState<string | null>(null)
+  const chartViewportRef = useRef<HTMLDivElement>(null)
   const width = 900
-  const height = 300
-  const padding = { left: 70, right: 24, top: 20, bottom: 42 }
-  const valid = points
-    .map((point) => ({ ...point, time: new Date(point.sampledAt).getTime() }))
-    .filter((point) => Number.isFinite(point.time) && Number.isFinite(Number(point.priceUsdPerGpuHour)))
-  if (valid.length === 0) {
-    return <EmptyState title="正在积累行情" description="部署后开始采样；有实时报价时会先显示当前价格。" />
+  const height = 340
+  const padding = { left: 74, right: 24, top: 24, bottom: 52 }
+  const groupedSeries = useMemo(
+    () => groupComputeMarketPricePointsBySource(points, usdCnyRate, { bucketMilliseconds }),
+    [bucketMilliseconds, points, usdCnyRate]
+  )
+  const availableSeries = useMemo(
+    () =>
+      groupedSeries
+        .map((series) => {
+          const style = marketSeriesStyle(series.source, 0)
+          const data = sampleMarketChartPoints(series.points, 240)
+            .map((point, pointIndex) => ({
+              point,
+              time: new Date(point.aggregationBucketStartedAt || point.sampledAt).getTime(),
+              value: getComputeMarketDisplayCnyPrice(point, usdCnyRate),
+              key: `${series.key}:${point.sampledAt}:${pointIndex}`,
+            }))
+            .filter(
+              (datum): datum is { point: ComputeMarketComparisonPoint; time: number; value: number; key: string } =>
+                Number.isFinite(datum.time) && datum.value !== undefined && Number.isFinite(datum.value)
+            )
+          return {
+            ...series,
+            ...style,
+            data,
+          }
+        })
+        .filter((series) => series.data.length > 0),
+    [groupedSeries, usdCnyRate]
+  )
+  const normalizedSeries = availableSeries
+  const flatData = useMemo(
+    () =>
+      normalizedSeries.flatMap((series) =>
+        series.data.map((datum) => ({
+          ...datum,
+          seriesKey: series.key,
+          color: series.color,
+          dash: series.dash,
+        }))
+      ),
+    [normalizedSeries]
+  )
+
+  useEffect(() => {
+    if (activeKey && !flatData.some((datum) => datum.key === activeKey)) setActiveKey(null)
+  }, [activeKey, flatData])
+
+  if (flatData.length === 0) {
+    return (
+      <Box py="xl" ta="center" role="status">
+        <Text fw={600}>{loading ? '正在加载行情历史…' : '暂无匹配行情'}</Text>
+        <Text size="sm" c="chatbox-secondary" mt={4}>
+          {loading ? '正在读取服务端采样数据，请稍候。' : emptyDescription}
+        </Text>
+      </Box>
+    )
   }
-  const times = valid.map((point) => point.time)
-  const prices = valid.map((point) => Number(point.priceUsdPerGpuHour))
+
+  const times = flatData.map((datum) => datum.time)
+  const prices = flatData.map((datum) => datum.value)
   const minTime = Math.min(...times)
   const maxTime = Math.max(...times)
   const rawMinPrice = Math.min(...prices)
@@ -1378,124 +1957,841 @@ function MarketPriceChart({ points }: { points: ComputeMarketPricePoint[] }) {
   const maxPrice = rawMaxPrice + pricePadding
   const plotWidth = width - padding.left - padding.right
   const plotHeight = height - padding.top - padding.bottom
-  const x = (time: number) => padding.left + ((time - minTime) / Math.max(1, maxTime - minTime)) * plotWidth
+  const x = (time: number) =>
+    minTime === maxTime
+      ? padding.left + plotWidth / 2
+      : padding.left + ((time - minTime) / (maxTime - minTime)) * plotWidth
   const y = (price: number) =>
     padding.top + (1 - (price - minPrice) / Math.max(0.000001, maxPrice - minPrice)) * plotHeight
-  const sources = [
-    { source: 'VAST_AI', color: '#228be6' },
-    { source: 'AKAMAI', color: '#12b886' },
-  ] as const
   const gridValues = Array.from({ length: 5 }, (_, index) => minPrice + ((maxPrice - minPrice) * index) / 4)
+  const timeTicks =
+    minTime === maxTime
+      ? [{ key: 'only', timestamp: minTime }]
+      : ['start', 'quarter', 'middle', 'three-quarter', 'end'].map((key, index) => ({
+          key,
+          timestamp: minTime + ((maxTime - minTime) * index) / 4,
+        }))
+  const chartData: MarketChartDatum[] = flatData.map((datum) => ({
+    key: datum.key,
+    point: datum.point,
+    seriesKey: datum.seriesKey,
+    color: datum.color,
+    dash: datum.dash,
+    time: datum.time,
+    value: datum.value,
+    x: x(datum.time),
+    y: y(datum.value),
+  }))
+  const active = chartData.find((datum) => datum.key === activeKey) || null
+
+  const moveActivePoint = (direction: number) => {
+    const chronological = [...chartData].sort(
+      (left, right) => left.time - right.time || left.key.localeCompare(right.key)
+    )
+    const currentIndex = active ? chronological.findIndex((datum) => datum.key === active.key) : -1
+    const nextIndex = Math.min(Math.max(currentIndex + direction, 0), chronological.length - 1)
+    const next = chronological[nextIndex]
+    setActiveKey(next?.key || null)
+    const viewport = chartViewportRef.current
+    if (next && viewport) {
+      const targetLeft = (next.x / width) * viewport.scrollWidth
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      viewport.scrollTo({
+        left: Math.max(0, targetLeft - viewport.clientWidth / 2),
+        behavior: reduceMotion ? 'auto' : 'smooth',
+      })
+    }
+  }
+
+  const selectNearestPoint = (clientX: number, clientY: number, svg: SVGSVGElement) => {
+    const bounds = svg.getBoundingClientRect()
+    if (bounds.width <= 0 || bounds.height <= 0) return
+    const pointerX = ((clientX - bounds.left) / bounds.width) * width
+    const pointerY = ((clientY - bounds.top) / bounds.height) * height
+    if (
+      pointerX < padding.left ||
+      pointerX > width - padding.right ||
+      pointerY < padding.top ||
+      pointerY > height - padding.bottom
+    ) {
+      return
+    }
+    let nearest: MarketChartDatum | undefined
+    let nearestDistance = Number.POSITIVE_INFINITY
+    for (const datum of chartData) {
+      const distance = (datum.x - pointerX) ** 2 + (datum.y - pointerY) ** 2
+      if (distance >= nearestDistance) continue
+      nearest = datum
+      nearestDistance = distance
+    }
+    setActiveKey(nearest?.key || null)
+  }
 
   return (
-    <Box style={{ width: '100%', overflow: 'hidden' }}>
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label="GPU 美元每小时价格折线图"
-        style={{ width: '100%' }}
-      >
-        {gridValues.map((value) => (
-          <g key={value}>
-            <line
-              x1={padding.left}
-              x2={width - padding.right}
-              y1={y(value)}
-              y2={y(value)}
-              stroke="var(--mantine-color-gray-3)"
-              strokeDasharray="4 5"
-            />
+    <Stack gap="sm">
+      <ScrollArea type="auto" offsetScrollbars viewportRef={chartViewportRef}>
+        <Box
+          pos="relative"
+          miw={720}
+          tabIndex={0}
+          role="group"
+          aria-label="GPU 行情图。使用左右方向键逐点查看，按 Escape 关闭详情。"
+          onFocus={() => !activeKey && setActiveKey(chartData[0]?.key || null)}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+              event.preventDefault()
+              moveActivePoint(1)
+            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+              event.preventDefault()
+              moveActivePoint(-1)
+            } else if (event.key === 'Escape') {
+              setActiveKey(null)
+            }
+          }}
+          onMouseLeave={() => setActiveKey(null)}
+          onClick={() => setActiveKey(null)}
+        >
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            role="img"
+            aria-labelledby={`${chartId}-title ${chartId}-description`}
+            style={{ width: '100%', display: 'block' }}
+            onPointerMove={(event) => selectNearestPoint(event.clientX, event.clientY, event.currentTarget)}
+            onPointerDown={(event) => {
+              event.stopPropagation()
+              selectNearestPoint(event.clientX, event.clientY, event.currentTarget)
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <title id={`${chartId}-title`}>GetDeploying 与 Vast.ai 同 GPU 规格人民币折算价格走势</title>
+            <desc id={`${chartId}-description`}>
+              每个数据来源一条单调平滑主线。纵轴为人民币每 GPU 小时，横轴为{marketTrendGranularityLabel(granularity)}
+              分组时间。方点或圆点为真实时段最低价；鼠标悬停、触摸数据点或聚焦图表后使用方向键可查看详情。
+            </desc>
+            {gridValues.map((value) => (
+              <g key={value}>
+                <line
+                  x1={padding.left}
+                  x2={width - padding.right}
+                  y1={y(value)}
+                  y2={y(value)}
+                  stroke="var(--mantine-color-gray-5)"
+                  strokeDasharray="4 5"
+                  opacity="0.34"
+                />
+                <text
+                  x={padding.left - 10}
+                  y={y(value) + 4}
+                  textAnchor="end"
+                  fontSize="11"
+                  fill="currentColor"
+                  opacity="0.62"
+                >
+                  ¥{formatCompactMarketPrice(value)}
+                </text>
+              </g>
+            ))}
+            {normalizedSeries.map((series) => {
+              const seriesData = chartData.filter((datum) => datum.seriesKey === series.key)
+              const markerStep = Math.max(1, Math.ceil(seriesData.length / 36))
+              const markerData = seriesData.filter(
+                (datum, index) =>
+                  index === 0 || index === seriesData.length - 1 || index % markerStep === 0 || datum.key === activeKey
+              )
+              return (
+                <g key={series.key}>
+                  {splitMarketChartSegments(seriesData).map((segment, index) => (
+                    <path
+                      key={`${series.key}-segment-${index}`}
+                      fill="none"
+                      stroke={series.color}
+                      strokeWidth="3"
+                      strokeDasharray={series.dash}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      d={buildComputeMarketMonotoneSvgPath(segment)}
+                    />
+                  ))}
+                  {markerData.map((datum) => (
+                    <g key={datum.key} aria-hidden="true" pointerEvents="none">
+                      {datum.point.source === 'GETDEPLOYING' ? (
+                        <rect
+                          x={datum.x - 4}
+                          y={datum.y - 4}
+                          width="8"
+                          height="8"
+                          rx="1.5"
+                          fill={series.color}
+                          stroke={activeKey === datum.key ? 'currentColor' : series.color}
+                          strokeWidth={activeKey === datum.key ? 2 : 1}
+                        />
+                      ) : (
+                        <circle
+                          cx={datum.x}
+                          cy={datum.y}
+                          r="4.5"
+                          fill={series.color}
+                          stroke={activeKey === datum.key ? 'currentColor' : series.color}
+                          strokeWidth={activeKey === datum.key ? 2 : 1}
+                        />
+                      )}
+                    </g>
+                  ))}
+                </g>
+              )
+            })}
+            {timeTicks.map(({ key, timestamp }, index) => (
+              <text
+                key={key}
+                x={x(timestamp)}
+                y={height - 17}
+                textAnchor={index === 0 ? 'start' : index === timeTicks.length - 1 ? 'end' : 'middle'}
+                fontSize="11"
+                fill="currentColor"
+                opacity="0.62"
+              >
+                {formatChartTime(timestamp, granularity)}
+              </text>
+            ))}
             <text
-              x={padding.left - 10}
-              y={y(value) + 4}
-              textAnchor="end"
+              x={14}
+              y={padding.top + plotHeight / 2}
+              textAnchor="middle"
               fontSize="11"
               fill="currentColor"
-              opacity="0.6"
+              opacity="0.62"
+              transform={`rotate(-90 14 ${padding.top + plotHeight / 2})`}
             >
-              ${value.toFixed(2)}
+              人民币 / GPU·小时
             </text>
-          </g>
-        ))}
-        {sources.map(({ source, color }) => {
-          const sourcePoints = valid.filter((point) => point.source === source).sort((a, b) => a.time - b.time)
-          if (sourcePoints.length === 0) return null
-          const coordinates = sourcePoints
-            .map((point) => `${x(point.time)},${y(Number(point.priceUsdPerGpuHour))}`)
-            .join(' ')
-          return (
-            <g key={source}>
-              <polyline
-                fill="none"
-                stroke={color}
-                strokeWidth="3"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                points={coordinates}
-              />
-              {sourcePoints.map((point) => (
-                <circle
-                  key={`${source}-${point.time}`}
-                  cx={x(point.time)}
-                  cy={y(Number(point.priceUsdPerGpuHour))}
-                  r="3"
-                  fill={color}
-                >
-                  <title>
-                    {`${point.gpuModel} · $${Number(point.priceUsdPerGpuHour).toFixed(4)} · ${formatDate(point.sampledAt)}`}
-                  </title>
-                </circle>
-              ))}
-            </g>
-          )
-        })}
-        <text x={padding.left} y={height - 12} fontSize="11" fill="currentColor" opacity="0.6">
-          {formatChartTime(minTime)}
-        </text>
-        <text
-          x={width - padding.right}
-          y={height - 12}
-          textAnchor="end"
-          fontSize="11"
-          fill="currentColor"
-          opacity="0.6"
-        >
-          {formatChartTime(maxTime)}
-        </text>
-      </svg>
-    </Box>
+          </svg>
+        </Box>
+      </ScrollArea>
+      {active ? (
+        <MarketPriceTooltip datum={active} usdCnyRate={usdCnyRate} />
+      ) : (
+        <Text size="xs" c="chatbox-secondary">
+          {flatData.length === 1
+            ? '当前粒度只有 1 个真实数据点，至少需要 2 个点才能形成曲线。'
+            : '悬停或点击真实数据点查看具体价格；聚焦图表后可用方向键逐点浏览。'}
+        </Text>
+      )}
+    </Stack>
   )
 }
 
-function ChartLegend({ color, label }: { color: string; label: string }) {
+function ChartLegend({ color, label, dash }: { color: string; label: string; dash?: string }) {
   return (
     <Group gap={6}>
-      <Box w={18} h={3} bg={color} style={{ borderRadius: 3 }} />
+      <svg width="20" height="8" aria-hidden="true">
+        <line x1="1" x2="19" y1="4" y2="4" stroke={color} strokeWidth="3" strokeDasharray={dash} />
+      </svg>
       <Text size="xs">{label}</Text>
     </Group>
   )
 }
 
-function mergeLivePricePoints(
-  history: ComputeMarketPriceHistory | undefined,
-  quotes: ComputeMarketPriceQuote[]
-): ComputeMarketPricePoint[] {
-  const points = [...(history?.points || [])]
-  for (const quote of quotes) {
-    if (quote.priceUsdPerGpuHour == null || !quote.sampledAt || !quote.quoteType) continue
-    points.push({
-      source: quote.source,
-      gpuModel: quote.gpuModel,
-      quoteType: quote.quoteType,
-      priceUsdPerGpuHour: quote.priceUsdPerGpuHour,
-      priceCnyPerGpuHour: quote.priceCnyPerGpuHour || 0,
-      cardHoursPerGpuHour: quote.cardHoursPerGpuHour || 0,
-      sampleSize: quote.sampleSize || 0,
-      sampledAt: quote.sampledAt,
+function MarketPriceTooltip({ datum, usdCnyRate }: { datum: MarketChartDatum; usdCnyRate?: number }) {
+  const point = datum.point
+  return (
+    <Paper withBorder shadow="md" radius="md" p="sm" role="status" style={{ background: 'var(--mantine-color-body)' }}>
+      <Group justify="space-between" gap="xs" wrap="nowrap" mb={6}>
+        <Text fw={700} size="sm">
+          {marketSourceLabel(point.source, point.sourceLabel)}
+        </Text>
+        <Badge size="xs" variant="light" color={point.source === 'GETDEPLOYING' ? 'orange' : 'blue'}>
+          {marketQuoteTypeText(point.quoteType)}
+        </Badge>
+      </Group>
+      <Stack gap={3}>
+        <TooltipRow label="来源型号" value={point.sourceModel || point.gpuModel} />
+        <TooltipRow label="对应型号" value={point.gpuModel} />
+        <TooltipRow label="供应商 / 地区" value={marketSupplierOrRegionLabel(point)} />
+        {(point.aggregatedRegionCount || 0) > 1 && (
+          <TooltipRow
+            label="汇总范围"
+            value={
+              point.aggregationLabel ||
+              `${point.aggregatedRegionCount} ${point.source === 'GETDEPLOYING' ? '家供应商' : '个地区'}，当前点取最低价`
+            }
+          />
+        )}
+        {point.aggregationBucketStartedAt && (
+          <TooltipRow
+            label="趋势分组"
+            value={`${marketTrendBucketLabel(point.aggregationBucketMilliseconds)} · ${formatDate(point.aggregationBucketStartedAt)} 起`}
+          />
+        )}
+        {point.aggregationSampleCount != null && (
+          <TooltipRow label="分组样本" value={`${point.aggregationSampleCount} 个真实报价样本，显示区间最低价`} />
+        )}
+        <TooltipRow label="租赁周期" value={marketRentalTermLabel(getComputeMarketRentalTerm(point))} />
+        <TooltipRow label="原币价格" value={marketPointOriginalPrice(point)} />
+        <TooltipRow label="人民币折算" value={`¥${formatOptionalNumber(datum.value, 4)} / GPU·小时`} />
+        {usdCnyRate != null && (
+          <TooltipRow label="本次汇率" value={`1 USD ≈ ¥${formatOptionalNumber(usdCnyRate, 4)}`} />
+        )}
+        <TooltipRow label="库存 / 样本" value={marketPointCoverage(point)} />
+        <TooltipRow label="数据状态" value={marketPointStatusLabel(point.status)} />
+        {point.priceCondition && <TooltipRow label="价格条件" value={point.priceCondition} />}
+        <TooltipRow label="采集时间" value={formatDate(point.sampledAt)} />
+        {point.providerUpdatedAt && <TooltipRow label="平台更新时间" value={formatDate(point.providerUpdatedAt)} />}
+      </Stack>
+    </Paper>
+  )
+}
+
+function TooltipRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Flex justify="space-between" align="flex-start" gap="md">
+      <Text size="xs" c="chatbox-secondary" style={{ flexShrink: 0 }}>
+        {label}
+      </Text>
+      <Text size="xs" fw={500} ta="right">
+        {value}
+      </Text>
+    </Flex>
+  )
+}
+
+const MARKET_DETAILS_PREVIEW_ROWS = 3
+const MARKET_DETAILS_MAX_ROWS_PER_SOURCE = 50
+
+function MarketPriceDetailsTable({
+  points,
+  usdCnyRate,
+}: {
+  points: ComputeMarketComparisonPoint[]
+  usdCnyRate?: number
+}) {
+  const titleId = useId()
+  const [expandedSources, setExpandedSources] = useState<ComputeMarketPriceSource[]>([])
+  const sourceGroups = useMemo(() => {
+    const groups = new Map<
+      ComputeMarketPriceSource,
+      { source: ComputeMarketPriceSource; sourceLabel?: string; points: ComputeMarketComparisonPoint[] }
+    >()
+    const sortedPoints = points
+      .map((point, index) => ({ point, index, sampledAt: Date.parse(point.sampledAt) }))
+      .sort((left, right) => {
+        const leftValid = Number.isFinite(left.sampledAt)
+        const rightValid = Number.isFinite(right.sampledAt)
+        if (leftValid !== rightValid) return leftValid ? -1 : 1
+        if (leftValid && rightValid && left.sampledAt !== right.sampledAt) return right.sampledAt - left.sampledAt
+        return left.index - right.index
+      })
+      .map(({ point }) => point)
+    for (const point of sortedPoints) {
+      const group = groups.get(point.source)
+      if (group) {
+        group.points.push(point)
+      } else {
+        groups.set(point.source, {
+          source: point.source,
+          sourceLabel: point.sourceLabel,
+          points: [point],
+        })
+      }
+    }
+    return [...groups.values()].sort((left, right) => {
+      const leftIndex = MARKET_COMPARISON_SOURCES.indexOf(left.source)
+      const rightIndex = MARKET_COMPARISON_SOURCES.indexOf(right.source)
+      const normalizedLeft = leftIndex < 0 ? Number.MAX_SAFE_INTEGER : leftIndex
+      const normalizedRight = rightIndex < 0 ? Number.MAX_SAFE_INTEGER : rightIndex
+      return normalizedLeft - normalizedRight || left.source.localeCompare(right.source, 'en-US')
+    })
+  }, [points])
+
+  return (
+    <Paper withBorder radius="lg" p={{ base: 'md', sm: 'lg' }}>
+      <Flex justify="space-between" align="flex-start" gap="sm" wrap="wrap" mb="md">
+        <Box>
+          <Title order={4} id={titleId}>
+            当前筛选数据明细
+          </Title>
+          <Text size="xs" c="chatbox-secondary">
+            按数据来源分组并按采集时间倒序排列；默认每个来源显示最新 3 条，点击来源标题可展开最近 50 条。
+          </Text>
+        </Box>
+        <Badge variant="light">{points.length} 个采样点</Badge>
+      </Flex>
+      {sourceGroups.length === 0 ? (
+        <Text c="chatbox-secondary">当前筛选条件下暂无可展示明细。</Text>
+      ) : (
+        <Stack gap="sm">
+          {sourceGroups.map((group, groupIndex) => {
+            const expanded = expandedSources.includes(group.source)
+            const retainedRows = group.points.slice(0, MARKET_DETAILS_MAX_ROWS_PER_SOURCE)
+            const visibleRows = expanded ? retainedRows : retainedRows.slice(0, MARKET_DETAILS_PREVIEW_ROWS)
+            const canExpand = retainedRows.length > MARKET_DETAILS_PREVIEW_ROWS
+            const sourceId = `${titleId}-${group.source.toLocaleLowerCase('en-US')}`
+            const sourceLabelId = `${sourceId}-label`
+            const tableId = `${sourceId}-table`
+            const sourceName = marketSourceLabel(group.source, group.sourceLabel)
+            const sourceColor =
+              group.source === 'GETDEPLOYING' ? 'orange' : group.source === 'VAST_AI' ? 'blue' : 'gray'
+            const headerContent = (
+              <Group justify="space-between" gap="sm" wrap="nowrap">
+                <Group gap="sm" wrap="wrap">
+                  <Badge id={sourceLabelId} color={sourceColor} variant="light">
+                    {sourceName}
+                  </Badge>
+                  <Text size="sm" c="chatbox-secondary">
+                    显示 {visibleRows.length} 条 / 共 {group.points.length} 条
+                  </Text>
+                </Group>
+                {canExpand && (
+                  <Group gap={6} wrap="nowrap">
+                    <Text size="xs" fw={600} c="chatbox-secondary">
+                      {expanded ? '收起' : '展开更多'}
+                    </Text>
+                    <IconChevronDown
+                      size={16}
+                      aria-hidden="true"
+                      style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                      className="transition-transform duration-150 ease-out motion-reduce:transition-none"
+                    />
+                  </Group>
+                )}
+              </Group>
+            )
+
+            return (
+              <Box
+                component="section"
+                key={group.source}
+                aria-labelledby={sourceLabelId}
+                pt={groupIndex === 0 ? 0 : 'sm'}
+                style={groupIndex === 0 ? undefined : { borderTop: '1px solid var(--mantine-color-default-border)' }}
+              >
+                {canExpand ? (
+                  <UnstyledButton
+                    id={sourceId}
+                    w="100%"
+                    px="xs"
+                    py="sm"
+                    aria-expanded={expanded}
+                    aria-controls={tableId}
+                    aria-label={`${sourceName}：当前显示 ${visibleRows.length} 条，共 ${group.points.length} 条；${expanded ? '点击收起' : '点击展开更多'}`}
+                    className="rounded-md transition-colors hover:bg-[var(--chatbox-background-primary-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--chatbox-border-brand)]"
+                    onClick={() =>
+                      setExpandedSources((current) =>
+                        current.includes(group.source)
+                          ? current.filter((source) => source !== group.source)
+                          : [...current, group.source]
+                      )
+                    }
+                  >
+                    {headerContent}
+                  </UnstyledButton>
+                ) : (
+                  <Box id={sourceId} px="xs" py="sm">
+                    {headerContent}
+                  </Box>
+                )}
+                <MarketPriceDetailsDataTable
+                  id={tableId}
+                  labelIds={`${titleId} ${sourceLabelId}`}
+                  scrollLabel={`${sourceName} 明细表横向滚动区域`}
+                  rows={visibleRows}
+                  usdCnyRate={usdCnyRate}
+                />
+              </Box>
+            )
+          })}
+        </Stack>
+      )}
+    </Paper>
+  )
+}
+
+function MarketPriceDetailsDataTable({
+  id,
+  labelIds,
+  scrollLabel,
+  rows,
+  usdCnyRate,
+}: {
+  id: string
+  labelIds: string
+  scrollLabel: string
+  rows: ComputeMarketComparisonPoint[]
+  usdCnyRate?: number
+}) {
+  return (
+    <ScrollArea id={id} type="auto" offsetScrollbars viewportProps={{ tabIndex: 0, 'aria-label': scrollLabel }}>
+      <Table striped highlightOnHover miw={1020} aria-labelledby={labelIds}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>采集时间</Table.Th>
+            <Table.Th>来源型号</Table.Th>
+            <Table.Th>对应型号</Table.Th>
+            <Table.Th>供应商 / 地区</Table.Th>
+            <Table.Th>租期</Table.Th>
+            <Table.Th>原币价格</Table.Th>
+            <Table.Th>人民币折算</Table.Th>
+            <Table.Th>库存 / 样本</Table.Th>
+            <Table.Th>报价口径</Table.Th>
+            <Table.Th>状态</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((point, index) => {
+            const cnyPrice = getComputeMarketDisplayCnyPrice(point, usdCnyRate)
+            return (
+              <Table.Tr
+                key={`${point.source}-${getMarketModelKey(point)}-${getComputeMarketRegionCode(point)}-${getComputeMarketRentalTerm(point)}-${point.sampledAt}-${index}`}
+              >
+                <Table.Td>{formatDate(point.sampledAt)}</Table.Td>
+                <Table.Td>{point.sourceModel || point.gpuModel}</Table.Td>
+                <Table.Td>{point.gpuModel}</Table.Td>
+                <Table.Td>{marketSupplierOrRegionLabel(point)}</Table.Td>
+                <Table.Td>{marketRentalTermLabel(getComputeMarketRentalTerm(point))}</Table.Td>
+                <Table.Td>{marketPointOriginalPrice(point)}</Table.Td>
+                <Table.Td>{cnyPrice === undefined ? '—' : `¥${formatOptionalNumber(cnyPrice, 4)} / GPU·小时`}</Table.Td>
+                <Table.Td>{marketPointCoverage(point)}</Table.Td>
+                <Table.Td>{marketQuoteTypeText(point.quoteType)}</Table.Td>
+                <Table.Td>{marketPointStatusLabel(point.status)}</Table.Td>
+              </Table.Tr>
+            )
+          })}
+        </Table.Tbody>
+      </Table>
+    </ScrollArea>
+  )
+}
+
+function getMarketBaseModelKey(record: { gpuModel: string; modelKey?: string; canonicalModel?: string }) {
+  return record.canonicalModel?.trim() || record.modelKey?.trim() || record.gpuModel.trim()
+}
+
+function normalizeMarketDimension(value: string) {
+  return value.trim().toLocaleUpperCase('en-US')
+}
+
+function sameMarketDimension(left: string, right: string) {
+  return normalizeMarketDimension(left) === normalizeMarketDimension(right)
+}
+
+function getMarketModelKey(record: {
+  gpuModel: string
+  modelKey?: string
+  canonicalModel?: string
+  vramMiB?: number
+  formFactor?: string | null
+}) {
+  const base = getMarketBaseModelKey(record)
+  const normalizedBase = base.toLocaleLowerCase('en-US').replaceAll(/\s+/g, '')
+  const vramGb = record.vramMiB ? Math.round(record.vramMiB / 1024) : undefined
+  const formFactor = record.formFactor?.trim().toLocaleUpperCase('en-US')
+  const includesVram =
+    !vramGb || normalizedBase.includes(`${vramGb}gb`) || normalizedBase.includes(String(record.vramMiB))
+  const includesForm = !formFactor || normalizedBase.includes(formFactor.toLocaleLowerCase('en-US'))
+  if (includesVram && includesForm) return base
+  return [base, vramGb ? `vram-${vramGb}gb` : '', formFactor ? `form-${formFactor}` : ''].filter(Boolean).join('::')
+}
+
+function buildMarketModelOptions(snapshot?: Awaited<ReturnType<typeof getComputeMarketPrices>>) {
+  const options = new Map<string, MarketModelOption>()
+  for (const quote of snapshot?.quotes || []) {
+    if (!MARKET_COMPARISON_SOURCES.includes(quote.source)) continue
+    const value = getMarketModelKey(quote)
+    const fallback = MARKET_DEFAULT_MODELS.find((option) => sameMarketDimension(option.value, value))?.label
+    const details = [
+      quote.vramMiB && !quote.gpuModel.toLocaleLowerCase('en-US').includes('gb')
+        ? `${Math.round(quote.vramMiB / 1024)} GB`
+        : '',
+      quote.formFactor &&
+      !quote.gpuModel.toLocaleUpperCase('en-US').includes(quote.formFactor.toLocaleUpperCase('en-US'))
+        ? quote.formFactor.toLocaleUpperCase('en-US')
+        : '',
+    ].filter(Boolean)
+    options.set(normalizeMarketDimension(value), {
+      value,
+      label: [fallback || quote.gpuModel, ...details].join(' · '),
+      queryModel: getMarketBaseModelKey(quote),
+      vramMiB: quote.vramMiB,
+      formFactor: quote.formFactor,
     })
   }
-  const unique = new Map(points.map((point) => [`${point.source}:${point.sampledAt}`, point]))
-  return [...unique.values()].sort((a, b) => new Date(a.sampledAt).getTime() - new Date(b.sampledAt).getTime())
+  for (const model of snapshot?.trackedModels || []) {
+    if (![...options.values()].some((option) => sameMarketDimension(option.queryModel, model))) {
+      options.set(normalizeMarketDimension(model), {
+        value: model,
+        label: MARKET_DEFAULT_MODELS.find((option) => option.value === model)?.label || model,
+        queryModel: model,
+      })
+    }
+  }
+  if (options.size === 0) {
+    for (const option of MARKET_DEFAULT_MODELS) options.set(normalizeMarketDimension(option.value), option)
+  }
+  return [...options.values()]
+}
+
+interface MarketExactComparisonRow {
+  key: string
+  label: string
+  quotes: ComputeMarketPriceQuote[]
+}
+
+function buildMarketExactComparisonRows(quotes: ComputeMarketPriceQuote[]): MarketExactComparisonRow[] {
+  const rows = new Map<string, MarketExactComparisonRow>()
+  for (const quote of quotes) {
+    if (!MARKET_COMPARISON_SOURCES.includes(quote.source) || getComputeMarketRentalTerm(quote) !== 'HOURLY') continue
+    const key = getComputeMarketExactSpecKey(quote)
+    if (!key) continue
+    const current = rows.get(key)
+    if (current) {
+      current.quotes.push(quote)
+    } else {
+      rows.set(key, { key, label: marketExactSpecLabel(quote), quotes: [quote] })
+    }
+  }
+  return [...rows.values()].sort((left, right) => left.label.localeCompare(right.label, 'zh-CN'))
+}
+
+function marketExactSpecLabel(quote: ComputeMarketPriceQuote) {
+  const normalizedModel = quote.gpuModel.toLocaleUpperCase('en-US')
+  const vramGb = quote.vramMiB ? Math.round(quote.vramMiB / 1024) : undefined
+  const formFactor = quote.formFactor?.trim().toLocaleUpperCase('en-US')
+  const details = [
+    vramGb && !normalizedModel.includes(`${vramGb}GB`) ? `${vramGb} GB` : '',
+    formFactor && !normalizedModel.includes(formFactor) ? formFactor : '',
+  ].filter(Boolean)
+  return [quote.gpuModel, ...details].join(' · ')
+}
+
+function findSharedMarketModel(snapshot?: Awaited<ReturnType<typeof getComputeMarketPrices>>) {
+  const sourcesByModel = new Map<string, Set<ComputeMarketPriceSource>>()
+  const selectionValueByModel = new Map<string, string>()
+  for (const quote of snapshot?.quotes || []) {
+    if (!MARKET_COMPARISON_SOURCES.includes(quote.source)) continue
+    const selectionValue = getMarketModelKey(quote)
+    const key = normalizeMarketDimension(selectionValue)
+    const sources = sourcesByModel.get(key) || new Set<ComputeMarketPriceSource>()
+    sources.add(quote.source)
+    sourcesByModel.set(key, sources)
+    if (!selectionValueByModel.has(key)) selectionValueByModel.set(key, selectionValue)
+  }
+  const sharedKey = [...sourcesByModel].find(
+    ([, sources]) => sources.has('GETDEPLOYING') && sources.has('VAST_AI')
+  )?.[0]
+  return sharedKey ? selectionValueByModel.get(sharedKey) : undefined
+}
+
+function buildMarketRegionOptions(
+  snapshot: Awaited<ReturnType<typeof getComputeMarketPrices>> | undefined,
+  records: Array<ComputeMarketPriceQuote | ComputeMarketPricePoint>
+) {
+  const options = new Map<string, { value: string; label: string }>()
+  for (const option of snapshot?.availableRegions || []) {
+    if (
+      option.value !== COMPUTE_MARKET_DEFAULT_REGION &&
+      (!option.source || MARKET_COMPARISON_SOURCES.includes(option.source))
+    ) {
+      options.set(option.value.toLocaleUpperCase('en-US'), {
+        value: option.value,
+        label: option.source ? marketRegionFilterOptionLabel(option.source, option.label) : option.label,
+      })
+    }
+  }
+  for (const option of deriveComputeMarketRegions(records)) {
+    if (option.value !== COMPUTE_MARKET_DEFAULT_REGION) {
+      const source = records.find((record) =>
+        sameMarketDimension(getComputeMarketRegionCode(record), option.value)
+      )?.source
+      options.set(option.value.toLocaleUpperCase('en-US'), {
+        ...option,
+        label: source ? marketRegionFilterOptionLabel(source, option.label) : option.label,
+      })
+    }
+  }
+  return [...options.values()].sort((left, right) => left.label.localeCompare(right.label, 'zh-CN'))
+}
+
+function mergeMarketRegionOptions(
+  previous: Array<{ value: string; label: string }>,
+  incoming: Array<{ value: string; label: string }>
+) {
+  const options = new Map(previous.map((option) => [option.value.toLocaleUpperCase('en-US'), option]))
+  for (const option of incoming) options.set(option.value.toLocaleUpperCase('en-US'), option)
+  return [...options.values()].sort((left, right) => left.label.localeCompare(right.label, 'zh-CN'))
+}
+
+function pickLowestMarketQuote(quotes: ComputeMarketPriceQuote[], usdCnyRate?: number) {
+  const comparable = quotes
+    .filter((quote) => quote.status === 'OK' || quote.status === 'STALE')
+    .filter((quote) => getComputeMarketDisplayCnyPrice(quote, usdCnyRate) !== undefined)
+  const fresh = comparable.filter((quote) => quote.status === 'OK')
+  const candidates = [...(fresh.length > 0 ? fresh : comparable)]
+  candidates.sort((left, right) => {
+    const leftPrice = getComputeMarketDisplayCnyPrice(left, usdCnyRate)
+    const rightPrice = getComputeMarketDisplayCnyPrice(right, usdCnyRate)
+    if (leftPrice === undefined) return 1
+    if (rightPrice === undefined) return -1
+    return leftPrice - rightPrice
+  })
+  return candidates[0]
+}
+
+function marketModelLabel(options: Array<{ value: string; label: string }>, value: string) {
+  return options.find((option) => sameMarketDimension(option.value, value))?.label || value
+}
+
+function marketSourceLabel(source: ComputeMarketPriceSource, fallback?: string) {
+  if (source === 'GETDEPLOYING') return 'GetDeploying'
+  if (source === 'AUTODL') return 'AutoDL'
+  if (source === 'VAST_AI') return 'Vast.ai'
+  if (source === 'AKAMAI') return 'Akamai'
+  return fallback || source
+}
+
+function marketRegionFilterOptionLabel(source: ComputeMarketPriceSource, label: string) {
+  const dimension = source === 'GETDEPLOYING' ? '供应商（总部）' : '地区'
+  return `${marketSourceLabel(source)} · ${dimension}：${label}`
+}
+
+function marketSupplierOrRegionLabel(record: {
+  source: ComputeMarketPriceSource
+  providerName?: string
+  providerCountry?: string
+  regionCode?: string
+  regionLabel?: string
+}) {
+  if (record.source === 'GETDEPLOYING') {
+    const providerName = record.providerName?.trim()
+    const providerCountry = record.providerCountry?.trim()
+    if (providerName && providerCountry) return `${providerName}（总部：${providerCountry}）`
+    if (providerName) return `${providerName}（总部未标注）`
+    if (providerCountry) return `供应商总部：${providerCountry}`
+  }
+  return record.regionLabel?.trim() || record.regionCode?.trim() || '全市场'
+}
+
+function marketRentalTermLabel(value: string) {
+  return MARKET_RENTAL_TERMS.find((option) => option.value === value)?.label || value
+}
+
+function marketBillingUnitLabel(value?: string) {
+  if (value === 'DAY') return '日'
+  if (value === 'WEEK') return '周'
+  if (value === 'MONTH') return '月'
+  return '小时'
+}
+
+function marketQuoteTypeText(quoteType?: string) {
+  if (quoteType === 'MIN_AVAILABLE') return '当前可租最低价'
+  if (quoteType === 'MEDIAN_AVAILABLE') return '可租中位价'
+  if (quoteType === 'VERIFIED_MIN') return '已验证最低价'
+  if (quoteType === 'OFFICIAL_LIST') return '公开挂牌价'
+  if (quoteType === 'MEMBER_PRICE') return '会员条件价'
+  return quoteType || '当前报价'
+}
+
+function marketQuoteTypeLabel(quote: ComputeMarketPriceQuote) {
+  const quoteType = marketQuoteTypeText(quote.quoteType)
+  return quote.priceCondition ? `${quoteType} · ${quote.priceCondition}` : quoteType
+}
+
+function marketSeriesStyle(source: ComputeMarketPriceSource, index: number) {
+  const getDeploying = ['#d9480f', '#e8590c', '#f76707', '#c2410c', '#dc5f00', '#b95c00']
+  const vast = ['#1971c2', '#1c7ed6', '#228be6', '#3b82f6', '#2563eb', '#2878c7']
+  const legacy = ['#495057', '#868e96']
+  const palette = source === 'GETDEPLOYING' ? getDeploying : source === 'VAST_AI' ? vast : legacy
+  return {
+    color: palette[index % palette.length],
+    dash: source === 'GETDEPLOYING' ? '10 5' : source === 'VAST_AI' ? '2 5' : '6 4',
+  }
+}
+
+function sampleMarketChartPoints(points: ComputeMarketComparisonPoint[], maxPoints: number) {
+  if (points.length <= maxPoints) return points
+  const sampled: ComputeMarketComparisonPoint[] = []
+  const lastIndex = points.length - 1
+  for (let index = 0; index < maxPoints; index += 1) {
+    sampled.push(points[Math.round((lastIndex * index) / (maxPoints - 1))])
+  }
+  return sampled
+}
+
+function splitMarketChartSegments(points: MarketChartDatum[]) {
+  const sorted = [...points].sort((left, right) => left.time - right.time)
+  if (sorted.length < 3) return sorted.length > 0 ? [sorted] : []
+  const gaps = sorted
+    .slice(1)
+    .map((point, index) => point.time - sorted[index].time)
+    .filter((gap) => gap > 0)
+  const orderedGaps = [...gaps].sort((left, right) => left - right)
+  const medianGap = orderedGaps[Math.floor(orderedGaps.length / 2)] || 60_000
+  const breakAfter = Math.max(medianGap * 4, 15 * 60_000)
+  const segments: MarketChartDatum[][] = [[]]
+  for (const point of sorted) {
+    const current = segments[segments.length - 1]
+    const previous = current[current.length - 1]
+    if (previous && point.time - previous.time > breakAfter) segments.push([])
+    segments[segments.length - 1].push(point)
+  }
+  return segments
+}
+
+function marketPointOriginalPrice(point: ComputeMarketComparisonPoint) {
+  const currency = point.originalCurrency || (point.source === 'AUTODL' ? 'CNY' : 'USD')
+  if (point.originalBillingPrice != null) {
+    return `${formatMarketCurrency(point.originalBillingPrice, currency)} / GPU·${marketBillingUnitLabel(point.originalBillingUnit)}`
+  }
+  const fallback =
+    point.originalPricePerGpuHour ?? (currency === 'CNY' ? point.priceCnyPerGpuHour : point.priceUsdPerGpuHour)
+  return fallback == null ? '—' : `${formatMarketCurrency(fallback, currency)} / GPU·小时`
+}
+
+function marketOriginalPrice(quote: ComputeMarketPriceQuote) {
+  const currency = quote.originalCurrency || (quote.source === 'AUTODL' ? 'CNY' : 'USD')
+  const value =
+    quote.originalBillingPrice ??
+    quote.originalPricePerGpuHour ??
+    (currency === 'CNY' ? quote.priceCnyPerGpuHour : quote.priceUsdPerGpuHour)
+  return value == null ? '—' : formatMarketCurrency(value, currency)
+}
+
+function formatMarketCurrency(value: number, currency: string) {
+  return `${currency === 'CNY' ? '¥' : '$'}${formatOptionalNumber(value, 4)}`
+}
+
+function marketPointCoverage(point: ComputeMarketComparisonPoint) {
+  if (point.source === 'GETDEPLOYING' && point.sampleSize != null) return `${point.sampleSize} 个供应商报价样本`
+  if (point.availableGpuCount != null) return `${point.availableGpuCount} 张可租`
+  if (point.sampleSize != null) return `${point.sampleSize} 个样本`
+  return '—'
+}
+
+function marketPointStatusLabel(status?: string) {
+  if (status === 'OK') return '数据正常'
+  if (status === 'STALE') return '使用上次成功数据'
+  if (status === 'UNAVAILABLE') return '来源异常'
+  if (status === 'UNCONFIGURED') return '服务未配置'
+  if (status === 'NO_QUOTE') return '暂无报价'
+  return '历史采样'
+}
+
+function formatCompactMarketPrice(value: number) {
+  return value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2)
+}
+
+function formatOptionalNumber(value: number | string | null | undefined, digits = 3) {
+  if (value == null || (typeof value === 'string' && value.trim() === '')) return '—'
+  const number = Number(value)
+  return Number.isFinite(number)
+    ? number.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+    : '—'
+}
+
+function marketPriceErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.includes('No static resource')) {
+    return 'KOD 行情后端接口尚未部署。前端图表已经就绪，需配置 GetDeploying 聚合数据与 Vast.ai 服务端行情代理后才会显示真实数据。'
+  }
+  if (error instanceof Error && /timeout|abort/i.test(error.message)) return '行情服务响应超时，请稍后重试。'
+  return '暂时无法连接行情服务，请稍后重试。'
 }
 
 function marketPriceStatus(quote: ComputeMarketPriceQuote) {
@@ -1513,11 +2809,75 @@ function marketPriceStatus(quote: ComputeMarketPriceQuote) {
   }
 }
 
-function formatMarketPrice(quote?: ComputeMarketPriceQuote) {
-  return quote?.priceUsdPerGpuHour == null ? '暂无报价' : `$${formatNumber(quote.priceUsdPerGpuHour, 4)} / GPU·小时`
+function formatMarketPrice(quote: ComputeMarketPriceQuote | undefined, usdCnyRate?: number, clientStale = false) {
+  if (!quote) return '暂无报价'
+  const cnyPrice = getComputeMarketDisplayCnyPrice(quote, usdCnyRate)
+  if (cnyPrice === undefined) return '暂无报价'
+  const originalUnit = quote.originalBillingPrice != null ? marketBillingUnitLabel(quote.originalBillingUnit) : '小时'
+  const stale = clientStale || quote.status === 'STALE' ? ' · 上次成功数据' : ''
+  return `${marketOriginalPrice(quote)} / GPU·${originalUnit} · 约 ¥${formatOptionalNumber(cnyPrice, 4)} / GPU·小时 · ${marketQuoteTypeLabel(quote)}${stale}`
 }
 
-function formatChartTime(timestamp: number) {
+function marketComparisonUnavailableLabel(comparison: ComputeMarketGetDeployingVastComparison) {
+  if (comparison.reason === 'MISSING_SOURCE') return '缺一方，不计算'
+  if (comparison.reason === 'STALE') return '含缓存，不计算'
+  if (comparison.reason === 'SPEC_MISMATCH') return '规格不一致'
+  if (comparison.reason === 'INVALID_PRICE') return '价格无效'
+  return '无法计算'
+}
+
+function formatMarketRatio(comparison: ComputeMarketGetDeployingVastComparison) {
+  if (comparison.reason !== 'OK' || comparison.ratio === undefined) {
+    return `—（${marketComparisonUnavailableLabel(comparison)}）`
+  }
+  return `${formatOptionalNumber(comparison.ratio, 3)}×`
+}
+
+function formatMarketPercentVsVast(comparison: ComputeMarketGetDeployingVastComparison) {
+  if (comparison.reason !== 'OK' || comparison.percentVsVast === undefined) {
+    return `—（${marketComparisonUnavailableLabel(comparison)}）`
+  }
+  const prefix = comparison.percentVsVast > 0 ? '+' : ''
+  return `${prefix}${formatOptionalNumber(comparison.percentVsVast, 1)}%`
+}
+
+function formatMarketCoverage(getDeploying?: ComputeMarketPriceQuote, vast?: ComputeMarketPriceQuote) {
+  const getDeployingValue = getDeploying?.sampleSize
+  const vastCoverage =
+    vast?.availableGpuCount != null
+      ? `${vast.availableGpuCount} 张可租`
+      : vast?.sampleSize != null
+        ? `${vast.sampleSize} 个样本`
+        : '—'
+  return `GetDeploying ${getDeployingValue == null ? '—' : `${getDeployingValue} 个样本`} / Vast.ai ${vastCoverage}`
+}
+
+function marketTrendGranularityLabel(value: MarketTrendGranularity) {
+  return MARKET_TREND_GRANULARITIES.find((option) => option.value === value)?.label || value
+}
+
+function marketTrendBucketLabel(bucketMilliseconds?: number) {
+  if (!bucketMilliseconds) return '真实采样'
+  if (bucketMilliseconds >= 28 * 24 * 60 * 60_000) return '每月'
+  if (bucketMilliseconds >= 7 * 24 * 60 * 60_000) return '每周'
+  if (bucketMilliseconds >= 24 * 60 * 60_000) return '每天'
+  if (bucketMilliseconds >= 60 * 60_000) return '每小时'
+  return '实时采样'
+}
+
+function formatChartTime(timestamp: number, granularity: MarketTrendGranularity) {
+  if (granularity === 'month') {
+    return new Date(timestamp).toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+    })
+  }
+  if (granularity === 'day' || granularity === 'week') {
+    return new Date(timestamp).toLocaleDateString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+    })
+  }
   return new Date(timestamp).toLocaleString('zh-CN', {
     month: '2-digit',
     day: '2-digit',
@@ -1944,7 +3304,8 @@ function ReservationsPanel({
     <Stack>
       <Alert color="blue" title="卡时担保规则">
         买家付款后卡时由平台冻结，不会立即进入卖家账户；双方先在订单内沟通并确认结构化排期。商家交付后，
-        买家可确认收货或在 24 小时内发起争议；无争议才自动结算。你可以同时是购买方和已认证供应方。
+        买家可确认收货或在 24 小时内发起争议；无争议订单会自动确认，低风险订单在租期结束后结算，
+        异常或达到审核阈值的订单继续冻结并转人工处理。你可以同时是购买方和已认证供应方。
       </Alert>
       <Tabs defaultValue="buyer" keepMounted={false}>
         <Tabs.List>
@@ -2018,6 +3379,7 @@ function ReservationCard({
   const key = `${view}-reservation-${reservation.id}`
   const marketplace = reservation.tradeMode === 'MARKETPLACE_FIXED'
   const cancellable = marketplace && ['PENDING_SCHEDULE', 'PENDING_DELIVERY'].includes(reservation.status)
+  const manualReview = classifyComputeReservationReview(reservation)
   const packageDurationHours = resolvePackageDurationHours(reservation, productPackageDurationHours)
   const structuredSchedule = Number(reservation.workflowVersion || 1) >= 2
   const deliveryStart = structuredSchedule ? reservation.startTime : sshDelivery.actualStart
@@ -2053,6 +3415,14 @@ function ReservationCard({
         {reservation.incidentReason && (
           <Alert color="red">异常原因：{reservation.incidentReason}，等待管理员处理。</Alert>
         )}
+        {manualReview.needsManualReview && !reservation.incidentReason && (
+          <Alert color="violet" title="订单正在等待人工结算审核">
+            {manualReview.reasons.join('；')}。卡时会继续冻结，审核完成后才会结算或退款。
+            {reservation.manualReviewRequestedAt
+              ? ` 提交审核：${formatDate(reservation.manualReviewRequestedAt)}。`
+              : ''}
+          </Alert>
+        )}
         {!marketplace && <Alert color="gray">这是旧版预订记录，仅保留查看，不再使用旧版凭证交付功能。</Alert>}
         {marketplace && (
           <MarketplaceOrderWorkspace reservation={reservation} currentUserId={currentUserId} busy={busy} run={run} />
@@ -2087,7 +3457,8 @@ function ReservationCard({
         {view === 'buyer' && marketplace && reservation.status === 'DELIVERED' && (
           <Stack gap="xs">
             <Alert color="yellow">
-              请先实际验证资源。确认后立即结算；如无法连接、规格不符或交付有误，请在 24 小时内提交争议证据。
+              请先实际验证资源。确认后订单进入结算流程；如无法连接、规格不符或交付有误，请在 24
+              小时内提交争议证据。异常或大额订单会转人工审核。
             </Alert>
             <Group grow>
               <Button
@@ -2096,7 +3467,7 @@ function ReservationCard({
                   run(
                     `${key}-confirm`,
                     () => confirmComputeReservation(reservation.id),
-                    '已确认收到资源，卡时已结算给商家'
+                    '已确认收到资源；订单将在租期结束后按审核规则结算'
                   )
                 }
               >
@@ -2219,7 +3590,7 @@ function ReservationCard({
                       actualEnd,
                       deliveryNote: sshDelivery.deliveryNote,
                     }),
-                  'GPU 资源已交付，24 小时无争议将自动确认结算'
+                  'GPU 资源已交付，24 小时无争议将自动确认；租期结束后按审核规则结算'
                 )
               }
             >
@@ -2887,7 +4258,7 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
       <AdminOverview overview={overviewQuery.data} />
       <Alert color="violet" title="管理员可以处理什么">
         审核实名认证、资源商、GPU 资源证明和商品；维护商品可售状态；处理买家在交付后 24
-        小时内提交的交易争议。平台不登录或控制商家服务器。本人提交的资料和商品必须由另一名管理员审核。
+        小时内提交的交易争议，以及由异常或大额规则拦截的结算订单。平台不登录或控制商家服务器。本人提交的资料和商品必须由另一名管理员审核。
       </Alert>
       <Tabs defaultValue="reviews" keepMounted={false}>
         <Tabs.List>
@@ -3036,7 +4407,12 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
           <Stack>
             <CardHourAdminPanel busy={busy} run={run} />
             <AdminNodeOperations nodes={nodesQuery.data || []} busy={busy} run={run} />
-            <AdminReservationOperations reservations={reservationsQuery.data || []} busy={busy} run={run} />
+            <AdminReservationOperations
+              reservations={reservationsQuery.data || []}
+              reservationManualReviewThreshold={overviewQuery.data?.reservationManualReviewThreshold}
+              busy={busy}
+              run={run}
+            />
             <AdminSuspendedProxyKeys keys={suspendedKeysQuery.data || []} busy={busy} run={run} />
           </Stack>
         </Tabs.Panel>
@@ -3246,29 +4622,45 @@ function AdminNodeOperations({ nodes, busy, run }: { nodes: ComputeGpuNode[]; bu
 
 function AdminReservationOperations({
   reservations,
+  reservationManualReviewThreshold,
   busy,
   run,
 }: {
   reservations: ComputeReservation[]
+  reservationManualReviewThreshold?: number | null
   busy: string | null
   run: RunAction
 }) {
-  const actionable = reservations.filter(
-    (item) =>
-      ['EXCEPTION_PENDING', 'DISPUTED'].includes(item.status) ||
-      (['CONFIRMED', 'IN_USE'].includes(item.status) && new Date(item.endTime).getTime() <= Date.now())
-  )
+  const actionable = reservations
+    .map((item) => ({
+      item,
+      review: classifyComputeReservationReview(item, { reservationManualReviewThreshold }),
+    }))
+    .filter(
+      ({ item, review }) =>
+        review.needsManualReview ||
+        (['CONFIRMED', 'IN_USE'].includes(item.status) && new Date(item.endTime).getTime() <= Date.now())
+    )
   const [resolutions, setResolutions] = useState<Record<number, 'FULL_REFUND' | 'ACTUAL_USAGE' | 'FULL_SETTLEMENT'>>({})
   const [actuals, setActuals] = useState<Record<number, number>>({})
   const [reasons, setReasons] = useState<Record<number, string>>({})
   return (
-    <Section title={`交易争议与历史补偿结算（${actionable.length}）`}>
+    <Section title={`租赁结算审核与历史补偿（${actionable.length}）`}>
+      {reservationManualReviewThreshold && reservationManualReviewThreshold > 0 && (
+        <Alert color="violet" mb="md">
+          冻结卡时达到 {formatCardHours(reservationManualReviewThreshold)}{' '}
+          的订单，必须由管理员填写处理原因后才能完成结算或退款。
+        </Alert>
+      )}
       {actionable.length === 0 ? (
         <Text c="chatbox-tertiary">暂无需要人工处理的订单</Text>
       ) : (
         <Stack>
-          {actionable.map((item) => {
-            const exception = ['EXCEPTION_PENDING', 'DISPUTED'].includes(item.status)
+          {actionable.map(({ item, review }) => {
+            const persistedManualReview =
+              item.manualReviewRequired === true ||
+              ['EXCEPTION_PENDING', 'DISPUTED', 'PENDING_REVIEW'].includes(item.status)
+            const canResolve = review.needsManualReview && persistedManualReview
             const resolution = resolutions[item.id] || 'FULL_REFUND'
             return (
               <Paper key={item.id} withBorder p="md" radius="md">
@@ -3291,7 +4683,19 @@ function AdminReservationOperations({
                   </Flex>
                   {item.incidentReason && <Alert color="red">异常原因：{item.incidentReason}</Alert>}
                   {item.disputeEvidence && <Alert color="orange">买家证据：{item.disputeEvidence}</Alert>}
-                  {exception ? (
+                  {review.needsManualReview && (
+                    <Alert color="violet" title="人工审核触发原因">
+                      {review.reasons.join('；')}
+                      {item.manualReviewRequestedAt ? `。提交审核：${formatDate(item.manualReviewRequestedAt)}` : ''}
+                      {item.manualReviewPolicyVersion ? `；规则版本：${item.manualReviewPolicyVersion}` : ''}
+                    </Alert>
+                  )}
+                  {review.needsManualReview && !persistedManualReview && (
+                    <Alert color="yellow">
+                      该订单已达到前端展示阈值，但服务端尚未将其转入“待管理员审核”。为避免绕过结算规则，此处不会提供结算操作；请检查服务端结算任务后刷新。
+                    </Alert>
+                  )}
+                  {canResolve ? (
                     <>
                       <SimpleGrid cols={{ base: 1, sm: 3 }}>
                         <Select
@@ -3337,8 +4741,9 @@ function AdminReservationOperations({
                                 resolution,
                                 actualCardHours: actuals[item.id],
                                 reason: reasons[item.id] || '',
+                                ...(item.version == null ? {} : { expectedVersion: item.version }),
                               }),
-                            '异常订单已处理并完成账务结算'
+                            '审核决定已保存，订单已完成账务结算'
                           )
                         }
                       >
@@ -3346,12 +4751,20 @@ function AdminReservationOperations({
                       </Button>
                     </>
                   ) : (
-                    <Button
-                      loading={busy === `settle-${item.id}`}
-                      onClick={() => run(`settle-${item.id}`, () => settleAdminReservation(item.id), '订单已立即结算')}
-                    >
-                      立即结算（定时任务补偿）
-                    </Button>
+                    !review.needsManualReview && (
+                      <Button
+                        loading={busy === `settle-${item.id}`}
+                        onClick={() =>
+                          run(
+                            `settle-${item.id}`,
+                            () => settleAdminReservation(item.id, item.version),
+                            '订单已立即结算'
+                          )
+                        }
+                      >
+                        立即结算（定时任务补偿）
+                      </Button>
+                    )
                   )}
                 </Stack>
               </Paper>
@@ -3364,13 +4777,16 @@ function AdminReservationOperations({
 }
 
 function AdminOverview({ overview }: { overview?: ComputeAdminOverview }) {
-  const items = [
+  const items: Array<[string, number]> = [
     ['待审实名认证', overview?.identitiesPending || 0],
     ['待审供应方', overview?.suppliersPending || 0],
     ['待审 GPU 资源', overview?.nodesPending || 0],
     ['待审产品', overview?.productsPending || 0],
     ['待处理资源', overview?.nodesPendingAction || 0],
   ]
+  if (overview?.reservationsPendingManualReview !== undefined) {
+    items.push(['待审租赁结算', overview.reservationsPendingManualReview])
+  }
   return (
     <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }} spacing="sm">
       {items.map(([label, value]) => (
@@ -3397,11 +4813,17 @@ function AdminSettings({
   run: RunAction
 }) {
   const [transferReviewThreshold, setTransferReviewThreshold] = useState(1000)
+  const [reservationManualReviewThreshold, setReservationManualReviewThreshold] = useState<number | null>(null)
   const [usdCnyRate, setUsdCnyRate] = useState(7.2)
+  const supportsReservationReviewPolicy = overview?.reservationManualReviewThreshold !== undefined
 
   useEffect(() => {
     if (!overview) return
     setTransferReviewThreshold(Number(overview.transferReviewThreshold))
+    const reservationThreshold = Number(overview.reservationManualReviewThreshold)
+    setReservationManualReviewThreshold(
+      Number.isFinite(reservationThreshold) && reservationThreshold > 0 ? reservationThreshold : null
+    )
     setUsdCnyRate(Number(overview.usdCnyRate || 7.2))
   }, [overview])
 
@@ -3416,6 +4838,21 @@ function AdminSettings({
           onChange={(value) => setTransferReviewThreshold(Number(value) || 0)}
           w={240}
         />
+        {supportsReservationReviewPolicy ? (
+          <NumberInput
+            label="租赁结算人工审核阈值（卡时）"
+            description="冻结卡时达到该值的租赁订单，结束时必须转人工审核。"
+            min={0.001}
+            decimalScale={3}
+            value={reservationManualReviewThreshold ?? ''}
+            onChange={(value) => setReservationManualReviewThreshold(Number(value) || null)}
+            w={280}
+          />
+        ) : (
+          <Alert color="yellow" style={{ flex: '1 1 280px', minWidth: 0 }}>
+            当前后端尚未返回“租赁结算人工审核阈值”。部署审核策略后，可在这里统一配置；前端不会用本地设置绕过服务端结算规则。
+          </Alert>
+        )}
         <NumberInput
           label="美元兑人民币估算汇率"
           description="仅用于第三方 GPU 行情折算展示"
@@ -3434,13 +4871,21 @@ function AdminSettings({
         />
         <Button
           loading={busy === 'admin-settings'}
-          disabled={transferReviewThreshold <= 0 || usdCnyRate <= 0}
+          disabled={
+            transferReviewThreshold <= 0 ||
+            usdCnyRate <= 0 ||
+            (supportsReservationReviewPolicy &&
+              !(reservationManualReviewThreshold && reservationManualReviewThreshold > 0))
+          }
           onClick={() =>
             run(
               'admin-settings',
               () =>
                 updateComputeAdminSettings({
                   transferReviewThreshold,
+                  ...(supportsReservationReviewPolicy && reservationManualReviewThreshold
+                    ? { reservationManualReviewThreshold }
+                    : {}),
                   platformFeeRate: 0,
                   usdCnyRate,
                 }),

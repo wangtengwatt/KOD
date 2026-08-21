@@ -21,6 +21,9 @@ export const USE_BETA_CHATBOX = process.env.USE_BETA_CHATBOX || ''
 
 // Kod Portal backend
 export const KOD_API_ORIGIN = process.env.KOD_API_ORIGIN || 'https://kod.kai.com'
+// Optional dedicated endpoint for public compute-market price data.
+// Keep empty to use KOD_API_ORIGIN through getKodApiOrigin().
+export const KOD_MARKET_API_ORIGIN = process.env.KOD_MARKET_API_ORIGIN || ''
 
 export const NODE_ENV = process.env.NODE_ENV || 'development'
 

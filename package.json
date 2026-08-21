@@ -39,6 +39,8 @@
     "start:preload": "electron-vite build --preload --watch",
     "start:renderer": "electron-vite",
     "serve:web": "npx serve ./release/app/dist/renderer",
+    "market:serve": "node scripts/compute-market-server.mjs",
+    "market:test": "node --test scripts/compute-market-server.test.mjs",
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
