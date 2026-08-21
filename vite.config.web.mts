@@ -97,6 +97,7 @@ export default defineConfig({
     'process.env.USE_NEWDB_API': JSON.stringify(''),
     'process.env.USE_LOCAL_CHATBOX': JSON.stringify(''),
     'process.env.USE_BETA_CHATBOX': JSON.stringify(''),
+    'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
   },
   optimizeDeps: {
     // Disabled to avoid esbuild OOM on this machine — the pre-bundling step

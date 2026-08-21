@@ -1,0 +1,658 @@
+import { Alert, Badge, Box, Button, Card, Group, Loader, Progress, Stack, Text, Title } from '@mantine/core'
+import { IconCheck, IconGift, IconPlayerPause, IconPlayerPlay, IconRefresh } from '@tabler/icons-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import type { RewardedAdClaim, RewardedAdWatch } from '@/api/wallet'
+import { WalletApiError, walletApi } from '@/api/wallet'
+import { AdaptiveModal } from '@/components/common/AdaptiveModal'
+import { walletKeys } from '@/hooks/useWallet'
+import { trackingEvent } from '@/packages/event'
+import platform from '@/platform'
+import { formatCardTime } from '@/utils/wallet.utils'
+
+export const MINIMUM_REWARDED_WATCH_SECONDS = 90
+
+const MEDIA_LEAD_TOLERANCE_SECONDS = 0.75
+
+interface PlaybackSegment {
+  mediaStartedAt: number
+  trustedMediaTime: number
+  wallStartedAt: number
+}
+
+export interface RewardedVideoCardProps {
+  identity: string
+  onClaimed?: (claim: RewardedAdClaim) => undefined | Promise<unknown>
+}
+
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : '请求失败，请稍后重试')
+
+const monotonicNow = () => (typeof performance === 'undefined' ? Date.now() : performance.now())
+
+const trackRewardedAd = (
+  event: 'rewarded_ad_start' | 'rewarded_ad_complete' | 'rewarded_ad_claim' | 'rewarded_ad_abandon',
+  watch: RewardedAdWatch
+) =>
+  trackingEvent(event, {
+    campaign_id: watch.campaignId,
+    platform: platform.type,
+    reward_card_hours: String(watch.rewardCardHours),
+  })
+
+function formatCooldown(seconds: number) {
+  const safeSeconds = Math.max(0, Math.ceil(seconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainder = safeSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+}
+
+export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProps) {
+  const titleId = useId()
+  const descriptionId = useId()
+  const watchHelpId = useId()
+  const [opened, setOpened] = useState(false)
+  const [watch, setWatch] = useState<RewardedAdWatch | null>(null)
+  const [videoSource, setVideoSource] = useState<{ posterUrl: string; videoUrl: string } | null>(null)
+  const [validMilliseconds, setValidMilliseconds] = useState(0)
+  const [hasEnded, setHasEnded] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [playbackNotice, setPlaybackNotice] = useState<string | null>(null)
+  const [videoError, setVideoError] = useState<string | null>(null)
+  const [claimError, setClaimError] = useState<string | null>(null)
+  const [claimResult, setClaimResult] = useState<RewardedAdClaim | null>(null)
+  const [clockSeconds, setClockSeconds] = useState(() => Date.now() / 1000)
+
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const watchRef = useRef<RewardedAdWatch | null>(null)
+  const segmentRef = useRef<PlaybackSegment | null>(null)
+  const creditedMillisecondsRef = useRef(0)
+  const effectiveMillisecondsRef = useRef(0)
+  const trustedMediaTimeRef = useRef(0)
+  const correctionTargetRef = useRef<number | null>(null)
+  const resumeAfterSeekRef = useRef(false)
+  const endedRef = useRef(false)
+  const eligibleRef = useRef(false)
+  const autoClaimAttemptedRef = useRef(false)
+  const completionTrackedRef = useRef(false)
+  const abandonTrackedRef = useRef(false)
+  const claimStateRef = useRef<'idle' | 'pending' | 'succeeded'>('idle')
+
+  const status = useQuery({
+    queryKey: walletKeys.rewardedAdStatus(identity),
+    queryFn: walletApi.getRewardedAdStatus,
+    enabled: Boolean(identity),
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
+  const start = useMutation({ mutationFn: walletApi.startRewardedAd })
+  const claim = useMutation({ mutationFn: walletApi.claimRewardedAd })
+
+  const requiredSeconds = watch?.minWatchSeconds ?? status.data?.minWatchSeconds ?? MINIMUM_REWARDED_WATCH_SECONDS
+  const requiredMilliseconds = requiredSeconds * 1000
+  const watchExpired = Boolean(watch?.expiresAt && clockSeconds >= watch.expiresAt)
+
+  const publishProgress = useCallback(
+    (milliseconds: number) => {
+      const bounded = Math.max(0, Math.min(milliseconds, requiredMilliseconds))
+      effectiveMillisecondsRef.current = bounded
+      setValidMilliseconds(bounded)
+      return bounded
+    },
+    [requiredMilliseconds]
+  )
+
+  const segmentProgress = useCallback((segment: PlaybackSegment, mediaTime: number, wallTime: number) => {
+    const wallMilliseconds = Math.max(0, wallTime - segment.wallStartedAt)
+    const mediaMilliseconds = Math.max(0, (mediaTime - segment.mediaStartedAt) * 1000)
+    return Math.min(wallMilliseconds, mediaMilliseconds)
+  }, [])
+
+  const settleSegment = useCallback(
+    (video: HTMLVideoElement, mediaTime = video.currentTime) => {
+      const segment = segmentRef.current
+      if (!segment) return effectiveMillisecondsRef.current
+      creditedMillisecondsRef.current += segmentProgress(segment, mediaTime, monotonicNow())
+      segmentRef.current = null
+      return publishProgress(creditedMillisecondsRef.current)
+    },
+    [publishProgress, segmentProgress]
+  )
+
+  const beginSegment = useCallback((video: HTMLVideoElement) => {
+    if (segmentRef.current) return
+    segmentRef.current = {
+      mediaStartedAt: video.currentTime,
+      trustedMediaTime: video.currentTime,
+      wallStartedAt: monotonicNow(),
+    }
+    trustedMediaTimeRef.current = video.currentTime
+  }, [])
+
+  const stopInvalidPlayback = useCallback(
+    (video: HTMLVideoElement, message: string) => {
+      const trustedMediaTime = segmentRef.current?.trustedMediaTime ?? trustedMediaTimeRef.current
+      settleSegment(video, trustedMediaTime)
+      correctionTargetRef.current = trustedMediaTime
+      video.currentTime = trustedMediaTime
+      video.pause()
+      setIsPlaying(false)
+      setPlaybackNotice(message)
+    },
+    [settleSegment]
+  )
+
+  const resetPlayback = useCallback(() => {
+    const video = videoRef.current
+    if (video) {
+      video.pause()
+      video.playbackRate = 1
+    }
+    watchRef.current = null
+    segmentRef.current = null
+    creditedMillisecondsRef.current = 0
+    effectiveMillisecondsRef.current = 0
+    trustedMediaTimeRef.current = 0
+    correctionTargetRef.current = null
+    resumeAfterSeekRef.current = false
+    endedRef.current = false
+    eligibleRef.current = false
+    autoClaimAttemptedRef.current = false
+    completionTrackedRef.current = false
+    abandonTrackedRef.current = false
+    claimStateRef.current = 'idle'
+    setWatch(null)
+    setVideoSource(null)
+    setValidMilliseconds(0)
+    setHasEnded(false)
+    setIsPlaying(false)
+    setPlaybackNotice(null)
+    setVideoError(null)
+    setClaimError(null)
+    setClaimResult(null)
+    start.reset()
+    claim.reset()
+  }, [claim, start])
+
+  const attemptClaim = useCallback(async () => {
+    const activeWatch = watchRef.current
+    if (!activeWatch || !endedRef.current || !eligibleRef.current) return
+    if (claimStateRef.current !== 'idle') return
+    if (activeWatch.expiresAt > 0 && Date.now() / 1000 >= activeWatch.expiresAt) {
+      setClaimError('本次广告已过期，请关闭后重新观看。')
+      return
+    }
+
+    claimStateRef.current = 'pending'
+    setClaimError(null)
+    try {
+      const result = await claim.mutateAsync(activeWatch.watchId)
+      claimStateRef.current = 'succeeded'
+      trackRewardedAd('rewarded_ad_claim', activeWatch)
+      setClaimResult(result)
+      void status.refetch()
+      if (onClaimed)
+        void Promise.resolve()
+          .then(() => onClaimed(result))
+          .catch(() => undefined)
+    } catch (error) {
+      claimStateRef.current = 'idle'
+      setClaimError(errorMessage(error))
+    }
+  }, [claim, onClaimed, status])
+
+  const handleStart = useCallback(async () => {
+    const currentStatus = status.data
+    if (!currentStatus?.enabled || currentStatus.remainingToday <= 0) return
+    if (currentStatus.nextAvailableAt && currentStatus.nextAvailableAt > Date.now() / 1000) return
+
+    try {
+      const activeWatch = await start.mutateAsync(currentStatus.campaignId)
+      resetPlayback()
+      watchRef.current = activeWatch
+      setWatch(activeWatch)
+      setVideoSource({ posterUrl: currentStatus.posterUrl, videoUrl: currentStatus.videoUrl })
+      setClockSeconds(Date.now() / 1000)
+      setOpened(true)
+      trackRewardedAd('rewarded_ad_start', activeWatch)
+    } catch {
+      // Mutation state renders the server-provided error below the action.
+    }
+  }, [resetPlayback, start, status.data])
+
+  const handleClose = useCallback(() => {
+    if (claimStateRef.current === 'pending') return
+    const activeWatch = watchRef.current
+    if (activeWatch && claimStateRef.current !== 'succeeded' && !abandonTrackedRef.current) {
+      abandonTrackedRef.current = true
+      trackRewardedAd('rewarded_ad_abandon', activeWatch)
+    }
+    setOpened(false)
+    resetPlayback()
+  }, [resetPlayback])
+
+  const handlePlay = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      const video = event.currentTarget
+      if (document.hidden) {
+        video.pause()
+        setPlaybackNotice('页面不可见时不能累计观看时长。')
+        return
+      }
+      if (video.playbackRate !== 1) video.playbackRate = 1
+      setPlaybackNotice(null)
+      setIsPlaying(true)
+      beginSegment(video)
+    },
+    [beginSegment]
+  )
+
+  const handlePause = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      settleSegment(event.currentTarget)
+      setIsPlaying(false)
+    },
+    [settleSegment]
+  )
+
+  const handleTimeUpdate = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      const video = event.currentTarget
+      const segment = segmentRef.current
+      if (!segment) return
+      const wallTime = monotonicNow()
+      const wallSeconds = Math.max(0, wallTime - segment.wallStartedAt) / 1000
+      const maximumPlausibleTime = segment.mediaStartedAt + wallSeconds + MEDIA_LEAD_TOLERANCE_SECONDS
+      if (video.currentTime > maximumPlausibleTime) {
+        stopInvalidPlayback(video, '检测到快进，快进部分不会计入有效时长，请继续正常播放。')
+        return
+      }
+      segment.trustedMediaTime = video.currentTime
+      trustedMediaTimeRef.current = video.currentTime
+      publishProgress(creditedMillisecondsRef.current + segmentProgress(segment, video.currentTime, wallTime))
+    },
+    [publishProgress, segmentProgress, stopInvalidPlayback]
+  )
+
+  const handleSeeking = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      const video = event.currentTarget
+      const correctionTarget = correctionTargetRef.current
+      if (correctionTarget !== null) {
+        correctionTargetRef.current = null
+        if (Math.abs(video.currentTime - correctionTarget) <= 0.05) return
+      }
+      const segment = segmentRef.current
+      if (video.currentTime > trustedMediaTimeRef.current + MEDIA_LEAD_TOLERANCE_SECONDS) {
+        stopInvalidPlayback(video, '奖励广告不支持快进，请按正常速度完整观看。')
+        return
+      }
+      if (!segment) {
+        trustedMediaTimeRef.current = video.currentTime
+        return
+      }
+      resumeAfterSeekRef.current = true
+      settleSegment(video, segment.trustedMediaTime)
+    },
+    [settleSegment, stopInvalidPlayback]
+  )
+
+  const handleSeeked = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      if (!resumeAfterSeekRef.current) return
+      resumeAfterSeekRef.current = false
+      trustedMediaTimeRef.current = event.currentTarget.currentTime
+      beginSegment(event.currentTarget)
+    },
+    [beginSegment]
+  )
+
+  const handleRateChange = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      const video = event.currentTarget
+      if (video.playbackRate === 1) return
+      video.playbackRate = 1
+      stopInvalidPlayback(video, '奖励广告不支持倍速播放，已暂停并恢复为正常速度。')
+    },
+    [stopInvalidPlayback]
+  )
+
+  const handleEnded = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      const finalMilliseconds = settleSegment(event.currentTarget)
+      endedRef.current = true
+      setHasEnded(true)
+      setIsPlaying(false)
+      eligibleRef.current = finalMilliseconds >= requiredMilliseconds
+      if (!eligibleRef.current) {
+        setPlaybackNotice(`有效观看不足 ${requiredSeconds} 秒，本次不能领取奖励。`)
+        return
+      }
+      if (!completionTrackedRef.current) {
+        completionTrackedRef.current = true
+        const activeWatch = watchRef.current
+        if (activeWatch) trackRewardedAd('rewarded_ad_complete', activeWatch)
+      }
+      if (!autoClaimAttemptedRef.current) {
+        autoClaimAttemptedRef.current = true
+        void attemptClaim()
+      }
+    },
+    [attemptClaim, requiredMilliseconds, requiredSeconds, settleSegment]
+  )
+
+  const handleVideoError = useCallback(
+    (event: React.SyntheticEvent<HTMLVideoElement>) => {
+      const video = event.currentTarget
+      settleSegment(video)
+      video.pause()
+      setIsPlaying(false)
+      setVideoError('广告视频尚未部署、网络异常或格式无法播放，请稍后重试。')
+    },
+    [settleSegment]
+  )
+
+  const retryVideoLoad = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    setVideoError(null)
+    setPlaybackNotice(null)
+    video.load()
+  }, [])
+
+  const togglePlayback = useCallback(async () => {
+    const video = videoRef.current
+    if (!video || hasEnded || watchExpired || videoError) return
+    if (isPlaying) {
+      video.pause()
+      return
+    }
+    try {
+      video.playbackRate = 1
+      await video.play()
+    } catch (error) {
+      setPlaybackNotice(`视频无法播放：${errorMessage(error)}`)
+    }
+  }, [hasEnded, isPlaying, videoError, watchExpired])
+
+  useEffect(() => {
+    if (!opened) return
+    const timer = window.setInterval(() => {
+      const video = videoRef.current
+      const segment = segmentRef.current
+      if (video && segment) {
+        publishProgress(creditedMillisecondsRef.current + segmentProgress(segment, video.currentTime, monotonicNow()))
+      }
+    }, 250)
+    return () => window.clearInterval(timer)
+  }, [opened, publishProgress, segmentProgress])
+
+  useEffect(() => {
+    const nextAvailableAt = status.data?.nextAvailableAt
+    if (!opened && (!nextAvailableAt || nextAvailableAt <= Date.now() / 1000)) return
+    const timer = window.setInterval(() => setClockSeconds(Date.now() / 1000), 1000)
+    return () => window.clearInterval(timer)
+  }, [opened, status.data?.nextAvailableAt])
+
+  useEffect(() => {
+    if (!opened) return
+    const pauseForInterruption = (message: string) => {
+      const video = videoRef.current
+      if (video) {
+        settleSegment(video)
+        video.pause()
+      }
+      setIsPlaying(false)
+      setPlaybackNotice(message)
+    }
+    const onVisibilityChange = () => {
+      if (!document.hidden) return
+      pauseForInterruption('页面切到后台时广告已暂停，后台时长不会计入奖励。')
+    }
+    const onWindowBlur = () => pauseForInterruption('窗口失去焦点时广告已暂停，离开期间不会累计时长。')
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('blur', onWindowBlur)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('blur', onWindowBlur)
+    }
+  }, [opened, settleSegment])
+
+  useEffect(() => {
+    if (!opened || !watchExpired || claimResult) return
+    const video = videoRef.current
+    if (video) {
+      settleSegment(video)
+      video.pause()
+    }
+    setIsPlaying(false)
+    setPlaybackNotice('本次广告已过期，请关闭后重新观看。')
+  }, [claimResult, opened, settleSegment, watchExpired])
+
+  const cooldownSeconds = status.data?.nextAvailableAt ? Math.max(0, status.data.nextAvailableAt - clockSeconds) : 0
+  const available = Boolean(status.data?.enabled && status.data.remainingToday > 0 && cooldownSeconds <= 0)
+  const reward = watch?.rewardCardHours ?? status.data?.rewardCardHours
+  const progressPercent = Math.min(100, (validMilliseconds / requiredMilliseconds) * 100)
+  const watchedSeconds = Math.min(requiredSeconds, Math.floor(validMilliseconds / 1000))
+  const statusUnsupported = status.error instanceof WalletApiError && status.error.kind === 'unsupported'
+
+  let actionLabel = reward ? '观看并领取' : '观看广告赚卡时'
+  if (status.isPending && !status.data) actionLabel = '正在查询奖励…'
+  else if (status.data && !status.data.enabled) actionLabel = '活动暂未开放'
+  else if (status.data && status.data.remainingToday <= 0) actionLabel = '今日奖励已领完'
+  else if (cooldownSeconds > 0) actionLabel = `冷却中 ${formatCooldown(cooldownSeconds)}`
+
+  return (
+    <>
+      <Card withBorder component="section" aria-labelledby={titleId}>
+        <Stack gap="sm">
+          <Group justify="space-between" align="flex-start" wrap="nowrap">
+            <Stack gap={2}>
+              <Group gap="xs">
+                <Title order={4} id={titleId}>
+                  看广告得卡时
+                </Title>
+                <Badge size="xs" variant="light" color="gray">
+                  广告 · AD
+                </Badge>
+              </Group>
+              <Text size="sm" c="kod-tertiary" id={descriptionId}>
+                完整观看 {status.data?.minWatchSeconds ?? MINIMUM_REWARDED_WATCH_SECONDS} 秒广告后领取奖励。
+              </Text>
+            </Stack>
+            <IconGift size={24} aria-hidden="true" />
+          </Group>
+
+          {status.isPending && !status.data && <Loader size="sm" aria-label="正在加载广告奖励" />}
+          {status.error && !status.data && (
+            <Alert
+              color={statusUnsupported ? 'yellow' : 'red'}
+              title={statusUnsupported ? '服务端尚未开通' : '奖励信息加载失败'}
+            >
+              <Stack gap="xs">
+                <Text size="sm">{errorMessage(status.error)}</Text>
+                <Button
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconRefresh size={14} />}
+                  onClick={() => void status.refetch()}
+                >
+                  重试
+                </Button>
+              </Stack>
+            </Alert>
+          )}
+          {status.error && status.data && (
+            <Text size="xs" c="orange" role="status">
+              奖励信息刷新失败，当前显示上次结果。
+            </Text>
+          )}
+          {status.data && (
+            <Stack gap="xs">
+              <Stack gap={0}>
+                <Text fw={700} c="blue">
+                  +{formatCardTime(status.data.rewardCardHours)}
+                </Text>
+                <Text size="xs" c="kod-tertiary" aria-live="polite">
+                  今日剩余 {status.data.remainingToday}/{status.data.dailyLimit} 次
+                </Text>
+              </Stack>
+              <Button
+                fullWidth
+                variant="light"
+                leftSection={<IconPlayerPlay size={16} />}
+                disabled={!available || start.isPending}
+                loading={start.isPending}
+                aria-describedby={descriptionId}
+                onClick={() => void handleStart()}
+              >
+                {actionLabel}
+              </Button>
+            </Stack>
+          )}
+          {start.error && (
+            <Text size="sm" c="red" role="alert">
+              无法开始广告：{errorMessage(start.error)}
+            </Text>
+          )}
+        </Stack>
+      </Card>
+
+      <AdaptiveModal
+        opened={opened}
+        onClose={handleClose}
+        title="观看广告得卡时"
+        centered
+        size="lg"
+        closeOnClickOutside={false}
+        closeOnEscape={claimStateRef.current !== 'pending'}
+      >
+        <Stack gap="md">
+          <Group justify="space-between">
+            <Badge variant="light" color="gray">
+              广告 · AD
+            </Badge>
+            {reward != null && (
+              <Text size="sm" fw={600} c="blue">
+                完整观看可得 +{formatCardTime(reward)}
+              </Text>
+            )}
+          </Group>
+
+          {claimResult ? (
+            <Alert
+              color="green"
+              icon={<IconCheck size={18} />}
+              title={claimResult.duplicated ? '奖励已领取' : '领取成功'}
+            >
+              <Stack gap="xs">
+                <Text>本次获得 {formatCardTime(claimResult.rewardCardHours)}。</Text>
+                <Text size="sm">当前卡时余额：{formatCardTime(claimResult.availableCardHours)}</Text>
+              </Stack>
+            </Alert>
+          ) : (
+            <>
+              <Group justify="center">
+                <Box
+                  className="overflow-hidden rounded-lg bg-black"
+                  style={{
+                    aspectRatio: '9 / 16',
+                    height: 'min(65dvh, 640px)',
+                    maxHeight: 'min(65dvh, 640px)',
+                    maxWidth: '100%',
+                  }}
+                  aria-describedby={watchHelpId}
+                >
+                  <video
+                    ref={videoRef}
+                    src={videoSource?.videoUrl}
+                    poster={videoSource?.posterUrl}
+                    preload="metadata"
+                    playsInline
+                    disablePictureInPicture
+                    controls={false}
+                    aria-label="奖励广告视频"
+                    className="block h-full w-full object-contain"
+                    onPlay={handlePlay}
+                    onPause={handlePause}
+                    onTimeUpdate={handleTimeUpdate}
+                    onSeeking={handleSeeking}
+                    onSeeked={handleSeeked}
+                    onRateChange={handleRateChange}
+                    onEnded={handleEnded}
+                    onError={handleVideoError}
+                    onLoadedData={() => setVideoError(null)}
+                    onContextMenu={(event) => event.preventDefault()}
+                  />
+                </Box>
+              </Group>
+
+              <Stack gap={4}>
+                <Progress value={progressPercent} aria-label={`有效观看进度 ${watchedSeconds}/${requiredSeconds} 秒`} />
+                <Group justify="space-between">
+                  <Text size="xs" c="kod-tertiary" aria-live="polite">
+                    有效观看 {watchedSeconds}/{requiredSeconds} 秒
+                  </Text>
+                  <Text size="xs" c="kod-tertiary">
+                    正常速度 · 不可快进
+                  </Text>
+                </Group>
+              </Stack>
+
+              <Text id={watchHelpId} size="xs" c="kod-tertiary">
+                需保持页面可见并以正常速度完整播放；切到后台会自动暂停，关闭弹窗将放弃本次观看。
+              </Text>
+              {playbackNotice && (
+                <Alert color={hasEnded && !eligibleRef.current ? 'red' : 'yellow'} role="status">
+                  {playbackNotice}
+                </Alert>
+              )}
+              {videoError && (
+                <Alert color="red" title="视频加载失败" role="alert">
+                  <Stack gap="xs">
+                    <Text size="sm">{videoError}</Text>
+                    <Button size="xs" variant="light" leftSection={<IconRefresh size={14} />} onClick={retryVideoLoad}>
+                      重试加载
+                    </Button>
+                  </Stack>
+                </Alert>
+              )}
+              {claimError && (
+                <Alert color="red" title="奖励领取失败" role="alert">
+                  {claimError}
+                </Alert>
+              )}
+            </>
+          )}
+
+          <AdaptiveModal.Actions>
+            {claimResult ? (
+              <Button leftSection={<IconCheck size={16} />} onClick={handleClose}>
+                完成
+              </Button>
+            ) : (
+              <AdaptiveModal.CloseButton disabled={claim.isPending} onClick={handleClose}>
+                关闭并放弃
+              </AdaptiveModal.CloseButton>
+            )}
+            {!claimResult && !hasEnded && !videoError && (
+              <Button
+                leftSection={isPlaying ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}
+                disabled={watchExpired}
+                onClick={() => void togglePlayback()}
+              >
+                {isPlaying ? '暂停' : '开始播放'}
+              </Button>
+            )}
+            {!claimResult && hasEnded && eligibleRef.current && (
+              <Button loading={claim.isPending} disabled={claim.isPending} onClick={() => void attemptClaim()}>
+                {claim.isPending ? '正在领取…' : claimError ? '重试领取' : '领取奖励'}
+              </Button>
+            )}
+          </AdaptiveModal.Actions>
+        </Stack>
+      </AdaptiveModal>
+    </>
+  )
+}
+
+export default RewardedVideoCard

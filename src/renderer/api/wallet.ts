@@ -11,6 +11,25 @@ const nonnegativeInteger = decimalNumber.pipe(z.number().int().nonnegative())
 const nonnegativeNumber = decimalNumber.pipe(z.number().nonnegative())
 const positiveIntegerInput = z.number().finite().int().positive()
 const longIdWire = z.union([z.string().regex(/^\d+$/), z.number().int().nonnegative().safe()])
+const rewardedAdCampaignId = z.string().min(1).max(64)
+const rewardedAdWatchId = z.string().min(16).max(128)
+const WALLET_REQUEST_TIMEOUT_MS = 10_000
+const rewardAssetUrl = z
+  .string()
+  .min(1)
+  .max(2048)
+  .transform((value, context) => {
+    try {
+      const apiOrigin = new URL(getKodApiOrigin())
+      const url = new URL(value, apiOrigin)
+      const localHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+      if (url.origin !== apiOrigin.origin || (url.protocol !== 'https:' && !localHttp)) throw new Error('unsafe URL')
+      return url.toString()
+    } catch {
+      context.addIssue({ code: 'custom', message: 'reward asset must use the trusted API origin' })
+      return z.NEVER
+    }
+  })
 
 export const PayMethodWireSchema = z.object({
   name: z.string(),
@@ -69,6 +88,99 @@ export const WalletSchema = WalletWireSchema.transform((value) => ({
   balance: decimalNumber.parse(value.balance),
   historicalConsumption: decimalNumber.parse(value.historical_consumption),
 }))
+
+export const CardTimeAccountWireSchema = z
+  .object({
+    available_card_hours: decimalWire.optional(),
+    availableCardHours: decimalWire.optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.available_card_hours === undefined && value.availableCardHours === undefined) {
+      context.addIssue({ code: 'custom', path: ['available_card_hours'], message: 'available card hours is required' })
+    }
+    if (
+      value.available_card_hours !== undefined &&
+      value.availableCardHours !== undefined &&
+      Number(value.available_card_hours) !== Number(value.availableCardHours)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['available_card_hours'],
+        message: 'available card hour fields must match',
+      })
+    }
+  })
+  .transform((value) => ({
+    available_card_hours: decimalWire.parse(value.available_card_hours ?? value.availableCardHours),
+  }))
+export const CardTimeAccountSchema = CardTimeAccountWireSchema.transform((value) => ({
+  availableCardHours: nonnegativeNumber.parse(value.available_card_hours),
+}))
+export type CardTimeAccount = z.infer<typeof CardTimeAccountSchema>
+
+export const RewardedAdStatusWireSchema = z
+  .object({
+    enabled: z.boolean(),
+    campaign_id: rewardedAdCampaignId,
+    reward_card_hours: decimalWire,
+    daily_limit: decimalWire,
+    claimed_today: decimalWire,
+    remaining_today: decimalWire,
+    min_watch_seconds: decimalWire,
+    next_available_at: z.union([decimalWire, z.null(), z.undefined()]),
+    video_url: rewardAssetUrl,
+    poster_url: rewardAssetUrl,
+  })
+  .transform((value) => ({
+    enabled: value.enabled,
+    campaignId: value.campaign_id,
+    rewardCardHours: nonnegativeNumber.pipe(z.number().positive().max(100)).parse(value.reward_card_hours),
+    dailyLimit: nonnegativeInteger.pipe(z.number().max(100)).parse(value.daily_limit),
+    claimedToday: nonnegativeInteger.parse(value.claimed_today),
+    remainingToday: nonnegativeInteger.parse(value.remaining_today),
+    minWatchSeconds: nonnegativeInteger.pipe(z.number().positive().max(3600)).parse(value.min_watch_seconds),
+    nextAvailableAt: value.next_available_at == null ? null : nonnegativeInteger.parse(value.next_available_at),
+    videoUrl: value.video_url,
+    posterUrl: value.poster_url,
+  }))
+  .refine((value) => value.claimedToday + value.remainingToday === value.dailyLimit, {
+    message: 'reward counts must add up to daily limit',
+  })
+export type RewardedAdStatus = z.infer<typeof RewardedAdStatusWireSchema>
+
+export const RewardedAdWatchWireSchema = z.object({
+  watch_id: rewardedAdWatchId,
+  campaign_id: rewardedAdCampaignId,
+  reward_card_hours: decimalWire,
+  min_watch_seconds: decimalWire,
+  expires_at: decimalWire,
+})
+export const RewardedAdWatchSchema = RewardedAdWatchWireSchema.transform((value) => ({
+  watchId: value.watch_id,
+  campaignId: value.campaign_id,
+  rewardCardHours: nonnegativeNumber.pipe(z.number().positive().max(100)).parse(value.reward_card_hours),
+  minWatchSeconds: nonnegativeInteger.pipe(z.number().positive().max(3600)).parse(value.min_watch_seconds),
+  expiresAt: nonnegativeInteger.parse(value.expires_at),
+}))
+export type RewardedAdWatch = z.infer<typeof RewardedAdWatchSchema>
+
+export const RewardedAdClaimWireSchema = z.object({
+  duplicated: z.boolean().default(false),
+  reward_card_hours: decimalWire,
+  available_card_hours: decimalWire,
+  claimed_today: decimalWire,
+  remaining_today: decimalWire,
+  next_available_at: z.union([decimalWire, z.null(), z.undefined()]),
+})
+export const RewardedAdClaimSchema = RewardedAdClaimWireSchema.transform((value) => ({
+  duplicated: value.duplicated,
+  rewardCardHours: nonnegativeNumber.pipe(z.number().positive()).parse(value.reward_card_hours),
+  availableCardHours: nonnegativeNumber.parse(value.available_card_hours),
+  claimedToday: nonnegativeInteger.parse(value.claimed_today),
+  remainingToday: nonnegativeInteger.parse(value.remaining_today),
+  nextAvailableAt: value.next_available_at == null ? null : nonnegativeInteger.parse(value.next_available_at),
+}))
+export type RewardedAdClaim = z.infer<typeof RewardedAdClaimSchema>
 export const VideoConsumeReportSchema = z
   .object({
     duplicated: z.boolean().default(false),
@@ -140,11 +252,14 @@ const ResultEnvelopeSchema = z.object({
   message: z.string().default(''),
   data: z.unknown().optional(),
 })
+const ErrorEnvelopeSchema = z.object({ message: z.string().optional() })
 
 export class WalletApiError extends Error {
   constructor(
     message: string,
-    public readonly kind: 'auth' | 'http' | 'business' | 'schema' | 'network'
+    public readonly kind: 'auth' | 'http' | 'business' | 'schema' | 'network' | 'unsupported',
+    public readonly businessCode?: number,
+    public readonly statusCode?: number
   ) {
     super(message)
     this.name = 'WalletApiError'
@@ -169,7 +284,7 @@ function schemaFailure(path: string, issues: z.core.$ZodIssue[]): WalletApiError
 async function request<T extends z.ZodType>(
   path: string,
   schema: T,
-  options: { method?: 'GET' | 'POST'; body?: unknown; retry?: number } = {}
+  options: { method?: 'GET' | 'POST'; body?: unknown; retry?: number; timeoutMs?: number } = {}
 ): Promise<z.infer<T>> {
   const requestAccessToken = accessToken()
   try {
@@ -177,6 +292,7 @@ async function request<T extends z.ZodType>(
       method: options.method ?? 'GET',
       body: options.body as Record<string, unknown> | undefined,
       retry: options.retry ?? 1,
+      timeout: options.timeoutMs ?? WALLET_REQUEST_TIMEOUT_MS,
       ignoreResponseError: true,
       headers: {
         Authorization: `Bearer ${requestAccessToken}`,
@@ -184,12 +300,24 @@ async function request<T extends z.ZodType>(
       },
     })
     if (response.status === 401 || response.status === 403) throw invalidSession(requestAccessToken)
-    if (response.status < 200 || response.status >= 300)
-      throw new WalletApiError(`钱包服务请求失败（HTTP ${response.status}）`, 'http')
+    if (response.status < 200 || response.status >= 300) {
+      const responseMessage = ErrorEnvelopeSchema.safeParse(response._data)
+      const serverMessage = responseMessage.success ? responseMessage.data.message : undefined
+      const missingFeatureRoute =
+        path.startsWith('/api/user/compute/') &&
+        (response.status === 404 || (response.status === 500 && /no static resource/i.test(serverMessage ?? '')))
+      if (missingFeatureRoute) {
+        throw new WalletApiError('当前服务端尚未开通卡时奖励', 'unsupported', undefined, response.status)
+      }
+      const errorMessage =
+        response.status >= 500 ? '钱包服务暂时不可用，请稍后重试' : `钱包服务请求失败（HTTP ${response.status}）`
+      throw new WalletApiError(errorMessage, 'http', undefined, response.status)
+    }
     const envelope = ResultEnvelopeSchema.safeParse(response._data)
     if (!envelope.success) throw schemaFailure(path, envelope.error.issues)
     if (envelope.data.code === 401 || envelope.data.code === 403) throw invalidSession(requestAccessToken)
-    if (envelope.data.code !== 0) throw new WalletApiError(envelope.data.message || '钱包服务处理失败', 'business')
+    if (envelope.data.code !== 0)
+      throw new WalletApiError(envelope.data.message || '钱包服务处理失败', 'business', envelope.data.code)
     if (envelope.data.data == null)
       throw schemaFailure(path, [{ code: 'custom', path: ['data'], message: 'missing data', input: undefined }])
     const data = schema.safeParse(envelope.data.data)
@@ -197,7 +325,11 @@ async function request<T extends z.ZodType>(
     return data.data
   } catch (error) {
     if (error instanceof WalletApiError) throw error
-    throw new WalletApiError(error instanceof Error ? error.message : '网络请求失败，请检查网络后重试', 'network')
+    const causeText = error instanceof Error ? `${error.name} ${error.message}` : String(error)
+    if (/abort|timeout|timed out/i.test(causeText)) {
+      throw new WalletApiError('钱包服务响应超时，请稍后重试', 'network')
+    }
+    throw new WalletApiError('无法连接钱包服务，请检查网络后重试', 'network')
   }
 }
 function historyParams(page: number, pageSize: number) {
@@ -206,6 +338,20 @@ function historyParams(page: number, pageSize: number) {
 export const walletApi = {
   getTopupInfo: () => request('/api/user/topup/info', TopupInfoSchema),
   getWallet: () => request('/api/user/wallet', WalletSchema),
+  getCardTimeAccount: () => request('/api/user/compute/account', CardTimeAccountSchema, { retry: 0 }),
+  getRewardedAdStatus: () => request('/api/user/compute/ad-reward/status', RewardedAdStatusWireSchema, { retry: 0 }),
+  startRewardedAd: (campaignId: string) =>
+    request('/api/user/compute/ad-reward/start', RewardedAdWatchSchema, {
+      method: 'POST',
+      body: { campaign_id: rewardedAdCampaignId.parse(campaignId) },
+      retry: 0,
+    }),
+  claimRewardedAd: (watchId: string) =>
+    request('/api/user/compute/ad-reward/claim', RewardedAdClaimSchema, {
+      method: 'POST',
+      body: { watch_id: rewardedAdWatchId.parse(watchId) },
+      retry: 0,
+    }),
   calculateAmount: (amount: number) => request('/api/user/amount', AmountSchema, { method: 'POST', body: { amount } }),
   pay: (amount: number, paymentMethod: string) =>
     request('/api/user/pay', PaymentSchema, {

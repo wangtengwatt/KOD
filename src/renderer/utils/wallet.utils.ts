@@ -22,3 +22,10 @@ export const calculateDiscount = (amount: number, actualValue: number | string):
   const saved = Math.max(0, amount - actual)
   return { actual, rate: Math.max(0, Math.min(1, saved / amount)), saved }
 }
+
+export const formatCardTime = (value: number | string | null | undefined) => {
+  const number = typeof value === 'number' ? value : Number(value ?? 0)
+  return `${new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(
+    Number.isFinite(number) ? number : 0
+  )} 卡时`
+}

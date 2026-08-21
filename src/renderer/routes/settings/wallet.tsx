@@ -20,14 +20,23 @@ import { createFileRoute } from '@tanstack/react-router'
 import dayjs from 'dayjs'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { WalletApiError } from '@/api/wallet'
+import { RewardedVideoCard } from '@/components/wallet/RewardedVideoCard'
 import { useWallet } from '@/hooks/useWallet'
 import { navigateToSettings } from '@/modals/Settings'
 import platform from '@/platform'
-import { calculateDiscount, formatCny, formatTopupStatus, paymentMethodName } from '@/utils/wallet.utils'
+import {
+  calculateDiscount,
+  formatCardTime,
+  formatCny,
+  formatTopupStatus,
+  paymentMethodName,
+} from '@/utils/wallet.utils'
 
 export const Route = createFileRoute('/settings/wallet')({ component: RouteComponent })
 const pageSize = 10
 const message = (error: unknown) => (error instanceof Error ? error.message : '请求失败')
+const isUnsupported = (error: unknown) => error instanceof WalletApiError && error.kind === 'unsupported'
 const statusColor = (status: string) =>
   status === 'success'
     ? 'green'
@@ -41,7 +50,7 @@ const statusColor = (status: string) =>
 
 export function RouteComponent() {
   const [page, setPage] = useState(1)
-  const { identity, apiHost, info, balance, history, amount, pay, refresh } = useWallet(page, pageSize)
+  const { identity, apiHost, info, balance, cardTimeAccount, history, amount, pay, refresh } = useWallet(page, pageSize)
   const [selectedAmount, setSelectedAmount] = useState<number | string>('')
   const [methodType, setMethodType] = useState('')
   const [paymentNotice, setPaymentNotice] = useState<'opened' | 'open-failed' | null>(null)
@@ -136,7 +145,7 @@ export function RouteComponent() {
           刷新余额和记录
         </Button>
       </Group>
-      <SimpleGrid cols={{ base: 1, sm: 2 }}>
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
         <Card withBorder>
           <Text c="kod-tertiary">余额</Text>
           {balance.isLoading ? (
@@ -155,6 +164,30 @@ export function RouteComponent() {
             <Alert color="red">历史消费暂不可用</Alert>
           ) : (
             <Title order={2}>{formatCny(balance.data?.historicalConsumption)}</Title>
+          )}
+        </Card>
+        <RewardedVideoCard
+          identity={identity}
+          onClaimed={(result) => {
+            toast.success(`已获得 ${formatCardTime(result.rewardCardHours)}`)
+            return refresh()
+          }}
+        />
+        <Card withBorder>
+          <Text c="kod-tertiary">卡时余额</Text>
+          {cardTimeAccount.isPending && !cardTimeAccount.data ? (
+            <Loader size="sm" />
+          ) : cardTimeAccount.error && !cardTimeAccount.data ? (
+            <Stack gap="xs" align="flex-start">
+              <Text c={isUnsupported(cardTimeAccount.error) ? 'orange' : 'red'} size="sm">
+                {isUnsupported(cardTimeAccount.error) ? message(cardTimeAccount.error) : '卡时余额暂不可用'}
+              </Text>
+              <Button size="compact-xs" variant="light" onClick={() => void cardTimeAccount.refetch()}>
+                重试
+              </Button>
+            </Stack>
+          ) : (
+            <Title order={2}>{formatCardTime(cardTimeAccount.data?.availableCardHours)}</Title>
           )}
         </Card>
       </SimpleGrid>

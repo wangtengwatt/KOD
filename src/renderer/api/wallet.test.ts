@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { getKodApiOrigin } from '@/packages/kodApiOrigin'
 import { authInfoStore } from '@/stores/authInfoStore'
-import { PayMethodSchema, TopupHistorySchema, TopupInfoSchema, WalletApiError, walletApi } from './wallet'
+import {
+  CardTimeAccountSchema,
+  PayMethodSchema,
+  RewardedAdClaimSchema,
+  RewardedAdStatusWireSchema,
+  TopupHistorySchema,
+  TopupInfoSchema,
+  WalletApiError,
+  walletApi,
+} from './wallet'
 
 const ok = (data: unknown) =>
   new Response(JSON.stringify({ code: 0, message: '', data }), {
@@ -301,7 +311,7 @@ describe('wallet contracts', () => {
     })
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => {
+      vi.fn(() => {
         authInfoStore.getState().setTokens({
           accessToken: 'new-access-token',
           refreshToken: 'new-refresh-token',
@@ -364,6 +374,127 @@ describe('wallet contracts', () => {
     await expect(walletApi.pay(10, 'alipay')).rejects.toBeInstanceOf(WalletApiError)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+  it('accepts snake_case and camelCase card-time balances', () => {
+    expect(CardTimeAccountSchema.parse({ available_card_hours: '1.25' })).toEqual({ availableCardHours: 1.25 })
+    expect(CardTimeAccountSchema.parse({ availableCardHours: 2 })).toEqual({ availableCardHours: 2 })
+  })
+  it('parses rewarded-ad status and claim decimal wire values', () => {
+    const apiOrigin = getKodApiOrigin()
+    expect(
+      RewardedAdStatusWireSchema.parse({
+        enabled: true,
+        campaign_id: 'kod-reward-2026-08',
+        reward_card_hours: '0.10',
+        daily_limit: '3',
+        claimed_today: 1,
+        remaining_today: 2,
+        min_watch_seconds: '90',
+        next_available_at: null,
+        video_url: '/api/ads/kod-reward-2026-08.mp4',
+        poster_url: '/api/ads/kod-reward-2026-08-poster.jpg',
+      })
+    ).toEqual({
+      enabled: true,
+      campaignId: 'kod-reward-2026-08',
+      rewardCardHours: 0.1,
+      dailyLimit: 3,
+      claimedToday: 1,
+      remainingToday: 2,
+      minWatchSeconds: 90,
+      nextAvailableAt: null,
+      videoUrl: new URL('/api/ads/kod-reward-2026-08.mp4', apiOrigin).toString(),
+      posterUrl: new URL('/api/ads/kod-reward-2026-08-poster.jpg', apiOrigin).toString(),
+    })
+    expect(
+      RewardedAdClaimSchema.parse({
+        duplicated: false,
+        reward_card_hours: '0.10',
+        available_card_hours: '2.35',
+        claimed_today: 1,
+        remaining_today: 2,
+        next_available_at: null,
+      }).availableCardHours
+    ).toBe(2.35)
+  })
+  it('rejects impossible rewarded-ad counters and cross-origin assets', () => {
+    const base = {
+      enabled: true,
+      campaign_id: 'kod-reward-2026-08',
+      reward_card_hours: 0.1,
+      daily_limit: 3,
+      claimed_today: 0,
+      remaining_today: 3,
+      min_watch_seconds: 90,
+      next_available_at: null,
+      video_url: '/api/ads/kod-reward-2026-08.mp4',
+      poster_url: '/api/ads/kod-reward-2026-08-poster.jpg',
+    }
+    expect(() => RewardedAdStatusWireSchema.parse({ ...base, claimed_today: 4, remaining_today: 0 })).toThrow()
+    expect(() => RewardedAdStatusWireSchema.parse({ ...base, video_url: 'https://attacker.example/ad.mp4' })).toThrow()
+  })
+  it('starts and claims rewarded ads without retrying POST requests', async () => {
+    authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret' })
+    const fetchMock = vi.fn((url, init) => {
+      const path = new URL(String(url)).pathname
+      if (path.endsWith('/start')) {
+        expect(JSON.parse(String(init?.body))).toEqual({ campaign_id: 'kod-reward-2026-08' })
+        return ok({
+          watch_id: 'a6f57048-6eef-4c98-a561-b817bc352242',
+          campaign_id: 'kod-reward-2026-08',
+          reward_card_hours: 0.1,
+          min_watch_seconds: 90,
+          expires_at: 1787068800,
+        })
+      }
+      expect(path).toMatch(/\/claim$/)
+      expect(JSON.parse(String(init?.body))).toEqual({ watch_id: 'a6f57048-6eef-4c98-a561-b817bc352242' })
+      return ok({
+        duplicated: false,
+        reward_card_hours: 0.1,
+        available_card_hours: 2.35,
+        claimed_today: 1,
+        remaining_today: 2,
+        next_available_at: null,
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(walletApi.startRewardedAd('kod-reward-2026-08')).resolves.toMatchObject({
+      watchId: 'a6f57048-6eef-4c98-a561-b817bc352242',
+    })
+    await expect(walletApi.claimRewardedAd('a6f57048-6eef-4c98-a561-b817bc352242')).resolves.toMatchObject({
+      availableCardHours: 2.35,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+  it.each(['/api/user/compute/account', '/api/user/compute/ad-reward/status'])(
+    'classifies a missing feature route at %s without exposing the server exception',
+    async (path) => {
+      authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret' })
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                code: 500,
+                message: `No static resource ${path}; nested database diagnostics`,
+                data: null,
+              }),
+              { status: 500, headers: { 'Content-Type': 'application/json' } }
+            )
+        )
+      )
+
+      const operation = path.endsWith('/account') ? walletApi.getCardTimeAccount() : walletApi.getRewardedAdStatus()
+      const error = await operation.catch((caught) => caught)
+      expect(error).toMatchObject({
+        kind: 'unsupported',
+        message: '当前服务端尚未开通卡时奖励',
+        statusCode: 500,
+      })
+      expect(error).not.toMatchObject({ message: expect.stringContaining('database diagnostics') })
+    }
+  )
   it('rejects pagination responses that do not match the request', async () => {
     authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret', email: 'u@example.com' })
     vi.stubGlobal(
