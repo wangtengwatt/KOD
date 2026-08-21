@@ -366,6 +366,27 @@ describe('RewardedVideoCard', () => {
     expect(await screen.findByText('服务端尚未确认完整播放，本次不能领取奖励。')).toBeTruthy()
   })
 
+  it('keeps the active segment when stalled media continues from cache without another playing event', async () => {
+    renderCard()
+    const video = await openAd()
+
+    act(() => advancePlayback(video, 1))
+    await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(1))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    fireEvent.stalled(video)
+    act(() => advancePlayback(video, 2))
+
+    await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(2))
+    expect(mocks.progressRewardedAd.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({ mediaPositionSeconds: 2, sequence: 2, progressToken: 'progress-1' })
+    )
+    expect(screen.getByText('有效观看 2/3 秒')).toBeTruthy()
+  })
+
   it('deduplicates repeated ended events after becoming eligible', async () => {
     const onClaimed = vi.fn()
     renderCard(onClaimed)

@@ -742,7 +742,6 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
                     onPlaying={handlePlay}
                     onPause={handlePause}
                     onWaiting={handleBuffering}
-                    onStalled={handleBuffering}
                     onTimeUpdate={handleTimeUpdate}
                     onSeeking={handleSeeking}
                     onSeeked={handleSeeked}
