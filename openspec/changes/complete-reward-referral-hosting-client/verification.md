@@ -184,6 +184,18 @@ The backend full suite passes 150/150 across 35 suites with no failures, errors,
 
 Final range scans report zero client production video-sensitive added lines, zero protected realtime-price added lines in the two compute-center files, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files. `git diff --check f97c615 --` and `git diff --check f37e8cb --` both pass.
 
+## Twelfth independent cross-branch review repair
+
+A twelfth completely fresh read-only reviewer covered client `f97c615..e8b4d26` and backend `f37e8cb..c4e989e`; it did not inherit an earlier verdict. It reported no Critical findings and one Important finding. The client required no production change; the repaired backend head is `8aba672`:
+
+- platform-lease renewal now isolates an unexpected per-lease `RuntimeException`, and both the post-debit-failure stop path and drained-lease release path run through the same stage-and-lease-labelled exception boundary. A poison smallest-ID lease is rolled back and logged without preventing later leases from renewing, stopping intake, or releasing inventory; the required transaction template is still constructed fail-fast.
+
+The renewal regression was demonstrated red before production repair: the first lease threw `IllegalStateException("poison lease")`, `advanceExpiredLeases()` propagated it, and the second expired lease never renewed. After repair, three regressions cover renewal failure, failure inside the debit-fallback stop transaction, and release failure; each proves the next lease still commits. The complete platform-lease test class passes.
+
+The first post-repair backend full run exposed one task-introduced flaky test assertion, not a production failure: H2 rounded a persisted listing deadline from `...338800`ns to `...339000`ns, so a quote correctly clamped to the stored deadline appeared 200ns later than the original in-memory value. The assertion now compares the quote to the stored listing deadline. Its focused rerun passes, and the fresh backend full suite passes 153/153 across 35 suites with no failures, errors, or skips. Packaging passes and produces a 121,133,869-byte JAR; the seven backend video suites pass 19/19 without a real upstream key.
+
+The final client code is unchanged from the eleventh repair: the 11-file feature/video set remains 130/130, TypeScript and changed-file Biome remain clean, the 5,352/82/15,029-module production build remains passing, and the full suite remains 1,475 passed, the same six classified baseline failures, and 54 skipped out of 1,535 tests. Strict OpenSpec validation passes for both client and backend. Final scans again report zero production video-sensitive additions, zero protected realtime-price changes, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files; both range diff checks pass.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
