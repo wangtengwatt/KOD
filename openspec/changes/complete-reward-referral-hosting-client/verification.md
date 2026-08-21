@@ -220,6 +220,20 @@ The account-deletion regression verifies that an active lease is stopped before 
 
 The final client remains unchanged: its 11-file target set passes 130/130, TypeScript check passes, the full suite remains 1,475 passed, the same six classified baseline failures, and 54 skipped out of 1,535 tests, and the production build passes with 5,352/82/15,029 transformed modules. Both strict OpenSpec validations pass. Security, video, protected-price, secret, and range diff scans remain zero/clean.
 
+## Fifteenth independent cross-branch review repair
+
+A fifteenth completely fresh read-only reviewer covered client `f97c615..579413a` and backend `f37e8cb..086ab50`; it did not inherit an earlier verdict. It reported no Critical findings and three Important findings. The client required no production change; the repaired backend head is `608e20f`:
+
+- account deletion now also suspends the ordinary supplier profile and stops intake on every ordinary supplier node and product. Existing obligations remain available for drain, but deleted suppliers no longer leave publicly orderable products that can freeze a buyer's funds after the supplier has lost login access;
+- deletion and new platform rent now share the durable `sys_user` lifecycle row lock. Rent rechecks the deletion receipt after acquiring that lock, so delete-first rejects rent and rent-first is visible to deletion and transitioned to `STOPPING` instead of creating a post-tombstone active auto-renewing lease;
+- RFQ acceptance discovers all current participants without retaining business-row locks, globally locks buyer and seller wallets first, then re-locks and revalidates the selected RFQ quote and its deadline. Quote creation, cancellation, RFQ expiry, ordinary purchase confirmation, and listing expiry use the same wallet-before-business-row direction; participant-set changes or a deadline crossed while waiting abort before debit, delivery, or release.
+
+The ordinary purchase lock-order regression was demonstrated red before its repair: the wallet lock invocation occurred after the locked purchase-quote query (Mockito sequence 53 versus 19). It passes after the participant prelock was moved ahead of the quote/listing rows. The repaired account-deletion, platform-lease, settlement, and qualified-market focused set passes 50/50. The fresh backend full suite passes 158/158 across 35 suites with zero failures, errors, or skips. Packaging passes and produces a 121,137,884-byte JAR. The plan's package-wildcard video selector is not supported by the repository's current Surefire configuration and returns “No tests matching pattern”; the equivalent explicit seven-class selector passes all 19 video tests without a real upstream key.
+
+Fresh client verification used Node `v22.23.2`. The unchanged 11-file feature/video set passes 130/130, TypeScript check passes, the 11-file Biome check is clean, and the production build passes after transforming 5,352 main, 82 preload, and 15,029 renderer modules. The most recent full client run remains 154 files with 1,475 passed, the same six classified baseline failures, and 54 skipped out of 1,535 tests; no client production or test code changed in the fifteenth repair. Strict OpenSpec validation passes for both client and backend.
+
+Final scans report zero client forbidden upstream/key additions, zero protected realtime-price additions, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video/config production files. Both range diff checks pass.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
