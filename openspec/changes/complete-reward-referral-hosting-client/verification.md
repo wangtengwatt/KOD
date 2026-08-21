@@ -156,6 +156,19 @@ Fresh client verification used Node `v22.23.2`. The complete 11-file feature/vid
 
 Both strict OpenSpec validations pass. Final scans report zero client production video-sensitive added lines, zero protected realtime-price added lines, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files. `git diff --check f97c615 --` and `git diff --check f37e8cb --` both pass.
 
+## Tenth independent cross-branch review repair
+
+A tenth completely fresh read-only reviewer covered client `f97c615..ba1b173` and backend `f37e8cb..2e6db45`; it did not inherit an earlier verdict. It reported no Critical findings and two Important findings. The repaired code heads are client `f21862c` and backend `c15ddfe`:
+
+- the generic compute-center action runner now captures the normalized owner identity, checks it before starting and after every awaited continuation, and only lets the matching owner write busy/feedback state. The referral-bind action additionally rechecks ownership after the delayed device-config lookup and before issuing the authenticated bind request, so an A confirmation cannot execute with B's current token or navigate B;
+- card-hour purchase quote creation and confirmation now revalidate the locked listing and asset deadlines at request time. Quote expiry is clamped to the earliest of 30 minutes, listing expiry, and asset expiry; confirmation also rejects an expired quote asset snapshot, and final asset delivery repeats the deadline guard before ledger mutation.
+
+Both findings were demonstrated red before repair. The client test paused A during `platform.getConfig`, switched to B, resumed, and observed the old code call `bindComputeReferral("INVITE-A", "device-a")`. The backend tests showed that an already expired listing still created a quote and that a listing expiring in five minutes received a thirty-minute quote. After repair, the mounted-switch route suite passes 4/4, the complete 11-file client feature/video set passes 127/127, and the qualified-market backend suite passes including expired-create, cross-listing-deadline, cross-asset-deadline, and quote-clamp cases.
+
+Final client verification passes TypeScript, the two-file changed Biome check, and production build with 5,352 main, 82 preload, and 15,029 renderer modules. The full suite contains 154 files: 147 passed, 5 failed, 2 skipped; 1,532 tests: 1,472 passed, the same six classified baseline failures, and 54 skipped. The backend full suite passes 149/149 across 35 suites with no failures, errors, or skips; packaging passes and produces a 121,132,505-byte JAR.
+
+Both strict OpenSpec validations pass. Final scans again report zero client production video-sensitive added lines, zero protected realtime-price added lines, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files. Both range diff checks pass.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
