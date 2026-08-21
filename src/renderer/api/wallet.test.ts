@@ -392,6 +392,34 @@ describe('wallet contracts', () => {
       CardTimeAccountSchema.parse({ spendableCardHours: 2, redeemableCardHours: '1.25', rewardCardHours: '0.75' })
     ).toEqual({ availableCardHours: 2, spendableCardHours: 2, redeemableCardHours: 1.25, rewardCardHours: 0.75 })
   })
+  it('keeps legacy available-only account responses compatible', () => {
+    expect(CardTimeAccountSchema.parse({ available_card_hours: '1.250' })).toEqual({ availableCardHours: 1.25 })
+    expect(CardTimeAccountSchema.parse({ availableCardHours: 2 })).toEqual({ availableCardHours: 2 })
+    expect(CardTimeAccountSchema.parse({ available_card_hours: '1.250', availableCardHours: '1.25' })).toEqual({
+      availableCardHours: 1.25,
+    })
+  })
+  it('rejects conflicting aliases and partial qualified balance responses', () => {
+    expect(() => CardTimeAccountSchema.parse({ available_card_hours: '1.250', availableCardHours: '1.251' })).toThrow()
+    expect(() =>
+      CardTimeAccountSchema.parse({
+        availableCardHours: '2.000',
+        spendable_card_hours: '2.000',
+        spendableCardHours: '3.000',
+        redeemable_card_hours: '1.250',
+        reward_card_hours: '0.750',
+      })
+    ).toThrow()
+    expect(() => CardTimeAccountSchema.parse({ available_card_hours: '2.000', reward_card_hours: '0.750' })).toThrow()
+  })
+  it('accepts only DECIMAL(20,3) values that are exact at the UI number boundary', () => {
+    const boundary = CardTimeAccountSchema.parse({ available_card_hours: '8796093022207.999' })
+    expect(boundary.availableCardHours.toFixed(3)).toBe('8796093022207.999')
+    for (const spendable of ['1.0000', '8796093022208.001', '9007199254740.991', '99999999999999999.999']) {
+      expect(() => CardTimeAccountSchema.parse({ available_card_hours: spendable })).toThrow()
+    }
+    expect(() => CardTimeAccountSchema.parse({ available_card_hours: Number('8796093022208.001') })).toThrow()
+  })
   it('accepts frozen hours while rejecting malformed or impossible card-hour balances', () => {
     expect(
       CardHourAccountSchema.parse({
@@ -501,6 +529,44 @@ describe('wallet contracts', () => {
     await expect(walletApi.claimRewardedAd('a6f57048-6eef-4c98-a561-b817bc352242')).resolves.toMatchObject({
       availableCardHours: 2.35,
     })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+  it('loads qualified balances from the real compute account route', async () => {
+    authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret' })
+    const fetchMock = vi.fn((url) => {
+      expect(new URL(String(url)).pathname).toBe('/api/compute/account')
+      return ok({
+        availableCardHours: '100.000',
+        spendableCardHours: '100.000',
+        redeemableCardHours: '90.000',
+        rewardCardHours: '10.000',
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(walletApi.getCardTimeAccount()).resolves.toMatchObject({
+      spendableCardHours: 100,
+      redeemableCardHours: 90,
+      rewardCardHours: 10,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+  it('falls back to the legacy available-only route when the real account route is unavailable', async () => {
+    authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret' })
+    const fetchMock = vi.fn((url) => {
+      const path = new URL(String(url)).pathname
+      if (path === '/api/compute/account') {
+        return new Response(JSON.stringify({ message: 'No static resource /api/compute/account' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      expect(path).toBe('/api/user/compute/account')
+      return ok({ available_card_hours: '12.500' })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(walletApi.getCardTimeAccount()).resolves.toEqual({ availableCardHours: 12.5 })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
   it.each(['/api/user/compute/account', '/api/user/compute/ad-reward/status'])(

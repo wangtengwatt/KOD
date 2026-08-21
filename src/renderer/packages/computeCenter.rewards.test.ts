@@ -9,9 +9,12 @@ vi.mock('@/stores/authInfoStore', () => ({
 }))
 
 import {
+  ComputeAccountSchema,
   createEmailInvitation,
   EmailInvitationSchema,
+  getComputeAccount,
   listEmailInvitations,
+  listPlatformServerLeases,
   listPlatformServerSkus,
   PlatformServerLeaseSchema,
   PlatformServerSkuSchema,
@@ -74,6 +77,46 @@ const platformLease = {
   renewalCount: 0,
 } as const
 
+const computeAccount = {
+  userId: 7,
+  email: 'user@example.com',
+  cnyBalance: '25.000',
+  availableCardHours: '100.000',
+  spendableCardHours: '100.000',
+  redeemableCardHours: '90.000',
+  rewardCardHours: '10.000',
+  frozenCardHours: '0.000',
+  lifetimeIncome: '12.000',
+  lifetimeConsumption: '3.000',
+  rentalIncome: '4.000',
+  rentalIncomeCnyEquivalent: '4.000',
+  commissionIncome: '0.000',
+  pendingCommission: '0.000',
+  totalIncomeCny: '4.000',
+  invitedCount: 1,
+  apiSalesIncome: '8.000',
+  withdrawableCardHours: '90.000',
+  supplierStatus: 'APPROVED',
+  identityStatus: 'APPROVED',
+  isAdmin: false,
+  roles: ['BUYER', 'SUPPLIER'],
+  deviceCounts: { PENDING: 0, DEPLOYING: 0, RUNNING: 1, PENDING_ACTION: 0 },
+  gpuAssetCounts: {
+    PENDING: 0,
+    REJECTED: 0,
+    RUNNING: 1,
+    PENDING_DELIVERY: 0,
+    ACTIVE_RENTAL: 0,
+    PENDING_ACTION: 0,
+    OFFLINE: 0,
+  },
+  cardHourCnyRate: '1.002',
+  cardHourRedeemRate: '1.000',
+  unitName: '卡时',
+  currency: 'CNY',
+  unreadNotifications: 0,
+} as const
+
 describe('reward referral and platform hosting contracts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -97,6 +140,27 @@ describe('reward referral and platform hosting contracts', () => {
     ).toMatchObject({ inviteeUserId: '9', status: 'ACCEPTED', acceptedAt: '2026-08-22T08:30:00' })
   })
 
+  it('rejects impossible local date-times from invitation and lease records', () => {
+    expect(() => EmailInvitationSchema.parse({ ...pendingInvitation, createdAt: '2026-02-30T12:00:00' })).toThrow()
+    expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, expiresAt: 'not-a-date' })).toThrow()
+  })
+
+  it('parses qualified balances from the real compute account response', async () => {
+    expect(ComputeAccountSchema.parse(computeAccount)).toMatchObject({
+      availableCardHours: 100,
+      spendableCardHours: 100,
+      redeemableCardHours: 90,
+      rewardCardHours: 10,
+    })
+    expect(() => ComputeAccountSchema.parse({ ...computeAccount, email: undefined })).toThrow()
+    mocks.ofetch.mockResolvedValueOnce({ code: 0, data: computeAccount })
+    await expect(getComputeAccount()).resolves.toMatchObject({ rewardCardHours: 10 })
+    expect(mocks.ofetch).toHaveBeenCalledWith(
+      'https://kod.test/api/compute/account',
+      expect.objectContaining({ headers: { Authorization: 'Bearer test-access-token' } })
+    )
+  })
+
   it('validates and transforms every platform-controlled decimal', () => {
     expect(PlatformServerSkuSchema.parse(platformSku)).toMatchObject({
       id: '42',
@@ -112,6 +176,16 @@ describe('reward referral and platform hosting contracts', () => {
     })
     expect(() => PlatformServerSkuSchema.parse({ ...platformSku, monthlyRent: '720,000' })).toThrow()
     expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: '-1.000' })).toThrow()
+    expect(() => PlatformServerSkuSchema.parse({ ...platformSku, monthlyRent: '720.0000' })).toThrow()
+    expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: '8796093022208.001' })).toThrow()
+    expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: '9007199254740.992' })).toThrow()
+    expect(() =>
+      PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: Number('8796093022208.001') })
+    ).toThrow()
+  })
+
+  it('rejects SKU inventory above the server-controlled total', () => {
+    expect(() => PlatformServerSkuSchema.parse({ ...platformSku, availableInventory: 5 })).toThrow()
   })
 
   it('uses the backend invitation range and JSON contract', async () => {
@@ -121,7 +195,7 @@ describe('reward referral and platform hosting contracts', () => {
       .mockResolvedValueOnce({ code: 0, data: { acknowledgment: 'Invitation request received.' } })
       .mockResolvedValueOnce({ code: 0, data: [pendingInvitation] })
 
-    await expect(createEmailInvitation('friend@example.com', 'invite-request-1')).resolves.toEqual({
+    await expect(createEmailInvitation('friend@example.com')).resolves.toEqual({
       acknowledgment: 'Invitation request received.',
     })
     await expect(listEmailInvitations(30)).resolves.toMatchObject([{ id: '101', status: 'PENDING' }])
@@ -133,10 +207,7 @@ describe('reward referral and platform hosting contracts', () => {
         method: 'POST',
         body: { email: 'friend@example.com' },
         retry: 0,
-        headers: expect.objectContaining({
-          Authorization: 'Bearer test-access-token',
-          'Idempotency-Key': 'invite-request-1',
-        }),
+        headers: { Authorization: 'Bearer test-access-token' },
       })
     )
     expect(mocks.ofetch).toHaveBeenNthCalledWith(
@@ -149,12 +220,14 @@ describe('reward referral and platform hosting contracts', () => {
   it('uses platform hosting paths, real mutation bodies, and no POST retries', async () => {
     mocks.ofetch
       .mockResolvedValueOnce({ code: 0, data: [platformSku] })
+      .mockResolvedValueOnce({ code: 0, data: [platformLease] })
       .mockResolvedValueOnce({ code: 0, data: platformLease })
       .mockResolvedValueOnce({ code: 0, data: { ...platformLease, autoRenew: false } })
 
     await expect(listPlatformServerSkus()).resolves.toMatchObject([{ id: '42', monthlyRent: 720 }])
+    await expect(listPlatformServerLeases()).resolves.toMatchObject([{ id: '88', autoRenew: true }])
     await expect(rentPlatformServer('42', 'rent-request-1')).resolves.toMatchObject({ id: '88', autoRenew: true })
-    await expect(setLeaseAutoRenew('88', false, 'renew-request-1')).resolves.toMatchObject({
+    await expect(setLeaseAutoRenew('88', false)).resolves.toMatchObject({
       id: '88',
       autoRenew: false,
     })
@@ -167,16 +240,21 @@ describe('reward referral and platform hosting contracts', () => {
     expect(mocks.ofetch).toHaveBeenNthCalledWith(
       2,
       'https://kod.test/api/compute/platform-hosting/leases',
-      expect.objectContaining({ method: 'POST', body: { skuId: '42', requestId: 'rent-request-1' }, retry: 0 })
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-access-token' }) })
     )
     expect(mocks.ofetch).toHaveBeenNthCalledWith(
       3,
+      'https://kod.test/api/compute/platform-hosting/leases',
+      expect.objectContaining({ method: 'POST', body: { skuId: '42', requestId: 'rent-request-1' }, retry: 0 })
+    )
+    expect(mocks.ofetch).toHaveBeenNthCalledWith(
+      4,
       'https://kod.test/api/compute/platform-hosting/leases/88/auto-renew',
       expect.objectContaining({
         method: 'POST',
         body: { enabled: false },
         retry: 0,
-        headers: expect.objectContaining({ 'Idempotency-Key': 'renew-request-1' }),
+        headers: { Authorization: 'Bearer test-access-token' },
       })
     )
   })

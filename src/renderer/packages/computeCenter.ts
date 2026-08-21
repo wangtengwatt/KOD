@@ -54,6 +54,9 @@ export interface ComputeAccount {
   email: string
   cnyBalance: number
   availableCardHours: number
+  spendableCardHours: number
+  redeemableCardHours: number
+  rewardCardHours: number
   frozenCardHours: number
   lifetimeIncome: number
   lifetimeConsumption: number
@@ -315,15 +318,101 @@ export interface ComputeReferralReward {
   createTime: string
 }
 
-const contractDecimalPattern = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/
-const contractDecimalWire = z.union([z.number().finite(), z.string().regex(contractDecimalPattern)])
-const contractNonnegativeDecimal = contractDecimalWire
-  .transform((value) => Number(value))
-  .pipe(z.number().finite().nonnegative())
+const contractDecimalPattern = /^\d{1,17}(?:\.\d{1,3})?$/
+const maxSafeContractThousandths = BigInt(Number.MAX_SAFE_INTEGER)
+const maxUnambiguousNumericContractValue = 2 ** 43
+const contractNonnegativeDecimal = z
+  .union([z.number().finite().nonnegative(), z.string()])
+  .transform((input, context) => {
+    if (typeof input === 'number' && input >= maxUnambiguousNumericContractValue) {
+      context.addIssue({ code: 'custom', message: 'numeric value exceeds unambiguous thousandth precision' })
+      return z.NEVER
+    }
+    const text = String(input)
+    if (!contractDecimalPattern.test(text)) {
+      context.addIssue({ code: 'custom', message: 'value must be a nonnegative DECIMAL(20,3)' })
+      return z.NEVER
+    }
+    const [whole, fraction = ''] = text.split('.')
+    const thousandths = BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0'))
+    if (thousandths > maxSafeContractThousandths) {
+      context.addIssue({ code: 'custom', message: 'value exceeds the exact UI number range' })
+      return z.NEVER
+    }
+    const value = Number(text)
+    if (value.toFixed(3) !== `${whole}.${fraction.padEnd(3, '0')}`) {
+      context.addIssue({ code: 'custom', message: 'value cannot round-trip through the UI number type' })
+      return z.NEVER
+    }
+    return value
+  })
 const contractLongId = z
   .union([z.string().regex(/^[1-9]\d*$/), z.number().int().positive().safe()])
   .transform((value) => String(value))
-const contractDateTime = z.string().min(1)
+const contractDateTime = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$/)
+  .refine((value) => z.iso.datetime({ local: true }).safeParse(value).success, { message: 'invalid local date-time' })
+const contractNumber = z
+  .union([z.number().finite(), z.string().regex(/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/)])
+  .transform((value) => Number(value))
+  .pipe(z.number().finite())
+const contractNonnegativeNumber = contractNumber.pipe(z.number().nonnegative())
+const contractCount = z.number().int().nonnegative().safe()
+
+export const ComputeAccountSchema: z.ZodType<ComputeAccount> = z
+  .object({
+    userId: z.number().int().positive().safe(),
+    email: z.string().min(1),
+    cnyBalance: contractNonnegativeNumber,
+    availableCardHours: contractNonnegativeDecimal,
+    spendableCardHours: contractNonnegativeDecimal,
+    redeemableCardHours: contractNonnegativeDecimal,
+    rewardCardHours: contractNonnegativeDecimal,
+    frozenCardHours: contractNonnegativeDecimal,
+    lifetimeIncome: contractNonnegativeDecimal,
+    lifetimeConsumption: contractNonnegativeDecimal,
+    rentalIncome: contractNonnegativeDecimal,
+    rentalIncomeCnyEquivalent: contractNonnegativeNumber,
+    commissionIncome: contractNonnegativeDecimal,
+    pendingCommission: contractNonnegativeDecimal,
+    totalIncomeCny: contractNonnegativeNumber,
+    invitedCount: contractCount,
+    apiSalesIncome: contractNonnegativeDecimal,
+    withdrawableCardHours: contractNonnegativeDecimal,
+    supplierStatus: z.string().min(1),
+    identityStatus: z.string().min(1),
+    isAdmin: z.boolean(),
+    roles: z.array(z.enum(['BUYER', 'SUPPLIER', 'ADMIN'])),
+    deviceCounts: z.object({
+      PENDING: contractCount,
+      DEPLOYING: contractCount,
+      RUNNING: contractCount,
+      PENDING_ACTION: contractCount,
+    }),
+    gpuAssetCounts: z.object({
+      PENDING: contractCount,
+      REJECTED: contractCount,
+      RUNNING: contractCount,
+      PENDING_DELIVERY: contractCount,
+      ACTIVE_RENTAL: contractCount,
+      PENDING_ACTION: contractCount,
+      OFFLINE: contractCount,
+    }),
+    cardHourCnyRate: contractNonnegativeNumber,
+    cardHourRedeemRate: contractNonnegativeNumber,
+    unitName: z.string().min(1),
+    currency: z.string().min(1),
+    unreadNotifications: contractCount,
+    unreadOrderMessages: contractCount.optional(),
+  })
+  .passthrough()
+  .refine((value) => value.availableCardHours === value.spendableCardHours, {
+    message: 'available and spendable card hours must match',
+  })
+  .refine((value) => value.spendableCardHours <= value.redeemableCardHours + value.rewardCardHours, {
+    message: 'spendable card hours cannot exceed qualified card hours',
+  })
 
 export const EmailInvitationSchema = z.object({
   id: contractLongId,
@@ -342,27 +431,32 @@ export type EmailInvitation = z.infer<typeof EmailInvitationSchema>
 
 const EmailInvitationReceiptSchema = z.object({ acknowledgment: z.string().min(1) })
 
-export const PlatformServerSkuSchema = z.object({
-  id: contractLongId,
-  skuCode: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string(),
-  region: z.string().min(1),
-  gpuModel: z.string().min(1),
-  gpuMemoryGb: z.number().int().nonnegative(),
-  gpuCount: z.number().int().positive(),
-  cpuDescription: z.string(),
-  ramGb: z.number().int().nonnegative(),
-  storageGb: z.number().int().nonnegative(),
-  networkDescription: z.string(),
-  monthlyRent: contractNonnegativeDecimal,
-  platformSalePrice: contractNonnegativeDecimal,
-  packageDurationHours: z.number().int().positive(),
-  deliveryDeadlineHours: z.number().int().nonnegative(),
-  totalInventory: z.number().int().nonnegative(),
-  availableInventory: z.number().int().nonnegative(),
-  status: z.literal('ACTIVE'),
-})
+export const PlatformServerSkuSchema = z
+  .object({
+    id: contractLongId,
+    skuCode: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string(),
+    region: z.string().min(1),
+    gpuModel: z.string().min(1),
+    gpuMemoryGb: z.number().int().nonnegative(),
+    gpuCount: z.number().int().positive(),
+    cpuDescription: z.string(),
+    ramGb: z.number().int().nonnegative(),
+    storageGb: z.number().int().nonnegative(),
+    networkDescription: z.string(),
+    monthlyRent: contractNonnegativeDecimal,
+    platformSalePrice: contractNonnegativeDecimal,
+    packageDurationHours: z.number().int().positive(),
+    deliveryDeadlineHours: z.number().int().nonnegative(),
+    totalInventory: z.number().int().nonnegative(),
+    availableInventory: z.number().int().nonnegative(),
+    status: z.literal('ACTIVE'),
+  })
+  .refine((value) => value.availableInventory <= value.totalInventory, {
+    path: ['availableInventory'],
+    message: 'available inventory cannot exceed total inventory',
+  })
 export type PlatformServerSku = z.infer<typeof PlatformServerSkuSchema>
 
 export const PlatformServerLeaseSchema = z.object({
@@ -387,6 +481,7 @@ export type PlatformServerLease = z.infer<typeof PlatformServerLeaseSchema>
 
 const EmailInvitationListSchema = z.array(EmailInvitationSchema)
 const PlatformServerSkuListSchema = z.array(PlatformServerSkuSchema)
+export const PlatformServerLeaseListSchema = z.array(PlatformServerLeaseSchema)
 
 export type CardHourAssetType = 'STANDARD' | 'SPECIFIC'
 export type CardHourMarketType = 'PRIMARY_SALE' | 'IDLE_TRANSFER' | 'RFQ'
@@ -780,14 +875,14 @@ export function getComputeProductImageUrl(productId: number, imageId: number) {
 }
 
 export function getComputeAccount() {
-  return request<ComputeAccount>('/api/compute/account')
+  return request<unknown>('/api/compute/account').then((data) => ComputeAccountSchema.parse(data))
 }
 
 export function purchaseCardHours(cardHours: number) {
-  return request<ComputeAccount>('/api/compute/account/purchase', {
+  return request<unknown>('/api/compute/account/purchase', {
     method: 'POST',
     body: { cardHours },
-  })
+  }).then((data) => ComputeAccountSchema.parse(data))
 }
 
 export function listComputeLedger() {
@@ -835,11 +930,10 @@ function localDateTime(date: Date) {
   )}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
 }
 
-export function createEmailInvitation(email: string, requestId: string) {
+export function createEmailInvitation(email: string) {
   return request<unknown>('/api/compute/referrals/email-invites', {
     method: 'POST',
     body: { email },
-    headers: { 'Idempotency-Key': requestId },
     retry: 0,
   }).then((data) => EmailInvitationReceiptSchema.parse(data))
 }
@@ -860,6 +954,12 @@ export function listPlatformServerSkus() {
   )
 }
 
+export function listPlatformServerLeases() {
+  return request<unknown>('/api/compute/platform-hosting/leases').then((data) =>
+    PlatformServerLeaseListSchema.parse(data)
+  )
+}
+
 export function rentPlatformServer(skuId: string, requestId: string) {
   return request<unknown>('/api/compute/platform-hosting/leases', {
     method: 'POST',
@@ -868,11 +968,10 @@ export function rentPlatformServer(skuId: string, requestId: string) {
   }).then((data) => PlatformServerLeaseSchema.parse(data))
 }
 
-export function setLeaseAutoRenew(leaseId: string, enabled: boolean, requestId: string) {
+export function setLeaseAutoRenew(leaseId: string, enabled: boolean) {
   return request<unknown>(`/api/compute/platform-hosting/leases/${encodeURIComponent(leaseId)}/auto-renew`, {
     method: 'POST',
     body: { enabled },
-    headers: { 'Idempotency-Key': requestId },
     retry: 0,
   }).then((data) => PlatformServerLeaseSchema.parse(data))
 }

@@ -89,41 +89,117 @@ export const WalletSchema = WalletWireSchema.transform((value) => ({
   historicalConsumption: decimalNumber.parse(value.historical_consumption),
 }))
 
-const snakeCaseCardHourAccountSchema = z.object({
-  spendable_card_hours: decimalWire,
-  redeemable_card_hours: decimalWire,
-  reward_card_hours: decimalWire,
-})
-const camelCaseCardHourAccountSchema = z.object({
-  spendableCardHours: decimalWire,
-  redeemableCardHours: decimalWire,
-  rewardCardHours: decimalWire,
+const cardHourDecimalPattern = /^\d{1,17}(?:\.\d{1,3})?$/
+const maxSafeCardHourThousandths = BigInt(Number.MAX_SAFE_INTEGER)
+const maxUnambiguousNumericCardHours = 2 ** 43
+const cardHourDecimalWire = z.union([z.number().finite().nonnegative(), z.string()]).transform((input, context) => {
+  if (typeof input === 'number' && input >= maxUnambiguousNumericCardHours) {
+    context.addIssue({ code: 'custom', message: 'numeric card hours exceed unambiguous thousandth precision' })
+    return z.NEVER
+  }
+  const text = String(input)
+  if (!cardHourDecimalPattern.test(text)) {
+    context.addIssue({ code: 'custom', message: 'card hours must be a nonnegative DECIMAL(20,3)' })
+    return z.NEVER
+  }
+  const [whole, fraction = ''] = text.split('.')
+  const thousandths = BigInt(whole) * 1000n + BigInt(fraction.padEnd(3, '0'))
+  if (thousandths > maxSafeCardHourThousandths) {
+    context.addIssue({ code: 'custom', message: 'card hours exceed the exact UI number range' })
+    return z.NEVER
+  }
+  const value = Number(text)
+  if (value.toFixed(3) !== `${whole}.${fraction.padEnd(3, '0')}`) {
+    context.addIssue({ code: 'custom', message: 'card hours cannot round-trip through the UI number type' })
+    return z.NEVER
+  }
+  return { thousandths, value }
 })
 
-export const CardHourAccountWireSchema = z
-  .union([snakeCaseCardHourAccountSchema, camelCaseCardHourAccountSchema])
-  .transform((value) =>
-    'spendable_card_hours' in value
-      ? {
-          spendableCardHours: value.spendable_card_hours,
-          redeemableCardHours: value.redeemable_card_hours,
-          rewardCardHours: value.reward_card_hours,
-        }
-      : value
-  )
-export const CardHourAccountSchema = CardHourAccountWireSchema.transform((value) => ({
-  availableCardHours: nonnegativeNumber.parse(value.spendableCardHours),
-  spendableCardHours: nonnegativeNumber.parse(value.spendableCardHours),
-  redeemableCardHours: nonnegativeNumber.parse(value.redeemableCardHours),
-  rewardCardHours: nonnegativeNumber.parse(value.rewardCardHours),
-})).refine((value) => value.spendableCardHours <= value.redeemableCardHours + value.rewardCardHours + 1e-9, {
-  message: 'spendable card hours cannot exceed qualified card hours',
-})
-export type CardHourBalances = z.infer<typeof CardHourAccountSchema>
+const cardTimeAccountAliasesSchema = z
+  .object({
+    available_card_hours: cardHourDecimalWire.optional(),
+    availableCardHours: cardHourDecimalWire.optional(),
+    spendable_card_hours: cardHourDecimalWire.optional(),
+    spendableCardHours: cardHourDecimalWire.optional(),
+    redeemable_card_hours: cardHourDecimalWire.optional(),
+    redeemableCardHours: cardHourDecimalWire.optional(),
+    reward_card_hours: cardHourDecimalWire.optional(),
+    rewardCardHours: cardHourDecimalWire.optional(),
+  })
+  .passthrough()
+  .superRefine((value, context) => {
+    const pairs = [
+      ['available_card_hours', 'availableCardHours'],
+      ['spendable_card_hours', 'spendableCardHours'],
+      ['redeemable_card_hours', 'redeemableCardHours'],
+      ['reward_card_hours', 'rewardCardHours'],
+    ] as const
+    for (const [snake, camel] of pairs) {
+      if (value[snake] && value[camel] && value[snake].thousandths !== value[camel].thousandths) {
+        context.addIssue({ code: 'custom', path: [camel], message: `${snake} and ${camel} must match` })
+      }
+    }
+    const qualifiedAliases = [
+      value.spendable_card_hours,
+      value.spendableCardHours,
+      value.redeemable_card_hours,
+      value.redeemableCardHours,
+      value.reward_card_hours,
+      value.rewardCardHours,
+    ]
+    const hasQualifiedAlias = qualifiedAliases.some(Boolean)
+    const spendable = value.spendable_card_hours ?? value.spendableCardHours
+    const redeemable = value.redeemable_card_hours ?? value.redeemableCardHours
+    const reward = value.reward_card_hours ?? value.rewardCardHours
+    const available = value.available_card_hours ?? value.availableCardHours
+    if (hasQualifiedAlias && (!spendable || !redeemable || !reward)) {
+      context.addIssue({ code: 'custom', message: 'all qualified card-hour balances are required' })
+    }
+    if (!hasQualifiedAlias && !available) {
+      context.addIssue({ code: 'custom', message: 'available card hours are required' })
+    }
+    if (spendable && redeemable && reward && spendable.thousandths > redeemable.thousandths + reward.thousandths) {
+      context.addIssue({ code: 'custom', message: 'spendable card hours cannot exceed qualified card hours' })
+    }
+    if (available && spendable && available.thousandths !== spendable.thousandths) {
+      context.addIssue({
+        code: 'custom',
+        path: ['availableCardHours'],
+        message: 'available and spendable hours must match',
+      })
+    }
+  })
+  .transform((value) => {
+    const spendable = value.spendable_card_hours ?? value.spendableCardHours
+    const redeemable = value.redeemable_card_hours ?? value.redeemableCardHours
+    const reward = value.reward_card_hours ?? value.rewardCardHours
+    if (spendable && redeemable && reward) {
+      return {
+        availableCardHours: spendable.value,
+        spendableCardHours: spendable.value,
+        redeemableCardHours: redeemable.value,
+        rewardCardHours: reward.value,
+      }
+    }
+    return { availableCardHours: (value.available_card_hours ?? value.availableCardHours)?.value as number }
+  })
 
-export const CardTimeAccountWireSchema = CardHourAccountWireSchema
-export const CardTimeAccountSchema = CardHourAccountSchema
-export type CardTimeAccount = CardHourBalances
+export interface CardHourBalances {
+  availableCardHours: number
+  spendableCardHours: number
+  redeemableCardHours: number
+  rewardCardHours: number
+}
+export type CardTimeAccount = CardHourBalances | { availableCardHours: number }
+
+export const CardTimeAccountWireSchema = cardTimeAccountAliasesSchema
+export const CardTimeAccountSchema = cardTimeAccountAliasesSchema
+export const CardHourAccountWireSchema = cardTimeAccountAliasesSchema.refine(
+  (value): value is CardHourBalances => 'spendableCardHours' in value,
+  { message: 'qualified card-hour balances are required' }
+)
+export const CardHourAccountSchema = CardHourAccountWireSchema
 
 export const RewardedAdStatusWireSchema = z
   .object({
@@ -311,7 +387,7 @@ async function request<T extends z.ZodType>(
       const responseMessage = ErrorEnvelopeSchema.safeParse(response._data)
       const serverMessage = responseMessage.success ? responseMessage.data.message : undefined
       const missingFeatureRoute =
-        path.startsWith('/api/user/compute/') &&
+        (path === '/api/compute/account' || path.startsWith('/api/user/compute/')) &&
         (response.status === 404 || (response.status === 500 && /no static resource/i.test(serverMessage ?? '')))
       if (missingFeatureRoute) {
         throw new WalletApiError('当前服务端尚未开通卡时奖励', 'unsupported', undefined, response.status)
@@ -342,10 +418,18 @@ async function request<T extends z.ZodType>(
 function historyParams(page: number, pageSize: number) {
   return { page: positiveIntegerInput.parse(page), pageSize: positiveIntegerInput.parse(pageSize) }
 }
+async function getCardTimeAccount() {
+  try {
+    return await request('/api/compute/account', CardTimeAccountSchema, { retry: 0 })
+  } catch (error) {
+    if (!(error instanceof WalletApiError) || error.kind !== 'unsupported') throw error
+    return request('/api/user/compute/account', CardTimeAccountSchema, { retry: 0 })
+  }
+}
 export const walletApi = {
   getTopupInfo: () => request('/api/user/topup/info', TopupInfoSchema),
   getWallet: () => request('/api/user/wallet', WalletSchema),
-  getCardTimeAccount: () => request('/api/user/compute/account', CardTimeAccountSchema, { retry: 0 }),
+  getCardTimeAccount,
   getRewardedAdStatus: () => request('/api/user/compute/ad-reward/status', RewardedAdStatusWireSchema, { retry: 0 }),
   startRewardedAd: (campaignId: string) =>
     request('/api/user/compute/ad-reward/start', RewardedAdWatchSchema, {
