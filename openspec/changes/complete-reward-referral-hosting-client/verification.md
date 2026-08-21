@@ -209,6 +209,17 @@ The fresh backend full suite passes 154/154 across 35 suites with no failures, e
 
 Strict OpenSpec validation passes for client and backend. Final scans again report zero production video-sensitive additions, zero protected realtime-price changes, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video-production files; both range diff checks pass.
 
+## Fourteenth independent cross-branch review repair
+
+A fourteenth completely fresh read-only reviewer covered client `f97c615..4381c9b` and backend `f37e8cb..184771c`; it did not inherit an earlier verdict. It reported no Critical findings and two Important findings. The client required no production change; the repaired backend head is `086ab50`:
+
+- account deletion now locks the user's active platform leases in deterministic ID order before tombstoning, stops the managed node/product intake, disables auto-renew, and transitions each lease to `STOPPING`. Existing obligations can drain through the normal release path, while a deleted account cannot accept new work or incur another renewal debit;
+- RFQ acceptance now locks the buyer and every quoting seller together through the existing globally sorted `sys_user`/legacy/qualified wallet participant helper before payment, freeze release, or delivery mutation. Alternate listings are processed in listing-ID order, so reciprocal RFQ acceptances cannot each hold one selected seller wallet while waiting for the other.
+
+The account-deletion regression verifies that an active lease is stopped before account tombstoning. The RFQ regression verifies the complete buyer/seller participant vector is deduplicated and globally sorted before any incremental wallet mutation. Focused tests pass, and the fresh backend full suite passes 156/156 across 35 suites with no failures, errors, or skips. Packaging passes and produces a 121,137,046-byte JAR; the seven video suites remain 19/19 without a real upstream key.
+
+The final client remains unchanged: its 11-file target set passes 130/130, TypeScript check passes, the full suite remains 1,475 passed, the same six classified baseline failures, and 54 skipped out of 1,535 tests, and the production build passes with 5,352/82/15,029 transformed modules. Both strict OpenSpec validations pass. Security, video, protected-price, secret, and range diff scans remain zero/clean.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
