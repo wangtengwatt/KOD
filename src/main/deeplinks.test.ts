@@ -54,6 +54,7 @@ describe('Kod deep links', () => {
       path: `/compute-center?invite=${code}`,
     })
     expect(parseDeepLink(`kod://compute/invite?code=${code}&inviter=admin`)).toBeNull()
+    expect(parseDeepLink(`kod://compute/invite?code=${code}&code=${'f'.repeat(32)}`)).toBeNull()
     expect(parseDeepLink('kod://compute/invite?code=login-invite-code')).toBeNull()
   })
 })

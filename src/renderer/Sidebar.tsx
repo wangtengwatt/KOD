@@ -20,6 +20,7 @@ import Divider from './components/common/Divider'
 import { ScalableIcon } from './components/common/ScalableIcon'
 import SessionAttachmentRagDevPane from './components/dev/SessionAttachmentRagDevPane'
 import ThemeSwitchButton from './components/dev/ThemeSwitchButton'
+import { ReferralDrawerLauncher } from './components/referrals/ReferralDrawer'
 import { SidebarBrand } from './components/SidebarBrand'
 import SessionList from './components/session/SessionList'
 import TaskSessionList from './components/session/TaskSessionList'
@@ -280,6 +281,8 @@ export default function Sidebar() {
                 <ScalableIcon icon={IconCpu} size={20} />
               </ActionIcon>
 
+              <ReferralDrawerLauncher compact onOpened={() => setShowSidebar(false)} />
+
               <ActionIcon
                 variant="transparent"
                 color="chatbox-secondary"
@@ -312,6 +315,7 @@ export default function Sidebar() {
                 variant="light"
                 p="xs"
               />
+              <ReferralDrawerLauncher />
               <NavLink
                 c="chatbox-secondary"
                 className="rounded"

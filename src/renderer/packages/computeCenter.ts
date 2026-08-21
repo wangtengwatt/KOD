@@ -284,8 +284,8 @@ export interface ComputeWithdrawal {
 export interface ComputeReferralProfile {
   inviteCode: string
   inviteLink: string
-  rewardRate: number
-  rewardCap: number
+  registrationLink: string
+  rewardPolicy: 'LEGACY_READ_ONLY'
   invitedCount: number
   pendingCommission: number
   paidCommission: number

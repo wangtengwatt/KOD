@@ -43,7 +43,9 @@ export function parseDeepLink(link: string): DeepLinkAction | null {
 
     if (url.hostname === 'compute' && url.pathname === '/invite') {
       if ([...url.searchParams.keys()].some((key) => key !== 'code')) return null
-      const code = url.searchParams.get('code')?.trim().toLowerCase()
+      const codeValues = url.searchParams.getAll('code')
+      if (codeValues.length !== 1) return null
+      const code = codeValues[0]?.trim().toLowerCase()
       if (!code?.match(/^[0-9a-f]{32}$/)) return null
       return { type: 'navigate', path: `/compute-center?invite=${encodeURIComponent(code)}` }
     }

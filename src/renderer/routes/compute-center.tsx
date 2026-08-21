@@ -34,7 +34,6 @@ import {
   IconDatabaseDollar,
   IconExternalLink,
   IconGauge,
-  IconGift,
   IconReceipt,
   IconRefresh,
   IconServer,
@@ -75,7 +74,6 @@ import {
   type ComputePackagePurchase,
   type ComputeProduct,
   type ComputeReferralPreview,
-  type ComputeReferralProfile,
   type ComputeReferralReward,
   type ComputeReservation,
   type ComputeSupplier,
@@ -106,7 +104,6 @@ import {
   getComputeMarketPrices,
   getComputePackageCredential,
   getComputeProductImageUrl,
-  getComputeReferralProfile,
   getComputeSupplier,
   grantAdminCardHours,
   listAdminIdentities,
@@ -494,7 +491,7 @@ function ComputeCenterPage() {
   )
 }
 
-function ReferralInviteModal({
+export function ReferralInviteModal({
   opened,
   preview,
   loading,
@@ -524,8 +521,7 @@ function ReferralInviteModal({
             <Alert color={preview.canBind ? 'blue' : 'orange'}>
               邀请人：<b>{preview.inviterEmail}</b>
               <br />
-              绑定后永久不能更改。你首次充值成功并经过 7 天确认期后，邀请人将获得充值金额 5% 的人民币返佣，单人最高
-              ¥100。
+              绑定后永久不能更改。邀请关系和奖励以服务端验证结果为准。
             </Alert>
             {!preview.canBind && <Text c="red">{preview.reason}</Text>}
           </>
@@ -742,15 +738,7 @@ function Hero({
   )
 }
 
-function AssetDashboard({
-  account,
-  referral,
-  onOpen,
-}: {
-  account?: ComputeAccount
-  referral?: ComputeReferralProfile
-  onOpen: (value: string) => void
-}) {
+export function AssetDashboard({ account, onOpen }: { account?: ComputeAccount; onOpen: (value: string) => void }) {
   if (!account) return <Text c="chatbox-tertiary">正在加载账户信息…</Text>
 
   const supplierEntryLabel =
@@ -759,7 +747,7 @@ function AssetDashboard({
   return (
     <Stack gap="md">
       <Section title="我的收益">
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <Card withBorder padding="md">
             <Text size="sm" c="chatbox-tertiary">
               累计收益
@@ -768,7 +756,7 @@ function AssetDashboard({
               ¥{formatNumber(account.totalIncomeCny, 4)}
             </Text>
             <Text size="xs" c="chatbox-tertiary">
-              租金按当前回购汇率折算后与佣金合计
+              服务端账户累计收益
             </Text>
           </Card>
           <Card withBorder padding="md">
@@ -780,28 +768,6 @@ function AssetDashboard({
             </Text>
             <Text size="xs" c="chatbox-tertiary">
               约 ¥{formatNumber(account.rentalIncomeCnyEquivalent, 4)}
-            </Text>
-          </Card>
-          <Card withBorder padding="md">
-            <Text size="sm" c="chatbox-tertiary">
-              佣金收益
-            </Text>
-            <Text size="xl" fw={700}>
-              ¥{formatNumber(account.commissionIncome, 4)}
-            </Text>
-            <Text size="xs" c="chatbox-tertiary">
-              已进入人民币钱包
-            </Text>
-          </Card>
-          <Card withBorder padding="md">
-            <Text size="sm" c="chatbox-tertiary">
-              待发放佣金
-            </Text>
-            <Text size="xl" fw={700}>
-              ¥{formatNumber(account.pendingCommission, 4)}
-            </Text>
-            <Text size="xs" c="chatbox-tertiary">
-              首次充值成功后等待 7 天
             </Text>
           </Card>
         </SimpleGrid>
@@ -821,56 +787,6 @@ function AssetDashboard({
         <Text size="xs" c="chatbox-tertiary" mt="sm">
           “可发布”表示资源审核通过；“待交付、运行中、待处理”来自你作为供应方的租赁订单。平台不替商家远程部署 GPU。
         </Text>
-      </Section>
-
-      <Section title="邀请好友返佣">
-        <Paper withBorder p="md" radius="md">
-          <Stack gap="sm">
-            <Group gap="sm">
-              <ThemeIcon variant="light" color="violet">
-                <IconGift size={18} />
-              </ThemeIcon>
-              <Box>
-                <Text fw={700}>首次充值返佣 5%</Text>
-                <Text size="xs" c="chatbox-tertiary">
-                  被邀请人确认绑定且首次充值后，等待 7 天发放；每名好友最高奖励 ¥100。
-                </Text>
-              </Box>
-            </Group>
-            {referral ? (
-              <>
-                <TextInput
-                  label="我的专属邀请链接"
-                  readOnly
-                  value={referral.inviteLink}
-                  rightSection={
-                    <ActionIcon
-                      variant="subtle"
-                      aria-label="复制邀请链接"
-                      onClick={() => copyToClipboard(referral.inviteLink)}
-                    >
-                      <IconCopy size={17} />
-                    </ActionIcon>
-                  }
-                />
-                <Group gap="xl">
-                  <Metric label="已邀请" value={`${referral.invitedCount} 人`} />
-                  <Metric label="待发放" value={`¥${formatNumber(referral.pendingCommission, 4)}`} />
-                  <Metric label="已到账" value={`¥${formatNumber(referral.paidCommission, 4)}`} />
-                </Group>
-                {referral.bound && (
-                  <Text size="sm" c="chatbox-tertiary">
-                    我的邀请人：{referral.inviterEmail} · 绑定时间 {formatDate(referral.boundAt)}
-                  </Text>
-                )}
-              </>
-            ) : (
-              <Text size="sm" c="chatbox-tertiary">
-                正在生成专属邀请链接…
-              </Text>
-            )}
-          </Stack>
-        </Paper>
       </Section>
 
       <Section title="常用功能">
@@ -1591,7 +1507,6 @@ function AccountPanel({
   const packagesQuery = useQuery({ queryKey: ['compute', 'package-purchases'], queryFn: listComputePackagePurchases })
   const usageQuery = useQuery({ queryKey: ['compute', 'api-usage'], queryFn: listComputeApiUsage })
   const withdrawalsQuery = useQuery({ queryKey: ['compute', 'withdrawals'], queryFn: listComputeWithdrawals })
-  const referralQuery = useQuery({ queryKey: ['compute', 'referrals', 'me'], queryFn: getComputeReferralProfile })
   const referralRewardsQuery = useQuery({
     queryKey: ['compute', 'referrals', 'rewards'],
     queryFn: listComputeReferralRewards,
@@ -1603,7 +1518,7 @@ function AccountPanel({
 
   return (
     <Stack gap="md">
-      <AssetDashboard account={account} referral={referralQuery.data} onOpen={onOpen} />
+      <AssetDashboard account={account} onOpen={onOpen} />
 
       <Alert color="blue" title="官网充值与客户端共用同一人民币钱包">
         <Flex justify="space-between" align="center" gap="md" wrap="wrap">
@@ -1627,7 +1542,7 @@ function AccountPanel({
         <Tabs.List>
           <Tabs.Tab value="exchange">资产兑换</Tabs.Tab>
           <Tabs.Tab value="buybacks">回购记录</Tabs.Tab>
-          <Tabs.Tab value="rewards">邀请佣金明细</Tabs.Tab>
+          <Tabs.Tab value="rewards">历史邀请佣金</Tabs.Tab>
           <Tabs.Tab value="packages">Token 套餐</Tabs.Tab>
           <Tabs.Tab value="ledger">资产流水</Tabs.Tab>
         </Tabs.List>
