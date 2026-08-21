@@ -35,4 +35,4 @@
 - [x] 6.2 Build Windows desktop and Web shared renderer; sync Android and iOS renderer targets, recording native toolchain limits.
 - [ ] 6.3 Verify notifications and image previews on desktop and responsive narrow layout without leaking sensitive content.
 - [x] 6.4 Update and test the desktop launcher/shortcut against the final `suanlizhongxin_KOD` checkout with Node 22 and pnpm 10.33.0.
-- [ ] 6.5 Run `openspec validate enhance-compute-hosted-marketplace --strict`, inspect the final diff and push the verified client commits.
+- [x] 6.5 Run `openspec validate enhance-compute-hosted-marketplace --strict`, inspect the final diff and push the verified client commits.
