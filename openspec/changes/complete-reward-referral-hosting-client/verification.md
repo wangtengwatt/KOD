@@ -234,6 +234,17 @@ Fresh client verification used Node `v22.23.2`. The unchanged 11-file feature/vi
 
 Final scans report zero client forbidden upstream/key additions, zero protected realtime-price additions, zero client/backend added-secret matches, zero changed backend realtime-price files, and zero changed backend video/config production files. Both range diff checks pass.
 
+## Sixteenth independent cross-branch review repair
+
+A sixteenth completely fresh read-only reviewer covered client `f97c615..f4f6bb9` and backend `f37e8cb..608e20f`; it did not inherit an earlier verdict. It reported no Critical findings and two Important findings. The client required no production change; the repaired backend head is `3683d74`:
+
+- account deletion and every ordinary supplier creation/review or card-hour settlement path now share the sorted `sys_user` lifecycle boundary before wallet and business-row locking. Waiting continuations reject tombstoned participants, deletion cancels and precisely unfreezes the supplier's active card-hour listings, public inventory hides deleted sellers, and stopped/deleted API supply is classified but cannot charge or credit. Supplier, node, and product creation/review also recheck the lifecycle boundary, so a concurrent or later callback cannot recreate public supply after tombstoning;
+- RFQ quote and listing expiry is clamped to the earliest of 30 minutes, the RFQ's own `closes_at`, and the asset deadline. Acceptance includes `closes_at` in both snapshots and revalidates it after all participant-wallet waits, so an `OPEN` row or a later quote expiry cannot authorize a transaction after the RFQ has closed.
+
+Both principal regressions were demonstrated red before production repair: a deleted seller's listing remained in the public result and an RFQ past its own close advanced to a later payment check instead of returning the expired semantic error. After repair, `ComputeCardHourMarketQualifiedLedgerTest` passes 17/17, the eight related backend classes pass, and the fresh backend full suite passes 162/162 across 35 suites with no failures, errors, or skips. Packaging succeeds and produces a 121,139,193-byte executable JAR; the explicit seven-class server-side video suite passes 19/19 without a real upstream key.
+
+The client remains unchanged from `f4f6bb9`: its 11-file feature/video target passes 130/130, TypeScript check passes, changed-file Biome is clean, and the production build still passes with 5,352 main, 82 preload, and 15,029 renderer modules. The most recent full client suite remains 154 files with 1,475 passed, the same six classified baseline failures, and 54 skipped out of 1,535 tests. Both backend OpenSpec changes and the client change pass strict validation. Protected real-time-price source remains unchanged, added-line secret and forbidden-video scans are zero, and both repository range diff checks pass.
+
 ## Protected scope, credentials, and diff hygiene
 
 - Client `f97c615` versus the working branch has zero changed lines matching `ComputeMarketPrice`, `MarketPrice`, `/market-prices`, `prices`, or `实时行情` inside the two touched compute-center files. Backend `f37e8cb..HEAD` has zero changed realtime-price files.
