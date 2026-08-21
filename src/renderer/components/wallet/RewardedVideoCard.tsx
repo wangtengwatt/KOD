@@ -504,10 +504,17 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
       const activeWatch = watchRef.current
       const owner = watchOwnerRef.current
       if (!activeWatch || !isWatchOwnerCurrent(activeWatch, owner) || !endedRef.current) return
-      if (effectiveMillisecondsRef.current < requiredMilliseconds) {
+      if (effectiveMillisecondsRef.current < assetDurationSeconds * 1000) {
         eligibleRef.current = false
         autoClaimAttemptedRef.current = false
         setPlaybackNotice('服务端尚未确认完整播放，本次不能领取奖励。')
+        return
+      }
+      const remainingMinimumMilliseconds = activeWatch.startedAt * 1000 + requiredMilliseconds - Date.now()
+      if (remainingMinimumMilliseconds > 0) {
+        eligibleRef.current = false
+        autoClaimAttemptedRef.current = false
+        setPlaybackNotice(`视频已完整播放，请再等待 ${Math.ceil(remainingMinimumMilliseconds / 1000)} 秒后领取。`)
         return
       }
       if (video) await reportServerProgress(video.currentTime)

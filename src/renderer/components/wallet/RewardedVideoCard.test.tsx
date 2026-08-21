@@ -132,7 +132,7 @@ beforeEach(() => {
     campaignId: status.campaignId,
     videoUrl: status.videoUrl,
     minimumSeconds: status.minimumSeconds,
-    startedAt: Math.floor(Date.now() / 1000),
+    startedAt: Math.floor(Date.now() / 1000) - status.minimumSeconds,
     expiresAt: Math.floor(Date.now() / 1000) + 600,
     progressToken: 'progress-0',
   }))
@@ -510,6 +510,33 @@ describe('RewardedVideoCard', () => {
 
     expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
     expect(await screen.findByText('服务端尚未确认完整播放，本次不能领取奖励。')).toBeTruthy()
+  })
+
+  it('can complete a short asset after the longer server minimum wait has elapsed', async () => {
+    let wallClock = 1_800_000_000_000
+    vi.spyOn(Date, 'now').mockImplementation(() => wallClock)
+    mocks.getRewardedAdStatus.mockResolvedValue({ ...status, minimumSeconds: 5 })
+    mocks.startRewardedAd.mockResolvedValue({
+      watchId: 17,
+      campaignId: status.campaignId,
+      videoUrl: status.videoUrl,
+      minimumSeconds: 5,
+      startedAt: Math.floor(wallClock / 1000),
+      expiresAt: Math.floor(wallClock / 1000) + 600,
+      progressToken: 'progress-0',
+    })
+    renderCard()
+    const video = await openAd()
+
+    await completeAdvertisement(video)
+    expect(mocks.completeRewardedAd).not.toHaveBeenCalled()
+    expect(mocks.claimRewardedAd).not.toHaveBeenCalled()
+
+    wallClock += 5_000
+    fireEvent.click(screen.getByRole('button', { name: '领取奖励' }))
+
+    await waitFor(() => expect(mocks.completeRewardedAd).toHaveBeenCalledWith(17, 'progress-3'))
+    await waitFor(() => expect(mocks.claimRewardedAd.mock.calls[0]?.[0]).toBe(17))
   })
 
   it('does not claim when the completion receipt belongs to another watch', async () => {

@@ -39,7 +39,7 @@ const rewardedAdDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const rewardedAdInstant = z
   .string()
   .datetime({ offset: true })
-  .transform((value) => Math.floor(Date.parse(value) / 1000))
+  .transform((value) => Date.parse(value) / 1000)
 
 export const PayMethodWireSchema = z.object({
   name: z.string(),
