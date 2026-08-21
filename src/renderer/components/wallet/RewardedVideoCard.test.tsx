@@ -578,6 +578,29 @@ describe('RewardedVideoCard', () => {
     expect(onClaimed).toHaveBeenCalledWith(claimResult)
   })
 
+  it('does not invoke the previous identity claim callback after receipt invalidation finishes', async () => {
+    const onClaimed = vi.fn()
+    const { queryClient, rerenderCard } = renderCard(onClaimed, 'member-a@kod.test')
+    let releaseInvalidations!: () => void
+    const invalidationsBlocked = new Promise<void>((resolve) => {
+      releaseInvalidations = resolve
+    })
+    vi.spyOn(queryClient, 'invalidateQueries').mockImplementation(() => invalidationsBlocked)
+    const video = await openAd()
+
+    await completeAdvertisement(video)
+    await waitFor(() => expect(queryClient.invalidateQueries).toHaveBeenCalled())
+    rerenderCard('member-b@kod.test')
+    await act(async () => {
+      releaseInvalidations()
+      await invalidationsBlocked
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(onClaimed).not.toHaveBeenCalled()
+  })
+
   it('allows an explicit retry after a claim failure without duplicate success', async () => {
     const onClaimed = vi.fn()
     mocks.claimRewardedAd.mockRejectedValueOnce(new Error('临时网络错误')).mockResolvedValueOnce(claimResult)

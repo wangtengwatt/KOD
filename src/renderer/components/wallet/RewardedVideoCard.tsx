@@ -262,9 +262,13 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
       trackRewardedAd('rewarded_ad_claim', activeWatch, result.rewardCardHours)
       setClaimResult(result)
       await invalidateRewardReceipt(queryClient, identity)
+      if (!isWatchOwnerCurrent(activeWatch, owner)) return
       if (onClaimed)
         void Promise.resolve()
-          .then(() => onClaimed(result))
+          .then(() => {
+            if (!isWatchOwnerCurrent(activeWatch, owner)) return
+            return onClaimed(result)
+          })
           .catch(() => undefined)
     } catch (error) {
       if (!isWatchOwnerCurrent(activeWatch, owner)) return

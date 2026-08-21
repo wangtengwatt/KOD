@@ -37,6 +37,8 @@ const GENERIC_CONFIRMATION = '邀请请求已记录'
 const REWARD_NOTIFICATION_TYPE = 'REFERRAL_REGISTRATION_REWARDED'
 
 type DrawerView = 'invite' | 'tracking'
+type InviteRequest = { email: string; identity: string; epoch: number }
+type RewardReceipt = { content: string; identity: string }
 
 const invitationStatus = {
   PENDING: { label: '待处理', color: 'gray' },
@@ -84,8 +86,18 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState('')
   const [confirmation, setConfirmation] = useState('')
-  const [rewardReceipt, setRewardReceipt] = useState('')
+  const [rewardReceipt, setRewardReceipt] = useState<RewardReceipt | null>(null)
   const shownRewardNotification = useRef<number | null>(null)
+  const renderedIdentityRef = useRef(queryIdentity)
+  const resetIdentityRef = useRef(queryIdentity)
+  const currentIdentityRef = useRef(queryIdentity)
+  const identityEpochRef = useRef(0)
+  if (renderedIdentityRef.current !== queryIdentity) {
+    renderedIdentityRef.current = queryIdentity
+    identityEpochRef.current += 1
+    shownRewardNotification.current = null
+  }
+  currentIdentityRef.current = queryIdentity
 
   const profileQuery = useQuery({
     queryKey: computeKeys.referralProfile(queryIdentity),
@@ -104,16 +116,29 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
     refetchInterval: isLoggedIn ? 5000 : false,
   })
   const createMutation = useMutation({
-    mutationFn: createEmailInvitation,
-    onSuccess: () => {
+    mutationFn: ({ email }: InviteRequest) => createEmailInvitation(email),
+    onSuccess: (_receipt, request) => {
+      if (currentIdentityRef.current !== request.identity || identityEpochRef.current !== request.epoch) return
       setEmail('')
       setEmailError('')
       setConfirmation(GENERIC_CONFIRMATION)
     },
-    onError: () => {
+    onError: (_error, request) => {
+      if (currentIdentityRef.current !== request.identity || identityEpochRef.current !== request.epoch) return
       setConfirmation('暂时无法记录邀请，请稍后重试')
     },
   })
+
+  useEffect(() => {
+    if (resetIdentityRef.current === queryIdentity) return
+    resetIdentityRef.current = queryIdentity
+    setView('invite')
+    setEmail('')
+    setEmailError('')
+    setConfirmation('')
+    setRewardReceipt(null)
+    createMutation.reset()
+  }, [createMutation.reset, queryIdentity])
 
   useEffect(() => {
     const reward = notificationsQuery.data?.find(
@@ -124,7 +149,7 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
     )
     if (!reward) return
     shownRewardNotification.current = reward.id
-    setRewardReceipt(reward.content)
+    setRewardReceipt({ content: reward.content, identity: queryIdentity })
     void Promise.allSettled([
       walletIdentity
         ? invalidateRewardReceipt(queryClient, walletIdentity)
@@ -145,7 +170,7 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
       return
     }
     setEmailError('')
-    createMutation.mutate(normalizedEmail)
+    createMutation.mutate({ email: normalizedEmail, identity: queryIdentity, epoch: identityEpochRef.current })
   }
 
   const close = () => {
@@ -287,9 +312,14 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
           </Stack>
         )}
       </Drawer>
-      <Modal opened={Boolean(rewardReceipt)} onClose={() => setRewardReceipt('')} centered title="邀请奖励">
+      <Modal
+        opened={rewardReceipt?.identity === queryIdentity}
+        onClose={() => setRewardReceipt(null)}
+        centered
+        title="邀请奖励"
+      >
         <Alert color="green" icon={<IconCheck size={18} />}>
-          {rewardReceipt}
+          {rewardReceipt?.identity === queryIdentity ? rewardReceipt.content : null}
         </Alert>
       </Modal>
     </>

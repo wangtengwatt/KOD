@@ -2,11 +2,16 @@
 
 import { MantineProvider } from '@mantine/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComputeReferralProfile } from '@/packages/computeCenter'
 
 const mocks = vi.hoisted(() => ({
+  authState: {
+    accessToken: 'test-token',
+    refreshToken: 'test-refresh-token',
+    loginEmail: 'Member@Example.com',
+  },
   copyToClipboard: vi.fn(),
   createEmailInvitation: vi.fn(),
   getComputeReferralProfile: vi.fn(),
@@ -31,11 +36,7 @@ vi.mock('@/packages/kodApiOrigin', () => ({ getKodApiOrigin: () => 'https://kod.
 vi.mock('@/stores/authInfoStore', () => ({
   authInfoStore: { subscribe: vi.fn() },
   useAuthInfoStore: (selector: (state: { accessToken: string; refreshToken: string; loginEmail: string }) => unknown) =>
-    selector({
-      accessToken: 'test-token',
-      refreshToken: 'test-refresh-token',
-      loginEmail: 'Member@Example.com',
-    }),
+    selector(mocks.authState),
 }))
 
 import ReferralDrawer, { ReferralDrawerLauncher } from './ReferralDrawer'
@@ -71,18 +72,30 @@ function renderDrawer(ui = <ReferralDrawer opened onClose={() => {}} />) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <MantineProvider>{ui}</MantineProvider>
+    </QueryClientProvider>
+  )
   return {
     queryClient,
-    ...render(
-      <QueryClientProvider client={queryClient}>
-        <MantineProvider>{ui}</MantineProvider>
-      </QueryClientProvider>
-    ),
+    ...view,
+    rerenderDrawer: () =>
+      view.rerender(
+        <QueryClientProvider client={queryClient}>
+          <MantineProvider>
+            <ReferralDrawer opened onClose={() => {}} />
+          </MantineProvider>
+        </QueryClientProvider>
+      ),
   }
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.authState.accessToken = 'test-token'
+  mocks.authState.refreshToken = 'test-refresh-token'
+  mocks.authState.loginEmail = 'Member@Example.com'
   mocks.getComputeReferralProfile.mockResolvedValue(profile)
   mocks.listEmailInvitations.mockResolvedValue([])
   mocks.listComputeNotifications.mockResolvedValue([])
@@ -263,6 +276,57 @@ describe('ReferralDrawer', () => {
     renderDrawer(<ReferralDrawer opened={false} onClose={() => {}} />)
 
     expect(await screen.findByText('10 卡时已到账')).toBeTruthy()
+  })
+
+  it('clears receipts and ignores an earlier account invitation callback after identity changes', async () => {
+    mocks.listComputeNotifications
+      .mockResolvedValueOnce([
+        {
+          id: 503,
+          notificationType: 'REFERRAL_REGISTRATION_REWARDED',
+          title: 'A reward',
+          content: 'A reward receipt',
+          referenceType: 'REFERRAL',
+          referenceId: '103',
+          isRead: 0,
+          createTime: '2026-08-22T08:30:00',
+          readTime: null,
+        },
+      ])
+      .mockResolvedValue([])
+    let resolveInvitation!: (value: { acknowledgment: string }) => void
+    mocks.createEmailInvitation.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInvitation = resolve
+        })
+    )
+    const { rerenderDrawer } = renderDrawer()
+
+    expect(await screen.findByText('A reward receipt')).toBeTruthy()
+    const email = screen.getByRole('textbox') as HTMLInputElement
+    fireEvent.change(email, { target: { value: 'friend-a@example.com' } })
+    const form = email.closest('form')
+    expect(form).not.toBeNull()
+    if (!form) throw new Error('Invitation form is missing')
+    fireEvent.submit(form)
+    await waitFor(() => expect(mocks.createEmailInvitation.mock.calls[0]?.[0]).toBe('friend-a@example.com'))
+
+    mocks.authState.accessToken = 'token-b'
+    mocks.authState.refreshToken = 'refresh-b'
+    mocks.authState.loginEmail = 'member-b@example.com'
+    rerenderDrawer()
+
+    expect(screen.queryByText('A reward receipt')).toBeNull()
+    const accountBEmail = screen.getByRole('textbox') as HTMLInputElement
+    fireEvent.change(accountBEmail, { target: { value: 'friend-b@example.com' } })
+    await act(async () => {
+      resolveInvitation({ acknowledgment: 'Invitation request received.' })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(accountBEmail.value).toBe('friend-b@example.com')
   })
 
   it('opens from the first-level invitation launcher', async () => {
