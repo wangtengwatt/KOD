@@ -2,7 +2,7 @@
 
 import { MantineProvider } from '@mantine/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComputeAccount, ComputeGpuNode, PlatformServerSku } from '@/packages/computeCenter'
 
@@ -18,6 +18,27 @@ const mocks = vi.hoisted(() => ({
   listSupplierProducts: vi.fn(),
 }))
 
+const auth = vi.hoisted(() => {
+  type AuthState = { accessToken: string; refreshToken: string; loginEmail: string }
+  let state: AuthState = {
+    accessToken: 'test-token',
+    refreshToken: 'test-refresh-token',
+    loginEmail: 'member@example.com',
+  }
+  const listeners = new Set<() => void>()
+  return {
+    getState: () => state,
+    setState: (next: AuthState) => {
+      state = next
+      listeners.forEach((listener) => listener())
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+  }
+})
+
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const original = await importOriginal<typeof import('@tanstack/react-router')>()
   return {
@@ -31,11 +52,27 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 })
 
 vi.mock('@/hooks/useScreenChange', () => ({ useIsSmallScreen: () => false }))
-vi.mock('@/stores/authInfoStore', () => ({
-  authInfoStore: { getState: () => ({ accessToken: 'test-token' }), subscribe: vi.fn() },
-  useAuthInfoStore: (selector: (state: { accessToken: string; refreshToken: string; loginEmail: string }) => unknown) =>
-    selector({ accessToken: 'test-token', refreshToken: 'test-refresh-token', loginEmail: 'member@example.com' }),
-}))
+vi.mock('@/stores/authInfoStore', async () => {
+  const { useSyncExternalStore } = await import('react')
+  return {
+    authInfoStore: {
+      getState: auth.getState,
+      subscribe: (
+        selector: (state: ReturnType<typeof auth.getState>) => unknown,
+        listener: (next: unknown, previous: unknown) => void
+      ) => {
+        let previous = selector(auth.getState())
+        return auth.subscribe(() => {
+          const next = selector(auth.getState())
+          listener(next, previous)
+          previous = next
+        })
+      },
+    },
+    useAuthInfoStore: (selector: (state: ReturnType<typeof auth.getState>) => unknown) =>
+      useSyncExternalStore(auth.subscribe, () => selector(auth.getState())),
+  }
+})
 vi.mock('@/packages/computeCenter', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/packages/computeCenter')>()
   return {
@@ -155,6 +192,11 @@ const supplierNodes = [
 
 beforeEach(() => {
   vi.clearAllMocks()
+  auth.setState({
+    accessToken: 'test-token',
+    refreshToken: 'test-refresh-token',
+    loginEmail: 'member@example.com',
+  })
   mocks.getComputeAccount.mockResolvedValue(account)
   mocks.getComputeIdentity.mockResolvedValue({ status: 'APPROVED', verificationType: 'REAL' })
   mocks.getComputeSupplier.mockResolvedValue({ status: 'APPROVED', displayName: 'Test supplier' })
@@ -221,4 +263,36 @@ it('opens card-hour hosting from the authenticated compute-center navigation', a
   fireEvent.click(await screen.findByRole('textbox', { name: '已审核 GPU 资源' }))
   expect(await screen.findByText(/用户自有 RTX 4090/)).toBeTruthy()
   expect(screen.queryByText(/平台月租 RTX 4090/)).toBeNull()
+})
+
+it('switches a mounted compute center to identity-scoped account data', async () => {
+  mocks.getComputeAccount.mockImplementation(async () => ({
+    ...account,
+    email: auth.getState().loginEmail,
+    availableCardHours: auth.getState().loginEmail === 'second@example.com' ? 25 : 100,
+  }))
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MantineProvider>
+        <ComputeCenterPage />
+      </MantineProvider>
+    </QueryClientProvider>
+  )
+
+  expect(await screen.findByText('member@example.com')).toBeTruthy()
+
+  act(() => {
+    auth.setState({
+      accessToken: 'second-token',
+      refreshToken: 'second-refresh-token',
+      loginEmail: 'second@example.com',
+    })
+  })
+
+  expect(await screen.findByText('second@example.com')).toBeTruthy()
+  await waitFor(() => expect(screen.queryByText('member@example.com')).toBeNull())
+  expect(queryClient.getQueryData(['compute', 'second@example.com', 'account'])).toEqual(
+    expect.objectContaining({ email: 'second@example.com', availableCardHours: 25 })
+  )
 })

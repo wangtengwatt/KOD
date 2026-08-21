@@ -52,6 +52,7 @@ import { MarketplaceOrderWorkspace } from '@/components/compute/MarketplaceOrder
 import { PlatformHostingPanel } from '@/components/compute/PlatformHostingPanel'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
+import { useComputeQueryKey, useWalletIdentity } from '@/hooks/useWallet'
 import {
   acceptComputeTransfer,
   activateComputeApi,
@@ -149,7 +150,6 @@ import { addHoursToLocalDateTime, resolvePackageDurationHours } from '@/packages
 import { ORDER_MESSAGE_NOTIFICATION, shouldNotifyOrderUnread } from '@/packages/computeMarketplace/projections'
 import { copyToClipboard } from '@/packages/navigator'
 import platform from '@/platform'
-import { useAuthInfoStore } from '@/stores/authInfoStore'
 
 const computeSearchSchema = z.object({
   invite: z.string().max(64).optional(),
@@ -194,7 +194,9 @@ export function ComputeCenterPage() {
   const isSmallScreen = useIsSmallScreen()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const isLoggedIn = useAuthInfoStore((state) => Boolean(state.accessToken))
+  const identity = useWalletIdentity()
+  const computeQueryKey = useComputeQueryKey()
+  const isLoggedIn = identity !== null
   const [activeTab, setActiveTab] = useState('market')
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<FeedbackMessage | null>(null)
@@ -202,16 +204,16 @@ export function ComputeCenterPage() {
   const previousUnreadOrderMessages = useRef<number | null>(null)
   const closeMessage = useCallback(() => setMessage(null), [])
 
-  const configQuery = useQuery({ queryKey: ['compute', 'config'], queryFn: getComputeConfig })
-  const productsQuery = useQuery({ queryKey: ['compute', 'products'], queryFn: () => listComputeProducts() })
+  const configQuery = useQuery({ queryKey: computeQueryKey('config'), queryFn: getComputeConfig })
+  const productsQuery = useQuery({ queryKey: computeQueryKey('products'), queryFn: () => listComputeProducts() })
   const accountQuery = useQuery({
-    queryKey: ['compute', 'account'],
+    queryKey: computeQueryKey('account'),
     queryFn: getComputeAccount,
     enabled: isLoggedIn,
     refetchInterval: 5000,
   })
   const referralPreviewQuery = useQuery({
-    queryKey: ['compute', 'referral-preview', search.invite],
+    queryKey: computeQueryKey('referral-preview', search.invite),
     queryFn: () => previewComputeReferral(search.invite || ''),
     enabled: isLoggedIn && Boolean(search.invite),
     retry: false,
@@ -242,7 +244,7 @@ export function ComputeCenterPage() {
 
   useEffect(() => {
     if (!isLoggedIn) return
-    const refreshWallet = () => void queryClient.invalidateQueries({ queryKey: ['compute', 'account'] })
+    const refreshWallet = () => void queryClient.invalidateQueries({ queryKey: computeQueryKey('account') })
     const onVisibility = () => {
       if (document.visibilityState === 'visible') refreshWallet()
     }
@@ -252,7 +254,7 @@ export function ComputeCenterPage() {
       window.removeEventListener('focus', refreshWallet)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [isLoggedIn, queryClient])
+  }, [computeQueryKey, isLoggedIn, queryClient])
 
   const run: RunAction = async (key, action, success) => {
     setBusy(key)
@@ -260,7 +262,7 @@ export function ComputeCenterPage() {
     try {
       await action()
       setMessage({ color: 'green', text: success })
-      await queryClient.invalidateQueries({ queryKey: ['compute'] })
+      await queryClient.invalidateQueries({ queryKey: computeQueryKey() })
       return true
     } catch (error) {
       setMessage({ color: 'red', text: error instanceof Error ? error.message : '操作失败' })
@@ -277,7 +279,7 @@ export function ComputeCenterPage() {
       try {
         await action(autoTopUp)
         setMessage({ color: 'green', text: success })
-        await queryClient.invalidateQueries({ queryKey: ['compute'] })
+        await queryClient.invalidateQueries({ queryKey: computeQueryKey() })
         return true
       } catch (error) {
         if (
@@ -1508,12 +1510,16 @@ function AccountPanel({
   run: RunAction
   onOpen: (value: string) => void
 }) {
-  const ledgerQuery = useQuery({ queryKey: ['compute', 'ledger'], queryFn: listComputeLedger })
-  const packagesQuery = useQuery({ queryKey: ['compute', 'package-purchases'], queryFn: listComputePackagePurchases })
-  const usageQuery = useQuery({ queryKey: ['compute', 'api-usage'], queryFn: listComputeApiUsage })
-  const withdrawalsQuery = useQuery({ queryKey: ['compute', 'withdrawals'], queryFn: listComputeWithdrawals })
+  const computeQueryKey = useComputeQueryKey()
+  const ledgerQuery = useQuery({ queryKey: computeQueryKey('ledger'), queryFn: listComputeLedger })
+  const packagesQuery = useQuery({
+    queryKey: computeQueryKey('package-purchases'),
+    queryFn: listComputePackagePurchases,
+  })
+  const usageQuery = useQuery({ queryKey: computeQueryKey('api-usage'), queryFn: listComputeApiUsage })
+  const withdrawalsQuery = useQuery({ queryKey: computeQueryKey('withdrawals'), queryFn: listComputeWithdrawals })
   const referralRewardsQuery = useQuery({
-    queryKey: ['compute', 'referrals', 'rewards'],
+    queryKey: computeQueryKey('referrals', 'rewards'),
     queryFn: listComputeReferralRewards,
   })
   const [amount, setAmount] = useState(10)
@@ -1637,8 +1643,12 @@ function AccountPanel({
 }
 
 function PurchasesPanel() {
-  const ordersQuery = useQuery({ queryKey: ['compute', 'orders'], queryFn: listComputeOrders })
-  const packagesQuery = useQuery({ queryKey: ['compute', 'package-purchases'], queryFn: listComputePackagePurchases })
+  const computeQueryKey = useComputeQueryKey()
+  const ordersQuery = useQuery({ queryKey: computeQueryKey('orders'), queryFn: listComputeOrders })
+  const packagesQuery = useQuery({
+    queryKey: computeQueryKey('package-purchases'),
+    queryFn: listComputePackagePurchases,
+  })
   return (
     <Stack>
       <Alert color="blue">购买记录保存订单与扣费；API 地址和套餐 Key 请到“我的资产 → Token 套餐”查看。</Alert>
@@ -1852,12 +1862,13 @@ function ReservationsPanel({
   busy: string | null
   run: RunAction
 }) {
+  const computeQueryKey = useComputeQueryKey()
   const buyerQuery = useQuery({
-    queryKey: ['compute', 'reservations', 'buyer'],
+    queryKey: computeQueryKey('reservations', 'buyer'),
     queryFn: () => listComputeReservations('buyer'),
   })
   const supplierQuery = useQuery({
-    queryKey: ['compute', 'reservations', 'supplier'],
+    queryKey: computeQueryKey('reservations', 'supplier'),
     queryFn: () => listComputeReservations('supplier'),
   })
   return (
@@ -2183,7 +2194,8 @@ function TransfersPanel({
   run: RunAction
   runCardHourAction: RunCardHourAction
 }) {
-  const transfersQuery = useQuery({ queryKey: ['compute', 'transfers'], queryFn: listComputeTransfers })
+  const computeQueryKey = useComputeQueryKey()
+  const transfersQuery = useQuery({ queryKey: computeQueryKey('transfers'), queryFn: listComputeTransfers })
   const [recipientEmail, setRecipientEmail] = useState('')
   const [amount, setAmount] = useState(1)
   const [transferMessage, setTransferMessage] = useState('')
@@ -2300,11 +2312,12 @@ function TransferCard({
 }
 
 function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
-  const identityQuery = useQuery({ queryKey: ['compute', 'identity'], queryFn: getComputeIdentity })
-  const supplierQuery = useQuery({ queryKey: ['compute', 'supplier'], queryFn: getComputeSupplier })
-  const accountQuery = useQuery({ queryKey: ['compute', 'account'], queryFn: getComputeAccount })
-  const nodesQuery = useQuery({ queryKey: ['compute', 'supplier-nodes'], queryFn: listSupplierNodes })
-  const productsQuery = useQuery({ queryKey: ['compute', 'supplier-products'], queryFn: listSupplierProducts })
+  const computeQueryKey = useComputeQueryKey()
+  const identityQuery = useQuery({ queryKey: computeQueryKey('identity'), queryFn: getComputeIdentity })
+  const supplierQuery = useQuery({ queryKey: computeQueryKey('supplier'), queryFn: getComputeSupplier })
+  const accountQuery = useQuery({ queryKey: computeQueryKey('account'), queryFn: getComputeAccount })
+  const nodesQuery = useQuery({ queryKey: computeQueryKey('supplier-nodes'), queryFn: listSupplierNodes })
+  const productsQuery = useQuery({ queryKey: computeQueryKey('supplier-products'), queryFn: listSupplierProducts })
   const supplier = supplierQuery.data
   const identity = identityQuery.data
   const approvedIdentity = identity?.status === 'APPROVED' || identity?.status === 'TEST_APPROVED'
@@ -2715,7 +2728,8 @@ function SupplierPanel({ busy, run }: { busy: string | null; run: RunAction }) {
 }
 
 function NotificationsPanel({ busy, run }: { busy: string | null; run: RunAction }) {
-  const query = useQuery({ queryKey: ['compute', 'notifications'], queryFn: listComputeNotifications })
+  const computeQueryKey = useComputeQueryKey()
+  const query = useQuery({ queryKey: computeQueryKey('notifications'), queryFn: listComputeNotifications })
   const notifications = query.data || []
   return (
     <Stack>
@@ -2770,16 +2784,20 @@ function NotificationCard({
 }
 
 function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
-  const overviewQuery = useQuery({ queryKey: ['compute', 'admin-overview'], queryFn: getComputeAdminOverview })
-  const identitiesQuery = useQuery({ queryKey: ['compute', 'admin-identities'], queryFn: listAdminIdentities })
-  const nodesQuery = useQuery({ queryKey: ['compute', 'admin-nodes'], queryFn: listAdminNodes })
-  const suppliersQuery = useQuery({ queryKey: ['compute', 'admin-suppliers'], queryFn: listAdminSuppliers })
-  const productsQuery = useQuery({ queryKey: ['compute', 'admin-products'], queryFn: listAdminProducts })
-  const transfersQuery = useQuery({ queryKey: ['compute', 'admin-transfers'], queryFn: listAdminTransfers })
-  const reservationsQuery = useQuery({ queryKey: ['compute', 'admin-reservations'], queryFn: listAdminReservations })
-  const upstreamsQuery = useQuery({ queryKey: ['compute', 'admin-upstreams'], queryFn: listAdminUpstreams })
+  const computeQueryKey = useComputeQueryKey()
+  const overviewQuery = useQuery({ queryKey: computeQueryKey('admin-overview'), queryFn: getComputeAdminOverview })
+  const identitiesQuery = useQuery({ queryKey: computeQueryKey('admin-identities'), queryFn: listAdminIdentities })
+  const nodesQuery = useQuery({ queryKey: computeQueryKey('admin-nodes'), queryFn: listAdminNodes })
+  const suppliersQuery = useQuery({ queryKey: computeQueryKey('admin-suppliers'), queryFn: listAdminSuppliers })
+  const productsQuery = useQuery({ queryKey: computeQueryKey('admin-products'), queryFn: listAdminProducts })
+  const transfersQuery = useQuery({ queryKey: computeQueryKey('admin-transfers'), queryFn: listAdminTransfers })
+  const reservationsQuery = useQuery({
+    queryKey: computeQueryKey('admin-reservations'),
+    queryFn: listAdminReservations,
+  })
+  const upstreamsQuery = useQuery({ queryKey: computeQueryKey('admin-upstreams'), queryFn: listAdminUpstreams })
   const suspendedKeysQuery = useQuery({
-    queryKey: ['compute', 'admin-suspended-proxy-keys'],
+    queryKey: computeQueryKey('admin-suspended-proxy-keys'),
     queryFn: listAdminSuspendedProxyKeys,
   })
   const [api, setApi] = useState({

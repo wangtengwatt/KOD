@@ -1,6 +1,7 @@
 import { Alert, Badge, Box, Button, FileInput, Group, Paper, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useComputeQueryKey } from '@/hooks/useWallet'
 import type { ComputeReservation } from '@/packages/computeCenter'
 import {
   acceptOrderSchedule,
@@ -34,6 +35,7 @@ export function MarketplaceOrderWorkspace({
   run: RunAction
 }) {
   const queryClient = useQueryClient()
+  const computeQueryKey = useComputeQueryKey()
   const [text, setText] = useState('')
   const [image, setImage] = useState<File | null>(null)
   const [startTime, setStartTime] = useState('')
@@ -43,7 +45,7 @@ export function MarketplaceOrderWorkspace({
   const durationHours = Number(reservation.packageDurationHours || 0)
   const endTime = useMemo(() => addHours(startTime, durationHours), [durationHours, startTime])
   const messagesQuery = useQuery({
-    queryKey: ['compute', 'reservation-messages', reservation.id],
+    queryKey: computeQueryKey('reservation-messages', reservation.id),
     queryFn: () =>
       listOrderMessages(
         reservation.id,
@@ -52,7 +54,7 @@ export function MarketplaceOrderWorkspace({
     refetchInterval: readonly ? false : 5000,
   })
   const scheduleQuery = useQuery({
-    queryKey: ['compute', 'reservation-schedule', reservation.id],
+    queryKey: computeQueryKey('reservation-schedule', reservation.id),
     queryFn: () => getOrderSchedule(reservation.id),
     enabled: reservation.workflowVersion === 2,
     refetchInterval: reservation.status === 'PENDING_SCHEDULE' ? 5000 : false,
@@ -80,15 +82,15 @@ export function MarketplaceOrderWorkspace({
     if (!lastMessageId) return
     if (lastMessageSenderUserId !== currentUserId) {
       void markOrderMessagesRead(reservation.id, lastMessageId).then(() =>
-        queryClient.invalidateQueries({ queryKey: ['compute', 'account'] })
+        queryClient.invalidateQueries({ queryKey: computeQueryKey('account') })
       )
     }
-  }, [currentUserId, lastMessageId, lastMessageSenderUserId, queryClient, reservation.id])
+  }, [computeQueryKey, currentUserId, lastMessageId, lastMessageSenderUserId, queryClient, reservation.id])
 
   const refreshWorkspace = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['compute', 'reservation-messages', reservation.id] }),
-      queryClient.invalidateQueries({ queryKey: ['compute', 'reservation-schedule', reservation.id] }),
+      queryClient.invalidateQueries({ queryKey: computeQueryKey('reservation-messages', reservation.id) }),
+      queryClient.invalidateQueries({ queryKey: computeQueryKey('reservation-schedule', reservation.id) }),
     ])
   }
 
@@ -309,9 +311,10 @@ function OrderMessage({
   message: ComputeOrderMessage
   currentUserId?: number
 }) {
+  const computeQueryKey = useComputeQueryKey()
   const mine = message.senderUserId === currentUserId
   const imageQuery = useQuery({
-    queryKey: ['compute', 'reservation-message-image', reservationId, message.id],
+    queryKey: computeQueryKey('reservation-message-image', reservationId, message.id),
     queryFn: () => getOrderMessageImage(reservationId, message.id),
     enabled: message.messageType === 'IMAGE' && !message.imagePurgedAt,
     staleTime: Number.POSITIVE_INFINITY,

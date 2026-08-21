@@ -1,13 +1,15 @@
 import { Alert, Badge, Button, Group, Paper, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useComputeQueryKey } from '@/hooks/useWallet'
 import { cancelHostedNodeDelist, listHostedNodes, requestHostedNodeDelist } from '@/packages/computeMarketplace/api'
 import { marketplaceStatus, nextOfflineLabel } from '@/packages/computeMarketplace/projections'
 
 type RunAction = (key: string, action: () => Promise<unknown>, success: string) => Promise<boolean>
 
 export function HostedComputePanel({ busy, run }: { busy: string | null; run: RunAction }) {
-  const hostingQuery = useQuery({ queryKey: ['compute', 'supplier-hosting'], queryFn: listHostedNodes })
+  const computeQueryKey = useComputeQueryKey()
+  const hostingQuery = useQuery({ queryKey: computeQueryKey('supplier-hosting'), queryFn: listHostedNodes })
   const [reasons, setReasons] = useState<Record<number, string>>({})
   const nodes = (hostingQuery.data || []).filter((node) => !node.platformManaged)
   return (

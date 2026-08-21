@@ -55,10 +55,10 @@ export function PlatformHostingPanel() {
       queryClient.invalidateQueries({ queryKey: accountQueryKey }),
       queryClient.invalidateQueries({ queryKey: computeKeys.legacyAccount }),
       queryClient.invalidateQueries({ queryKey: PLATFORM_SKUS_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: ['compute', 'supplier-hosting'] }),
-      queryClient.invalidateQueries({ queryKey: ['compute', 'supplier-nodes'] }),
-      queryClient.invalidateQueries({ queryKey: ['compute', 'supplier-products'] }),
-      queryClient.invalidateQueries({ queryKey: ['compute', 'products'] }),
+      queryClient.invalidateQueries({ queryKey: ['compute', queryIdentity, 'supplier-hosting'] }),
+      queryClient.invalidateQueries({ queryKey: ['compute', queryIdentity, 'supplier-nodes'] }),
+      queryClient.invalidateQueries({ queryKey: ['compute', queryIdentity, 'supplier-products'] }),
+      queryClient.invalidateQueries({ queryKey: ['compute', queryIdentity, 'products'] }),
     ])
   }
 

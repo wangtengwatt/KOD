@@ -14,6 +14,13 @@ export function getWalletIdentity(loginEmail: string | null, accessToken: string
   return loginEmail.trim().toLowerCase()
 }
 
+export function useWalletIdentity() {
+  const accessToken = useAuthInfoStore((state) => state.accessToken)
+  const refreshToken = useAuthInfoStore((state) => state.refreshToken)
+  const loginEmail = useAuthInfoStore((state) => state.loginEmail)
+  return getWalletIdentity(loginEmail, accessToken, refreshToken)
+}
+
 export const walletKeys = {
   all: ['wallet'] as const,
   account: (identity: WalletIdentity) => ['wallet', identity] as const,
@@ -37,6 +44,11 @@ export const computeKeys = {
   emailInvites: (identity: WalletIdentity, days: number) =>
     ['compute', identity, 'referrals', 'email-invites', days] as const,
   platformLeases: (identity: WalletIdentity) => ['compute', identity, 'platform-hosting', 'leases'] as const,
+}
+
+export function useComputeQueryKey() {
+  const identity = useWalletIdentity()
+  return useCallback((...parts: unknown[]) => ['compute', identity ?? 'signed-out', ...parts] as const, [identity])
 }
 
 export function invalidateRewardReceipt(queryClient: QueryClient, identity: WalletIdentity) {
@@ -68,10 +80,7 @@ authInfoStore.subscribe(
 )
 
 export function useWallet(page: number, pageSize: number) {
-  const accessToken = useAuthInfoStore((state) => state.accessToken)
-  const refreshToken = useAuthInfoStore((state) => state.refreshToken)
-  const loginEmail = useAuthInfoStore((state) => state.loginEmail)
-  const identity = getWalletIdentity(loginEmail, accessToken, refreshToken)
+  const identity = useWalletIdentity()
   const enabled = identity !== null
   const queryClient = useQueryClient()
   const info = useQuery({

@@ -11,7 +11,7 @@ Verified on 2026-08-21 (Asia/Shanghai) in Windows PowerShell, branch `feature/re
 
 ## Client feature verification
 
-- The final combined feature/video command covered 11 files and passed 112 tests. Excluding the two video files (7 tests), the feature set now covers 9 files and 105 tests, including the new direct-account-switch cache regression in `useWallet.test.ts`.
+- The final combined feature/video command covered 11 files and passed 113 tests. Excluding the two video files (7 tests), the feature set now covers 9 files and 106 tests, including both direct-account-switch cache regressions.
 - `corepack pnpm run check` passed with exit code 0 and no TypeScript diagnostics.
 - `corepack pnpm run build` passed after 5,352 main modules, 82 preload modules, and 15,029 renderer modules were transformed. Existing Rollup circular-chunk, dynamic/static import, large-chunk, eval, and stale Browserslist warnings remain non-fatal.
 - The first build attempt found a branch regression: the two new compute-center tests were placed directly in `src/renderer/routes`, so TanStack Router generated production route imports for them and failed because test modules do not export `Route`. Moving both tests into the router-ignored `src/renderer/routes/-test` directory preserved 3/3 route tests and made the subsequent full build pass.
@@ -20,7 +20,7 @@ Verified on 2026-08-21 (Asia/Shanghai) in Windows PowerShell, branch `feature/re
 
 ## Full-suite baseline classification
 
-`corepack pnpm run test` was run again after the independent-review repairs. The final result was stable: 154 test files, 147 passed, 5 failed, 2 skipped; 1,517 tests, 1,457 passed, 6 failed, 54 skipped. All six failures are baseline, not regressions from `f97c615..HEAD`: none of the failing tests, their production files, test configuration, `package.json`, or `pnpm-lock.yaml` changed in this branch, and `openspec/changes/stabilize-existing-test-baseline` already records these Windows/stale-expectation categories.
+`corepack pnpm run test` was run again after the second independent-review repairs, without a concurrent build. The final result was stable: 154 test files, 147 passed, 5 failed, 2 skipped; 1,518 tests, 1,458 passed, 6 failed, 54 skipped. All six failures are baseline, not regressions from `f97c615..HEAD`: none of the failing tests, their production files, test configuration, `package.json`, or `pnpm-lock.yaml` changed in this branch, and `openspec/changes/stabilize-existing-test-baseline` already records these Windows/stale-expectation categories. The previously observed transient `store-node.test.ts` `EBUSY` did not recur.
 
 | Failure | Classification |
 | --- | --- |
@@ -45,6 +45,16 @@ The required read-only review covered client `f97c615..9cc3b8b` and backend `f37
 - paired-backend self-owned API activation and legacy self-usage billing are rejected so reward card hours cannot be laundered into redeemable supplier income.
 
 The client repair set passes 43/43 focused component/hook tests. The paired backend repair set passes 32/32 focused service tests, and its final full Maven run passes 131/131 tests.
+
+## Second independent cross-branch review repair
+
+A fresh read-only review of the post-repair client and backend ranges reported no Critical findings and three new Important findings. Each was reproduced with a failing regression before production changes:
+
+- a mounted compute-center page did not rerender during a direct authenticated A-to-B change because it subscribed only to the boolean token state; all account-scoped compute-center, card-hour, order-workspace, hosted-node, and administrator queries now use the normalized identity in their query keys, and the mounted route test proves A's rendered email is replaced by B's result under `['compute', 'second@example.com', 'account']`;
+- queued rewarded-ad seconds were sent immediately after a delayed receipt even though the backend accepts at most one progress second per one-second interval; the client now paces queued receipts by 1,000 ms, and the regression mock rejects any interval below 950 ms while proving seconds 1, 2, and 3 complete in order;
+- concurrent lease calls with the same `(userId, requestId)` but different SKUs could race on separate SKU locks and leak a unique-constraint exception; rent now locks the user's account row before the first idempotency lookup, and a concurrent cross-SKU test proves exactly one lease/debit and one controlled `BizException` loser.
+
+The final affected client regression run passed 37/37 tests, the combined feature/video run passed 113/113, TypeScript check passed, and the production build again transformed 5,352 main, 82 preload, and 15,029 renderer modules. The paired backend full suite now passes 132/132 tests, and the repackaged JAR is 121,126,123 bytes. Both strict OpenSpec validations passed.
 
 ## Protected scope, credentials, and diff hygiene
 

@@ -18,6 +18,7 @@ import { formatCardTime } from '@/utils/wallet.utils'
 export const MINIMUM_REWARDED_WATCH_SECONDS = 90
 
 const MEDIA_LEAD_TOLERANCE_SECONDS = 0.75
+const SERVER_PROGRESS_INTERVAL_MILLISECONDS = 1000
 
 interface PlaybackSegment {
   mediaStartedAt: number
@@ -348,6 +349,10 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
             serverProgressSequenceRef.current = receipt.sequence
             progressTokenRef.current = receipt.nextProgressToken
             reported = true
+            if (serverProgressPositionRef.current < serverProgressTargetRef.current) {
+              await new Promise((resolve) => window.setTimeout(resolve, SERVER_PROGRESS_INTERVAL_MILLISECONDS))
+              if (watchRef.current?.watchId !== activeWatch.watchId) return false
+            }
           } catch (error) {
             if (isElapsedProgressWindow(error) && watchRef.current?.watchId === activeWatch.watchId) {
               const video = videoRef.current
@@ -440,11 +445,14 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     async (video: HTMLVideoElement | null = videoRef.current) => {
       const activeWatch = watchRef.current
       if (!activeWatch || !endedRef.current) return
+      if (effectiveMillisecondsRef.current < requiredMilliseconds) {
+        eligibleRef.current = false
+        autoClaimAttemptedRef.current = false
+        setPlaybackNotice('服务端尚未确认完整播放，本次不能领取奖励。')
+        return
+      }
       if (video) await reportServerProgress(video.currentTime)
-      if (
-        effectiveMillisecondsRef.current < requiredMilliseconds ||
-        serverProgressPositionRef.current < assetDurationSeconds
-      ) {
+      if (serverProgressPositionRef.current < assetDurationSeconds) {
         eligibleRef.current = false
         autoClaimAttemptedRef.current = false
         setPlaybackNotice('服务端尚未确认完整播放，本次不能领取奖励。')

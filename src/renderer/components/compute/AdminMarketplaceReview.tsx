@@ -1,6 +1,7 @@
 import { Alert, Badge, Box, Button, Group, Paper, SimpleGrid, Stack, Table, Text, TextInput } from '@mantine/core'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { useComputeQueryKey } from '@/hooks/useWallet'
 import { type ComputeProduct, getAdminNodeProof, getComputeProductImageUrl } from '@/packages/computeCenter'
 import { getAdminProductReviewDetail, listAdminReviewHistory } from '@/packages/computeMarketplace/api'
 import { marketplaceStatus, reviewCategoryLabel } from '@/packages/computeMarketplace/projections'
@@ -14,13 +15,14 @@ export function AdminProductReviewCard({
   loading: boolean
   onReview: (approved: boolean, reason: string) => Promise<unknown>
 }) {
+  const computeQueryKey = useComputeQueryKey()
   const detailQuery = useQuery({
-    queryKey: ['compute', 'admin-product-review-detail', product.id],
+    queryKey: computeQueryKey('admin-product-review-detail', product.id),
     queryFn: () => getAdminProductReviewDetail(product.id),
   })
   const detail = detailQuery.data
   const proofQuery = useQuery({
-    queryKey: ['compute', 'admin-node-proof', detail?.nodeId],
+    queryKey: computeQueryKey('admin-node-proof', detail?.nodeId),
     queryFn: () => getAdminNodeProof(Number(detail?.nodeId)),
     enabled: Boolean(detail?.nodeProofAvailable && detail?.nodeId),
     staleTime: Number.POSITIVE_INFINITY,
@@ -119,10 +121,11 @@ export function AdminProductReviewCard({
 }
 
 export function AdminReviewHistory() {
+  const computeQueryKey = useComputeQueryKey()
   const [category, setCategory] = useState('')
   const [status, setStatus] = useState('')
   const historyQuery = useQuery({
-    queryKey: ['compute', 'admin-review-history', category, status],
+    queryKey: computeQueryKey('admin-review-history', category, status),
     queryFn: () => listAdminReviewHistory(category, status),
   })
   return (

@@ -234,6 +234,7 @@ describe('RewardedVideoCard', () => {
   })
 
   it('drains sequential progress heartbeats when playback advances during network latency', async () => {
+    const acceptedAt: number[] = []
     let resolveFirst:
       | ((receipt: {
           watchId: number
@@ -250,13 +251,18 @@ describe('RewardedVideoCard', () => {
             resolveFirst = resolve
           })
       )
-      .mockImplementation(async ({ watchId, mediaPositionSeconds, sequence }) => ({
-        watchId,
-        mediaPositionSeconds,
-        sequence,
-        nextProgressToken: `progress-${sequence}`,
-        expiresAt: Math.floor(Date.now() / 1000) + 600,
-      }))
+      .mockImplementation(({ watchId, mediaPositionSeconds, sequence }) => {
+        const now = Date.now()
+        if (now - (acceptedAt.at(-1) ?? 0) < 950) throw new Error('server rejected an early heartbeat')
+        acceptedAt.push(now)
+        return {
+          watchId,
+          mediaPositionSeconds,
+          sequence,
+          nextProgressToken: `progress-${sequence}`,
+          expiresAt: Math.floor(now / 1000) + 600,
+        }
+      })
     renderCard()
     const video = await openAd()
 
@@ -268,6 +274,7 @@ describe('RewardedVideoCard', () => {
     expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(1)
 
     await act(async () => {
+      acceptedAt.push(Date.now())
       resolveFirst?.({
         watchId: 17,
         mediaPositionSeconds: 1,
@@ -278,8 +285,11 @@ describe('RewardedVideoCard', () => {
       await Promise.resolve()
     })
 
-    await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(3), { timeout: 3500 })
     expect(mocks.progressRewardedAd.mock.calls.map((call) => call[0].mediaPositionSeconds)).toEqual([1, 2, 3])
+    expect(acceptedAt).toHaveLength(3)
+    expect(acceptedAt[1] - acceptedAt[0]).toBeGreaterThanOrEqual(950)
+    expect(acceptedAt[2] - acceptedAt[1]).toBeGreaterThanOrEqual(950)
     await waitFor(() => expect(mocks.completeRewardedAd).toHaveBeenCalledWith(17, 'progress-3'))
     await waitFor(() => expect(mocks.claimRewardedAd).toHaveBeenCalledTimes(1))
   })

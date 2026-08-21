@@ -31,6 +31,7 @@ import {
 } from '@tabler/icons-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
+import { useComputeQueryKey } from '@/hooks/useWallet'
 import {
   acceptCardHourRfqQuote,
   type CardHourAssetType,
@@ -150,20 +151,24 @@ export function CardHourMarketplace({
   runCardHourAction: RunCardHourAction
 }) {
   const queryClient = useQueryClient()
-  const listings = useQuery({ queryKey: ['compute', 'card-market', 'listings'], queryFn: listCardHourMarketListings })
-  const stats = useQuery({ queryKey: ['compute', 'card-market', 'stats'], queryFn: getCardHourMarketStats })
-  const rates = useQuery({ queryKey: ['compute', 'card-market', 'rates'], queryFn: listCardHourRates })
+  const computeQueryKey = useComputeQueryKey()
+  const listings = useQuery({
+    queryKey: computeQueryKey('card-market', 'listings'),
+    queryFn: listCardHourMarketListings,
+  })
+  const stats = useQuery({ queryKey: computeQueryKey('card-market', 'stats'), queryFn: getCardHourMarketStats })
+  const rates = useQuery({ queryKey: computeQueryKey('card-market', 'rates'), queryFn: listCardHourRates })
   const lots = useQuery({
-    queryKey: ['compute', 'card-market', 'lots'],
+    queryKey: computeQueryKey('card-market', 'lots'),
     queryFn: listCardHourLots,
     enabled: isLoggedIn,
   })
   const rfqs = useQuery({
-    queryKey: ['compute', 'card-market', 'rfqs'],
+    queryKey: computeQueryKey('card-market', 'rfqs'),
     queryFn: listCardHourRfqs,
     enabled: isLoggedIn,
   })
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['compute'] })
+  const refresh = () => queryClient.invalidateQueries({ queryKey: computeQueryKey() })
 
   return (
     <Stack gap="md">
@@ -260,48 +265,53 @@ export function CardHourBusiness({
   directTransferPanel?: React.ReactNode
 }) {
   const queryClient = useQueryClient()
+  const computeQueryKey = useComputeQueryKey()
   const [tab, setTab] = useState('custody')
-  const rates = useQuery({ queryKey: ['compute', 'card-market', 'rates'], queryFn: listCardHourRates })
+  const rates = useQuery({ queryKey: computeQueryKey('card-market', 'rates'), queryFn: listCardHourRates })
   const lots = useQuery({
-    queryKey: ['compute', 'card-market', 'lots'],
+    queryKey: computeQueryKey('card-market', 'lots'),
     queryFn: listCardHourLots,
     enabled: isLoggedIn,
   })
   const custody = useQuery({
-    queryKey: ['compute', 'card-market', 'custody'],
+    queryKey: computeQueryKey('card-market', 'custody'),
     queryFn: getCardHourCustody,
     enabled: isLoggedIn,
   })
   const deposits = useQuery({
-    queryKey: ['compute', 'card-market', 'deposits'],
+    queryKey: computeQueryKey('card-market', 'deposits'),
     queryFn: listCardHourDeposits,
     enabled: isLoggedIn,
   })
   const trades = useQuery({
-    queryKey: ['compute', 'card-market', 'trades'],
+    queryKey: computeQueryKey('card-market', 'trades'),
     queryFn: listCardHourTrades,
     enabled: isLoggedIn,
   })
   const myListings = useQuery({
-    queryKey: ['compute', 'card-market', 'my-listings'],
+    queryKey: computeQueryKey('card-market', 'my-listings'),
     queryFn: listMyCardHourListings,
     enabled: isLoggedIn,
   })
-  const nodes = useQuery({ queryKey: ['compute', 'supplier-nodes'], queryFn: listSupplierNodes, enabled: isLoggedIn })
-  const products = useQuery({ queryKey: ['compute', 'products', 'GPU'], queryFn: () => listComputeProducts('GPU') })
+  const nodes = useQuery({
+    queryKey: computeQueryKey('supplier-nodes'),
+    queryFn: listSupplierNodes,
+    enabled: isLoggedIn,
+  })
+  const products = useQuery({ queryKey: computeQueryKey('products', 'GPU'), queryFn: () => listComputeProducts('GPU') })
   const buyerRedemptions = useQuery({
-    queryKey: ['compute', 'card-market', 'redemptions', 'buyer'],
+    queryKey: computeQueryKey('card-market', 'redemptions', 'buyer'),
     queryFn: () => listCardHourRedemptions('buyer'),
     enabled: isLoggedIn,
   })
   const supplierRedemptions = useQuery({
-    queryKey: ['compute', 'card-market', 'redemptions', 'supplier'],
+    queryKey: computeQueryKey('card-market', 'redemptions', 'supplier'),
     queryFn: () => listCardHourRedemptions('supplier'),
     enabled: isLoggedIn,
   })
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['compute'] })
+    await queryClient.invalidateQueries({ queryKey: computeQueryKey() })
   }
 
   return (
@@ -721,6 +731,7 @@ function RfqMarket({
   runCardHourAction: RunCardHourAction
   onDone: () => Promise<void>
 }) {
+  const computeQueryKey = useComputeQueryKey()
   const [form, setForm] = useState({
     assetType: 'STANDARD' as CardHourAssetType,
     gpuModel: 'H100',
@@ -731,7 +742,7 @@ function RfqMarket({
   const [quoteForm, setQuoteForm] = useState({ rfqId: 0, sourceLotId: 0, unitPrice: 1 })
   const [quotesFor, setQuotesFor] = useState<CardHourRfq | null>(null)
   const quotes = useQuery({
-    queryKey: ['compute', 'card-market', 'rfq-quotes', quotesFor?.id],
+    queryKey: computeQueryKey('card-market', 'rfq-quotes', quotesFor?.id),
     queryFn: () => listCardHourRfqQuotes(quotesFor?.id || 0),
     enabled: Boolean(quotesFor),
   })
@@ -1477,15 +1488,16 @@ function TradeRecords({
 
 export function CardHourAdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
   const queryClient = useQueryClient()
-  const deposits = useQuery({ queryKey: ['compute', 'admin', 'card-deposits'], queryFn: listAdminCardHourDeposits })
-  const rates = useQuery({ queryKey: ['compute', 'card-market', 'rates'], queryFn: listCardHourRates })
+  const computeQueryKey = useComputeQueryKey()
+  const deposits = useQuery({ queryKey: computeQueryKey('admin', 'card-deposits'), queryFn: listAdminCardHourDeposits })
+  const rates = useQuery({ queryKey: computeQueryKey('card-market', 'rates'), queryFn: listCardHourRates })
   const redemptions = useQuery({
-    queryKey: ['compute', 'admin', 'card-redemptions'],
+    queryKey: computeQueryKey('admin', 'card-redemptions'),
     queryFn: listAdminCardHourRedemptions,
   })
   const [rate, setRate] = useState({ versionNo: 'V2', gpuModel: '', multiplier: 1, notes: '' })
   const [resolution, setResolution] = useState<Record<number, { actual: number; reason: string }>>({})
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['compute'] })
+  const refresh = () => queryClient.invalidateQueries({ queryKey: computeQueryKey() })
   return (
     <Stack>
       <Paper withBorder p="md">
