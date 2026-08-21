@@ -11,16 +11,16 @@ Verified on 2026-08-21 (Asia/Shanghai) in Windows PowerShell, branch `feature/re
 
 ## Client feature verification
 
-- `corepack pnpm exec vitest run src/renderer/api/wallet.test.ts src/renderer/packages/computeCenter.rewards.test.ts src/renderer/components/wallet/RewardedVideoCard.test.tsx src/renderer/components/referrals/ReferralDrawer.test.tsx src/renderer/components/compute/PlatformHostingPanel.test.tsx src/renderer/routes/-test/compute-center.hosting.test.tsx src/renderer/routes/-test/compute-center.referrals.test.tsx src/main/deeplinks.test.ts` passed: 8 files, 99 tests.
+- The final combined feature/video command covered 11 files and passed 112 tests. Excluding the two video files (7 tests), the feature set now covers 9 files and 105 tests, including the new direct-account-switch cache regression in `useWallet.test.ts`.
 - `corepack pnpm run check` passed with exit code 0 and no TypeScript diagnostics.
 - `corepack pnpm run build` passed after 5,352 main modules, 82 preload modules, and 15,029 renderer modules were transformed. Existing Rollup circular-chunk, dynamic/static import, large-chunk, eval, and stale Browserslist warnings remain non-fatal.
 - The first build attempt found a branch regression: the two new compute-center tests were placed directly in `src/renderer/routes`, so TanStack Router generated production route imports for them and failed because test modules do not export `Route`. Moving both tests into the router-ignored `src/renderer/routes/-test` directory preserved 3/3 route tests and made the subsequent full build pass.
-- `corepack pnpm exec biome check ...` over the Task 5 target set plus the video action and moved route tests passed: 10 files checked, no fixes applied.
+- `corepack pnpm exec biome check ...` over the final Task 5 target set passed: 11 files checked, no fixes applied.
 - `npx --yes @fission-ai/openspec validate complete-reward-referral-hosting-client --strict` passed: `Change 'complete-reward-referral-hosting-client' is valid`.
 
 ## Full-suite baseline classification
 
-`corepack pnpm run test` was run twice, including after the route-test build fix. The final result was stable: 154 test files, 147 passed, 5 failed, 2 skipped; 1,514 tests, 1,454 passed, 6 failed, 54 skipped. All six failures are baseline, not regressions from `f97c615..HEAD`: none of the failing tests, their production files, test configuration, `package.json`, or `pnpm-lock.yaml` changed in this branch, and `openspec/changes/stabilize-existing-test-baseline` already records these Windows/stale-expectation categories.
+`corepack pnpm run test` was run again after the independent-review repairs. The final result was stable: 154 test files, 147 passed, 5 failed, 2 skipped; 1,517 tests, 1,457 passed, 6 failed, 54 skipped. All six failures are baseline, not regressions from `f97c615..HEAD`: none of the failing tests, their production files, test configuration, `package.json`, or `pnpm-lock.yaml` changed in this branch, and `openspec/changes/stabilize-existing-test-baseline` already records these Windows/stale-expectation categories.
 
 | Failure | Classification |
 | --- | --- |
@@ -30,7 +30,19 @@ Verified on 2026-08-21 (Asia/Shanghai) in Windows PowerShell, branch `feature/re
 | `src/renderer/stores/session/tools-builder.test.ts` expects `parse_link` | Existing web-search tool/mock expectation mismatch |
 | Two `src/shared/providers/definitions/models/chatboxai.test.ts` cases expect the removed upstream fallback | Existing stale relay fallback expectations; production intentionally requires configured KOD relay login |
 
-`corepack pnpm run lint` also remains nonzero on the untouched repository baseline: 921 files checked, 13 errors and 1,009 warnings. Re-running with `--diagnostic-level=error --max-diagnostics=none` placed all 13 errors in unchanged files (`TopPSlider.tsx`, `SessionList.tsx`, `RemoteDialogWindow.tsx`, `ios_web_preview_init.ts`, `static/index.css`, and `chatboxai.ts`). The 10-file task-targeted Biome check is clean.
+`corepack pnpm run lint` also remains nonzero on the untouched repository baseline: 921 files checked, 13 errors and 1,009 warnings. Re-running with `--diagnostic-level=error --max-diagnostics=none` placed all 13 errors in unchanged files (`TopPSlider.tsx`, `SessionList.tsx`, `RemoteDialogWindow.tsx`, `ios_web_preview_init.ts`, `static/index.css`, and `chatboxai.ts`). The 11-file task-targeted Biome check is clean.
+
+## Independent cross-branch review repair
+
+The required read-only review covered client `f97c615..9cc3b8b` and backend `f37e8cb..efb43df`. It found one Critical and four Important gaps. Each was reproduced with a failing regression test before repair:
+
+- account changes now synchronously cancel and remove both `wallet` and `compute` roots, while referral, account, ledger, notification, and platform-lease keys include the normalized account identity;
+- rewarded-ad progress now queues the highest observed media second and drains signed one-second receipts sequentially, including while the first request is delayed;
+- tracked email invitations render and copy their backend-provided registration links against the authenticated KOD origin; the generic profile action is explicitly a registration link rather than the legacy `kod://` invite deep link;
+- ambiguous rent recovery now requires both `requestId` and `skuId`, matching the backend semantic-idempotency enforcement;
+- paired-backend self-owned API activation and legacy self-usage billing are rejected so reward card hours cannot be laundered into redeemable supplier income.
+
+The client repair set passes 43/43 focused component/hook tests. The paired backend repair set passes 32/32 focused service tests, and its final full Maven run passes 131/131 tests.
 
 ## Protected scope, credentials, and diff hygiene
 

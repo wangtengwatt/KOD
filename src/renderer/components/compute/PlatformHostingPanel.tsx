@@ -2,6 +2,7 @@ import { Alert, Badge, Button, Card, Group, Modal, Paper, SimpleGrid, Stack, Swi
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { computeKeys, getWalletIdentity } from '@/hooks/useWallet'
 import {
   getComputeAccount,
   listPlatformServerLeases,
@@ -11,14 +12,20 @@ import {
   rentPlatformServer,
   setLeaseAutoRenew,
 } from '@/packages/computeCenter'
+import { useAuthInfoStore } from '@/stores/authInfoStore'
 
 const PLATFORM_SKUS_QUERY_KEY = ['compute', 'platform-hosting', 'skus'] as const
-const PLATFORM_LEASES_QUERY_KEY = ['compute', 'platform-hosting', 'leases'] as const
 const RENT_REQUEST_STORAGE_PREFIX = 'compute.platform-hosting.rent-request.'
 const pendingRentRequestIds = new Map<string, string>()
 
 export function PlatformHostingPanel() {
   const queryClient = useQueryClient()
+  const accessToken = useAuthInfoStore((state) => state.accessToken)
+  const refreshToken = useAuthInfoStore((state) => state.refreshToken)
+  const loginEmail = useAuthInfoStore((state) => state.loginEmail)
+  const queryIdentity = getWalletIdentity(loginEmail, accessToken, refreshToken) ?? 'signed-out'
+  const platformLeasesQueryKey = computeKeys.platformLeases(queryIdentity)
+  const accountQueryKey = computeKeys.account(queryIdentity)
   const [checkout, setCheckout] = useState<{
     sku: PlatformServerSku
     requestId: string
@@ -33,19 +40,20 @@ export function PlatformHostingPanel() {
     refetchIntervalInBackground: false,
   })
   const leasesQuery = useQuery({
-    queryKey: PLATFORM_LEASES_QUERY_KEY,
+    queryKey: platformLeasesQueryKey,
     queryFn: listPlatformServerLeases,
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   })
-  const accountQuery = useQuery({ queryKey: ['compute', 'account'], queryFn: getComputeAccount })
+  const accountQuery = useQuery({ queryKey: accountQueryKey, queryFn: getComputeAccount })
 
   const refreshAfterRent = async (lease: PlatformServerLease) => {
-    queryClient.setQueryData<PlatformServerLease[]>(PLATFORM_LEASES_QUERY_KEY, (current = []) =>
+    queryClient.setQueryData<PlatformServerLease[]>(platformLeasesQueryKey, (current = []) =>
       upsertLease(current, lease)
     )
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['compute', 'account'] }),
+      queryClient.invalidateQueries({ queryKey: accountQueryKey }),
+      queryClient.invalidateQueries({ queryKey: computeKeys.legacyAccount }),
       queryClient.invalidateQueries({ queryKey: PLATFORM_SKUS_QUERY_KEY }),
       queryClient.invalidateQueries({ queryKey: ['compute', 'supplier-hosting'] }),
       queryClient.invalidateQueries({ queryKey: ['compute', 'supplier-nodes'] }),
@@ -68,11 +76,13 @@ export function PlatformHostingPanel() {
       let recoveredLease: PlatformServerLease | undefined
       try {
         const serverLeases = await queryClient.fetchQuery({
-          queryKey: PLATFORM_LEASES_QUERY_KEY,
+          queryKey: platformLeasesQueryKey,
           queryFn: listPlatformServerLeases,
           staleTime: 0,
         })
-        recoveredLease = serverLeases.find((lease) => lease.requestId === variables.requestId)
+        recoveredLease = serverLeases.find(
+          (lease) => lease.requestId === variables.requestId && lease.skuId === variables.skuId
+        )
       } catch {
         // Preserve the original mutation error when reconciliation is also unavailable.
       }
@@ -84,7 +94,8 @@ export function PlatformHostingPanel() {
         return
       }
       await Promise.allSettled([
-        queryClient.invalidateQueries({ queryKey: ['compute', 'account'] }),
+        queryClient.invalidateQueries({ queryKey: accountQueryKey }),
+        queryClient.invalidateQueries({ queryKey: computeKeys.legacyAccount }),
         queryClient.invalidateQueries({ queryKey: PLATFORM_SKUS_QUERY_KEY }),
       ])
       setRentError(errorMessage(error))
@@ -94,7 +105,7 @@ export function PlatformHostingPanel() {
   const renewMutation = useMutation({
     mutationFn: ({ leaseId, enabled }: { leaseId: string; enabled: boolean }) => setLeaseAutoRenew(leaseId, enabled),
     onSuccess: (updatedLease) => {
-      queryClient.setQueryData<PlatformServerLease[]>(PLATFORM_LEASES_QUERY_KEY, (current = []) =>
+      queryClient.setQueryData<PlatformServerLease[]>(platformLeasesQueryKey, (current = []) =>
         upsertLease(current, updatedLease)
       )
       setFeedback({ color: 'green', text: updatedLease.autoRenew ? '已开启下期自动续租' : '已关闭下期自动续租' })

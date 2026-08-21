@@ -27,6 +27,7 @@ vi.mock('@/packages/computeCenter', async (importOriginal) => {
   }
 })
 vi.mock('@/packages/navigator', () => ({ copyToClipboard: mocks.copyToClipboard }))
+vi.mock('@/packages/kodApiOrigin', () => ({ getKodApiOrigin: () => 'https://kod.example/' }))
 vi.mock('@/stores/authInfoStore', () => ({
   authInfoStore: { subscribe: vi.fn() },
   useAuthInfoStore: (selector: (state: { accessToken: string; refreshToken: string; loginEmail: string }) => unknown) =>
@@ -42,7 +43,7 @@ import ReferralDrawer, { ReferralDrawerLauncher } from './ReferralDrawer'
 const profile = {
   inviteCode: '0123456789abcdef0123456789abcdef',
   inviteLink: 'kod://compute/invite?code=legacy-link',
-  registrationLink: 'https://kod.example/register?invite=0123456789abcdef0123456789abcdef',
+  registrationLink: '/register',
   rewardPolicy: 'LEGACY_READ_ONLY',
   invitedCount: 1,
   pendingCommission: 0,
@@ -120,10 +121,10 @@ describe('ReferralDrawer', () => {
 
     expect(screen.getByText('奖励卡时可用于平台消费，不可提现、不可回购。')).toBeTruthy()
     expect(screen.getByLabelText('电子邮箱')).toBeTruthy()
-    const copyButton = await screen.findByRole('button', { name: '复制专属链接' })
+    const copyButton = await screen.findByRole('button', { name: '复制注册链接' })
     await waitFor(() => expect(copyButton.hasAttribute('disabled')).toBe(false))
     fireEvent.click(copyButton)
-    expect(mocks.copyToClipboard).toHaveBeenCalledWith(profile.registrationLink)
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith('https://kod.example/register')
     expect(mocks.copyToClipboard).not.toHaveBeenCalledWith(profile.inviteLink)
 
     const email = screen.getByPlaceholderText('添加电子邮箱')
@@ -179,6 +180,11 @@ describe('ReferralDrawer', () => {
     expect(screen.getByText('邀请已过期')).toBeTruthy()
     expect(screen.queryByText('account already has another inviter')).toBeNull()
     expect(screen.queryByText('internal-expiry-detail')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '复制 friend@example.com 注册链接' }))
+    expect(mocks.copyToClipboard).toHaveBeenCalledWith(
+      'https://kod.example/register?email=friend%40example.com&emailInvite=0123456789abcdef0123456789abcdef'
+    )
   })
 
   it('shows the unified reward receipt and refreshes account, notifications, and tracking', async () => {
@@ -201,13 +207,15 @@ describe('ReferralDrawer', () => {
     expect(await screen.findByText('10 卡时已到账')).toBeTruthy()
     expect(mocks.markComputeNotificationRead).toHaveBeenCalledWith(501)
     await waitFor(() => {
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'account'] })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'member@example.com', 'account'] })
       expect(invalidate).toHaveBeenCalledWith({
         queryKey: ['wallet', 'member@example.com', 'card-time-account'],
       })
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'ledger'] })
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'notifications'] })
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'referrals', 'email-invites', 90] })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'member@example.com', 'ledger'] })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'member@example.com', 'notifications'] })
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: ['compute', 'member@example.com', 'referrals', 'email-invites', 90],
+      })
     })
   })
 
@@ -229,7 +237,7 @@ describe('ReferralDrawer', () => {
     const { queryClient } = renderDrawer(<ReferralDrawer opened={false} onClose={() => {}} />)
 
     await waitFor(() =>
-      expect(queryClient.getQueryData(['compute', 'notifications'])).toEqual(
+      expect(queryClient.getQueryData(['compute', 'member@example.com', 'notifications'])).toEqual(
         expect.arrayContaining([expect.objectContaining({ id: 500, isRead: 1 })])
       )
     )

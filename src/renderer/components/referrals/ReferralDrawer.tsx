@@ -18,7 +18,7 @@ import {
 import { IconArrowLeft, IconCheck, IconCopy, IconMailPlus, IconUsersPlus } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
-import { getWalletIdentity, invalidateRewardReceipt } from '@/hooks/useWallet'
+import { computeKeys, getWalletIdentity, invalidateRewardReceipt } from '@/hooks/useWallet'
 import {
   createEmailInvitation,
   type EmailInvitation,
@@ -27,6 +27,7 @@ import {
   listEmailInvitations,
   markComputeNotificationRead,
 } from '@/packages/computeCenter'
+import { getKodApiOrigin } from '@/packages/kodApiOrigin'
 import { copyToClipboard } from '@/packages/navigator'
 import { useAuthInfoStore } from '@/stores/authInfoStore'
 import { ScalableIcon } from '../common/ScalableIcon'
@@ -58,6 +59,10 @@ function formatLocalDateTime(value: string | null) {
   return match ? `${match[1]}/${match[2]}/${match[3]} ${match[4]}:${match[5]}` : ''
 }
 
+function registrationUrl(value: string) {
+  return new URL(value, getKodApiOrigin()).toString()
+}
+
 function safeFailureReason(invitation: EmailInvitation) {
   if (invitation.status === 'EXPIRED') return '邀请已过期'
   const reason = invitation.failureReason.toLocaleLowerCase()
@@ -74,6 +79,7 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
   const loginEmail = useAuthInfoStore((state) => state.loginEmail)
   const isLoggedIn = Boolean(accessToken)
   const walletIdentity = getWalletIdentity(loginEmail, accessToken, refreshToken)
+  const queryIdentity = walletIdentity ?? 'signed-out'
   const [view, setView] = useState<DrawerView>('invite')
   const [email, setEmail] = useState('')
   const [emailError, setEmailError] = useState('')
@@ -82,17 +88,17 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
   const shownRewardNotification = useRef<number | null>(null)
 
   const profileQuery = useQuery({
-    queryKey: ['compute', 'referrals', 'me'],
+    queryKey: computeKeys.referralProfile(queryIdentity),
     queryFn: getComputeReferralProfile,
     enabled: opened && isLoggedIn,
   })
   const trackingQuery = useQuery({
-    queryKey: ['compute', 'referrals', 'email-invites', TRACKING_DAYS],
+    queryKey: computeKeys.emailInvites(queryIdentity, TRACKING_DAYS),
     queryFn: () => listEmailInvitations(TRACKING_DAYS),
     enabled: opened && isLoggedIn && view === 'tracking',
   })
   const notificationsQuery = useQuery({
-    queryKey: ['compute', 'notifications'],
+    queryKey: computeKeys.notifications(queryIdentity),
     queryFn: listComputeNotifications,
     enabled: isLoggedIn,
     refetchInterval: isLoggedIn ? 5000 : false,
@@ -122,13 +128,13 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
     void Promise.allSettled([
       walletIdentity
         ? invalidateRewardReceipt(queryClient, walletIdentity)
-        : queryClient.invalidateQueries({ queryKey: ['compute', 'account'] }),
+        : queryClient.invalidateQueries({ queryKey: computeKeys.account(queryIdentity) }),
       markComputeNotificationRead(reward.id).finally(() =>
-        queryClient.invalidateQueries({ queryKey: ['compute', 'notifications'] })
+        queryClient.invalidateQueries({ queryKey: computeKeys.notifications(queryIdentity) })
       ),
-      queryClient.invalidateQueries({ queryKey: ['compute', 'referrals', 'email-invites', TRACKING_DAYS] }),
+      queryClient.invalidateQueries({ queryKey: computeKeys.emailInvites(queryIdentity, TRACKING_DAYS) }),
     ])
-  }, [notificationsQuery.data, queryClient, walletIdentity])
+  }, [notificationsQuery.data, queryClient, queryIdentity, walletIdentity])
 
   const submitInvitation = (event: FormEvent) => {
     event.preventDefault()
@@ -195,11 +201,11 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
               onClick={() => {
                 const registrationLink = profileQuery.data?.registrationLink
                 if (!registrationLink) return
-                copyToClipboard(registrationLink)
-                setConfirmation('专属链接已复制')
+                copyToClipboard(registrationUrl(registrationLink))
+                setConfirmation('注册链接已复制')
               }}
             >
-              复制专属链接
+              复制注册链接
             </Button>
             {profileQuery.isError && (
               <Text size="sm" c="red">
@@ -255,6 +261,13 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
                           <Text size="xs" c="dimmed">
                             {formatLocalDateTime(completedAt)}
                           </Text>
+                          <ActionIcon
+                            variant="subtle"
+                            aria-label={`复制 ${invitation.email} 注册链接`}
+                            onClick={() => copyToClipboard(registrationUrl(invitation.registrationLink))}
+                          >
+                            <IconCopy size={16} />
+                          </ActionIcon>
                           {(invitation.status === 'FAILED' || invitation.status === 'EXPIRED') && (
                             <Text size="xs" c="red">
                               {safeFailureReason(invitation)}

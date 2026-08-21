@@ -5,6 +5,7 @@ import { walletApi } from '@/api/wallet'
 import { getKodApiOrigin } from '@/packages/kodApiOrigin'
 import platform from '@/platform'
 import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
+import { queryClient as accountQueryClient } from '@/stores/queryClient'
 
 export type WalletIdentity = string
 
@@ -20,26 +21,43 @@ export const walletKeys = {
   balance: (identity: WalletIdentity) => ['wallet', identity, 'balance'] as const,
   cardTimeAccount: (identity: WalletIdentity) => ['wallet', identity, 'card-time-account'] as const,
   rewardedAdStatus: (identity: WalletIdentity) => ['wallet', identity, 'rewarded-ad-status'] as const,
-  computeAccount: ['compute', 'account'] as const,
-  assetHistory: ['compute', 'ledger'] as const,
   historyRoot: (identity: WalletIdentity) => ['wallet', identity, 'history'] as const,
   history: (identity: WalletIdentity, page: number, pageSize: number) =>
     ['wallet', identity, 'history', page, pageSize] as const,
+}
+
+export const computeKeys = {
+  all: ['compute'] as const,
+  legacyAccount: ['compute', 'account'] as const,
+  legacyAssetHistory: ['compute', 'ledger'] as const,
+  account: (identity: WalletIdentity) => ['compute', identity, 'account'] as const,
+  assetHistory: (identity: WalletIdentity) => ['compute', identity, 'ledger'] as const,
+  notifications: (identity: WalletIdentity) => ['compute', identity, 'notifications'] as const,
+  referralProfile: (identity: WalletIdentity) => ['compute', identity, 'referrals', 'me'] as const,
+  emailInvites: (identity: WalletIdentity, days: number) =>
+    ['compute', identity, 'referrals', 'email-invites', days] as const,
+  platformLeases: (identity: WalletIdentity) => ['compute', identity, 'platform-hosting', 'leases'] as const,
 }
 
 export function invalidateRewardReceipt(queryClient: QueryClient, identity: WalletIdentity) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: walletKeys.cardTimeAccount(identity) }),
     queryClient.invalidateQueries({ queryKey: walletKeys.rewardedAdStatus(identity) }),
-    queryClient.invalidateQueries({ queryKey: walletKeys.computeAccount }),
-    queryClient.invalidateQueries({ queryKey: walletKeys.assetHistory }),
+    queryClient.invalidateQueries({ queryKey: computeKeys.account(identity) }),
+    queryClient.invalidateQueries({ queryKey: computeKeys.assetHistory(identity) }),
+    queryClient.invalidateQueries({ queryKey: computeKeys.legacyAccount }),
+    queryClient.invalidateQueries({ queryKey: computeKeys.legacyAssetHistory }),
   ])
 }
 
 export async function clearWalletCache() {
-  const { queryClient } = await import('@/stores/queryClient')
-  await queryClient.cancelQueries({ queryKey: walletKeys.all })
-  queryClient.removeQueries({ queryKey: walletKeys.all })
+  const cancellations = Promise.all([
+    accountQueryClient.cancelQueries({ queryKey: walletKeys.all }),
+    accountQueryClient.cancelQueries({ queryKey: computeKeys.all }),
+  ])
+  accountQueryClient.removeQueries({ queryKey: walletKeys.all })
+  accountQueryClient.removeQueries({ queryKey: computeKeys.all })
+  await cancellations
 }
 
 authInfoStore.subscribe(
@@ -88,8 +106,10 @@ export function useWallet(page: number, pageSize: number) {
             queryClient.invalidateQueries({ queryKey: walletKeys.balance(identity) }),
             queryClient.invalidateQueries({ queryKey: walletKeys.cardTimeAccount(identity) }),
             queryClient.invalidateQueries({ queryKey: walletKeys.rewardedAdStatus(identity) }),
-            queryClient.invalidateQueries({ queryKey: walletKeys.computeAccount }),
-            queryClient.invalidateQueries({ queryKey: walletKeys.assetHistory }),
+            queryClient.invalidateQueries({ queryKey: computeKeys.account(identity) }),
+            queryClient.invalidateQueries({ queryKey: computeKeys.assetHistory(identity) }),
+            queryClient.invalidateQueries({ queryKey: computeKeys.legacyAccount }),
+            queryClient.invalidateQueries({ queryKey: computeKeys.legacyAssetHistory }),
             queryClient.invalidateQueries({ queryKey: walletKeys.historyRoot(identity) }),
           ])
         : Promise.resolve([]),

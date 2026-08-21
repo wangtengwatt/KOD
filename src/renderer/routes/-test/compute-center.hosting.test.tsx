@@ -32,8 +32,9 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 
 vi.mock('@/hooks/useScreenChange', () => ({ useIsSmallScreen: () => false }))
 vi.mock('@/stores/authInfoStore', () => ({
-  authInfoStore: { getState: () => ({ accessToken: 'test-token' }) },
-  useAuthInfoStore: (selector: (state: { accessToken: string }) => unknown) => selector({ accessToken: 'test-token' }),
+  authInfoStore: { getState: () => ({ accessToken: 'test-token' }), subscribe: vi.fn() },
+  useAuthInfoStore: (selector: (state: { accessToken: string; refreshToken: string; loginEmail: string }) => unknown) =>
+    selector({ accessToken: 'test-token', refreshToken: 'test-refresh-token', loginEmail: 'member@example.com' }),
 }))
 vi.mock('@/packages/computeCenter', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/packages/computeCenter')>()

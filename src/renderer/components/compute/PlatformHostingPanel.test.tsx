@@ -289,6 +289,20 @@ describe('PlatformHostingPanel', () => {
     expect(mocks.rentPlatformServer).toHaveBeenCalledTimes(1)
   })
 
+  it('does not reconcile a reused request id to a lease for another SKU', async () => {
+    const wrongSkuLease = { ...lease, skuId: '99', requestId: 'rent-request-1' }
+    mocks.listPlatformServerLeases.mockResolvedValueOnce([]).mockResolvedValue([wrongSkuLease])
+    mocks.rentPlatformServer.mockRejectedValue(new Error('Request timed out'))
+    renderPanel()
+
+    fireEvent.click(await screen.findByRole('button', { name: '租用一个月' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(await screen.findByRole('button', { name: '确认租用' }))
+
+    expect(await within(dialog).findByText('Request timed out')).toBeTruthy()
+    expect(screen.queryByText('月租结果已从服务端确认，服务器已按平台统一价格上架')).toBeNull()
+  })
+
   it('reuses an unresolved request id after the checkout is closed and reopened', async () => {
     mocks.uuidv4.mockReturnValueOnce('unresolved-rent-key').mockReturnValueOnce('unsafe-new-key')
     mocks.listPlatformServerLeases.mockResolvedValue([])

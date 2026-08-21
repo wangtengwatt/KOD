@@ -83,6 +83,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
   const abandonTrackedRef = useRef(false)
   const claimStateRef = useRef<'idle' | 'pending' | 'succeeded'>('idle')
   const serverProgressPositionRef = useRef(0)
+  const serverProgressTargetRef = useRef(0)
   const serverProgressSequenceRef = useRef(0)
   const progressTokenRef = useRef('')
   const progressInFlightRef = useRef<Promise<boolean> | null>(null)
@@ -185,6 +186,7 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
     abandonTrackedRef.current = false
     claimStateRef.current = 'idle'
     serverProgressPositionRef.current = 0
+    serverProgressTargetRef.current = 0
     serverProgressSequenceRef.current = 0
     progressTokenRef.current = ''
     progressInFlightRef.current = null
@@ -318,47 +320,53 @@ export function RewardedVideoCard({ identity, onClaimed }: RewardedVideoCardProp
 
   const reportServerProgress = useCallback(
     (mediaTime: number): Promise<boolean> => {
+      serverProgressTargetRef.current = Math.max(
+        serverProgressTargetRef.current,
+        Math.min(assetDurationSeconds, Math.floor(mediaTime))
+      )
       if (progressInFlightRef.current) return progressInFlightRef.current
       const activeWatch = watchRef.current
-      const nextPosition = serverProgressPositionRef.current + 1
-      const targetPosition = Math.min(assetDurationSeconds, Math.floor(mediaTime))
-      if (!activeWatch || targetPosition < nextPosition || !progressTokenRef.current) return Promise.resolve(false)
+      if (!activeWatch || !progressTokenRef.current) return Promise.resolve(false)
 
-      const nextSequence = serverProgressSequenceRef.current + 1
-      const request = progress
-        .mutateAsync({
-          watchId: activeWatch.watchId,
-          progressToken: progressTokenRef.current,
-          mediaPositionSeconds: nextPosition,
-          sequence: nextSequence,
-          focused: !document.hidden,
-        })
-        .then((receipt) => {
-          if (receipt.mediaPositionSeconds !== nextPosition || receipt.sequence !== nextSequence) {
-            throw new Error('服务端返回了不匹配的播放进度')
-          }
-          serverProgressPositionRef.current = receipt.mediaPositionSeconds
-          serverProgressSequenceRef.current = receipt.sequence
-          progressTokenRef.current = receipt.nextProgressToken
-          return true
-        })
-        .catch(async (error) => {
-          if (isElapsedProgressWindow(error) && watchRef.current?.watchId === activeWatch.watchId) {
-            const video = videoRef.current
-            if (video) {
-              settleSegment(video)
-              video.pause()
+      const request = (async () => {
+        let reported = false
+        while (serverProgressPositionRef.current < serverProgressTargetRef.current) {
+          const nextPosition = serverProgressPositionRef.current + 1
+          const nextSequence = serverProgressSequenceRef.current + 1
+          try {
+            const receipt = await progress.mutateAsync({
+              watchId: activeWatch.watchId,
+              progressToken: progressTokenRef.current,
+              mediaPositionSeconds: nextPosition,
+              sequence: nextSequence,
+              focused: !document.hidden,
+            })
+            if (receipt.mediaPositionSeconds !== nextPosition || receipt.sequence !== nextSequence) {
+              throw new Error('服务端返回了不匹配的播放进度')
             }
-            setIsPlaying(false)
-            await abandonWatch(activeWatch, '观看中断超过 5 秒，本次未发放奖励，请重新开始。')
+            serverProgressPositionRef.current = receipt.mediaPositionSeconds
+            serverProgressSequenceRef.current = receipt.sequence
+            progressTokenRef.current = receipt.nextProgressToken
+            reported = true
+          } catch (error) {
+            if (isElapsedProgressWindow(error) && watchRef.current?.watchId === activeWatch.watchId) {
+              const video = videoRef.current
+              if (video) {
+                settleSegment(video)
+                video.pause()
+              }
+              setIsPlaying(false)
+              await abandonWatch(activeWatch, '观看中断超过 5 秒，本次未发放奖励，请重新开始。')
+              return false
+            }
+            setClaimError(`播放进度回执失败：${errorMessage(error)}`)
             return false
           }
-          setClaimError(`播放进度回执失败：${errorMessage(error)}`)
-          return false
-        })
-        .finally(() => {
-          progressInFlightRef.current = null
-        })
+        }
+        return reported
+      })().finally(() => {
+        progressInFlightRef.current = null
+      })
       progressInFlightRef.current = request
       return request
     },

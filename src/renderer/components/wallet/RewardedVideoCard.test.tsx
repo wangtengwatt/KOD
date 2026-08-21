@@ -233,6 +233,57 @@ describe('RewardedVideoCard', () => {
     ])
   })
 
+  it('drains sequential progress heartbeats when playback advances during network latency', async () => {
+    let resolveFirst:
+      | ((receipt: {
+          watchId: number
+          mediaPositionSeconds: number
+          sequence: number
+          nextProgressToken: string
+          expiresAt: number
+        }) => void)
+      | undefined
+    mocks.progressRewardedAd
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve
+          })
+      )
+      .mockImplementation(async ({ watchId, mediaPositionSeconds, sequence }) => ({
+        watchId,
+        mediaPositionSeconds,
+        sequence,
+        nextProgressToken: `progress-${sequence}`,
+        expiresAt: Math.floor(Date.now() / 1000) + 600,
+      }))
+    renderCard()
+    const video = await openAd()
+
+    act(() => advancePlayback(video, 1))
+    await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(1))
+    act(() => advancePlayback(video, 2))
+    act(() => advancePlayback(video, 3))
+    fireEvent.ended(video)
+    expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveFirst?.({
+        watchId: 17,
+        mediaPositionSeconds: 1,
+        sequence: 1,
+        nextProgressToken: 'progress-1',
+        expiresAt: Math.floor(Date.now() / 1000) + 600,
+      })
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(3))
+    expect(mocks.progressRewardedAd.mock.calls.map((call) => call[0].mediaPositionSeconds)).toEqual([1, 2, 3])
+    await waitFor(() => expect(mocks.completeRewardedAd).toHaveBeenCalledWith(17, 'progress-3'))
+    await waitFor(() => expect(mocks.claimRewardedAd).toHaveBeenCalledTimes(1))
+  })
+
   it('records one abandon event without sensitive fields', async () => {
     renderCard()
     await openAd()
@@ -428,8 +479,8 @@ describe('RewardedVideoCard', () => {
     await waitFor(() => {
       expect(invalidate).toHaveBeenCalledWith({ queryKey: walletKeys.cardTimeAccount('member@kod.test') })
       expect(invalidate).toHaveBeenCalledWith({ queryKey: walletKeys.rewardedAdStatus('member@kod.test') })
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: walletKeys.computeAccount })
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: walletKeys.assetHistory })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'member@kod.test', 'account'] })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'member@kod.test', 'ledger'] })
     })
   })
 
