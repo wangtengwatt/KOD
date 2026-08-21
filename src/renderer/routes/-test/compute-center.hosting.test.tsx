@@ -51,7 +51,7 @@ vi.mock('@/packages/computeCenter', async (importOriginal) => {
   }
 })
 
-import { ComputeCenterPage } from './compute-center'
+import { ComputeCenterPage } from '../compute-center'
 
 const account = {
   userId: 7,

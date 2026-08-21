@@ -4,7 +4,7 @@ import { MantineProvider } from '@mantine/core'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ComputeAccount } from '@/packages/computeCenter'
-import { AssetDashboard, ReferralInviteModal } from './compute-center'
+import { AssetDashboard, ReferralInviteModal } from '../compute-center'
 
 const account: ComputeAccount = {
   userId: 7,
