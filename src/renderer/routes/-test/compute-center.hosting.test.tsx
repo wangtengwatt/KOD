@@ -279,6 +279,30 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+it('wires the default realtime-market route to the required shared simulation feed', async () => {
+  const fetchMock = vi.fn().mockRejectedValue(new Error('offline'))
+  vi.stubGlobal('fetch', fetchMock)
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MantineProvider>
+        <ComputeCenterPage />
+      </MantineProvider>
+    </QueryClientProvider>
+  )
+
+  fireEvent.click(await screen.findByRole('tab', { name: '实时行情' }))
+
+  await waitFor(() =>
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://kod.kai.com/api/v1/contracts',
+      expect.objectContaining({ credentials: 'omit', redirect: 'error' })
+    )
+  )
+  expect(await screen.findByText('GPU 行情服务暂不可用')).toBeTruthy()
+  expect(screen.getByText('行情服务请求失败，请稍后重试。')).toBeTruthy()
+})
+
 it('opens card-hour hosting from the authenticated compute-center navigation', async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(

@@ -29,3 +29,9 @@
 
 - [x] 6.1 Record commit ancestry, backup branch, tests, build, endpoint availability, OpenSpec validation, protected-scope scan, and launcher target in `verification.md`.
 - [x] 6.2 Review the final diff with the user-approved scope and report any unexecuted manual or external-endpoint checks without claiming them as passed.
+
+## 7. Address Independent Review Findings
+
+- [x] 7.1 Correct the launcher design to match the inspected full-stack shortcut chain and explicitly leave the stale, unreferenced legacy script out of scope.
+- [x] 7.2 Add a mutation-verified route regression proving the default compute-center tab uses the shared simulation adapter and exposes required-feed failure.
+- [x] 7.3 Record exact verification commands and baseline references, then rerun focused tests, type checking, build, strict OpenSpec validation, and scope checks.

@@ -202,6 +202,7 @@ const simulatedMarketApi = createSimulatedMarketApi({
   allowedOrigins: parseComputeMarketSimulationAllowedOrigins(COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS),
   remoteRequired: featureFlags.computeMarketSimulationRemoteRequired,
   allowLoopback: featureFlags.computeMarketSimulationAllowLoopback,
+  fetchFn: (...args) => globalThis.fetch(...args),
 })
 
 export const Route = createFileRoute('/compute-center')({

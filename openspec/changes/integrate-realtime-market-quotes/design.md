@@ -1,6 +1,6 @@
 ## Context
 
-See `proposal.md` for motivation. Commit `b8c66432632bfa688cb34eccc8e8e4981e7160c3` is already an ancestor of the local branch after an externally performed rebase. The prior local work is commit `47daf9c9a596312a218258987e079e55d9140abe`, and `backup/pre-realtime-quotes-20260824` protects the combined state. The colleague feature is a shared **simulated** market feed, not direct live Vast.ai/Akamai collection. The desktop development shortcut currently invokes `D:\watt\.kod-local\run-kod-latest.ps1`, which still delegates to `D:\watt\kod-web\start-kod-dev.ps1`.
+See `proposal.md` for motivation. Commit `b8c66432632bfa688cb34eccc8e8e4981e7160c3` is already an ancestor of the local branch after an externally performed rebase. The prior local work is commit `47daf9c9a596312a218258987e079e55d9140abe`, and `backup/pre-realtime-quotes-20260824` protects the combined state. The colleague feature is a shared **simulated** market feed, not direct live Vast.ai/Akamai collection. The desktop development shortcut invokes `D:\watt\.kod-local\run-kod-full-stack.ps1`, which delegates the client launch to `D:\watt\kod\start-kod-dev.ps1`.
 
 ## Goals / Non-Goals
 
@@ -32,9 +32,9 @@ Tests and manual evidence will evaluate the configured shared simulation endpoin
 
 If a focused test or manual launch reveals a defect, add the smallest regression test that fails for that defect before changing production code. If a repair conflicts with protected local work or expands behavior beyond this specification, stop for user approval.
 
-### Keep delivery indirection but correct its repository
+### Keep the verified full-stack launcher chain
 
-Retain the stable desktop shortcut and `run-kod-latest.ps1` indirection so future builds do not require recreating the `.lnk`. Change the delegated client launcher from `kod-web` to a verified launcher under `D:\watt\kod`, then inspect the shortcut target and working directory. The separate SVG shortcut remains untouched.
+Retain the stable desktop shortcut and `run-kod-full-stack.ps1` indirection so future builds do not require recreating the `.lnk`. Verify that it delegates the client launch to `D:\watt\kod\start-kod-dev.ps1`, then inspect the shortcut target and working directory. The stale, unreferenced `D:\watt\.kod-local\run-kod-latest.ps1` still targets `kod-web`; changing or deleting it is outside this task because the active shortcut does not use it. The separate SVG shortcut remains untouched.
 
 ## Risks / Trade-offs
 
@@ -50,5 +50,5 @@ Retain the stable desktop shortcut and `run-kod-latest.ps1` indirection so futur
 2. Run focused tests for the colleague market modules and route integration.
 3. Run type, changed-file lint, broader regression, and production build checks.
 4. If failures identify a product defect, follow RED-GREEN-REFACTOR and re-run the gates.
-5. Update the stable launcher chain to `D:\watt\kod` and perform a startup smoke test.
+5. Verify the stable full-stack launcher chain resolves to `D:\watt\kod` and perform a bounded startup smoke test.
 6. Roll back by restoring the launcher script and resetting a new recovery branch to `backup/pre-realtime-quotes-20260824`; never discard user work in place.
