@@ -54,6 +54,8 @@ function isChineseGuide(language: string) {
   return language.startsWith('zh')
 }
 
+const GUIDE_LANGUAGE_HINT_MESSAGE_ID = 'guide-language-detection-hint'
+
 function getKodGreeting(language: string) {
   if (isChineseGuide(language)) {
     return `## 👋 你好！我是 KOD 新手助手
@@ -190,18 +192,34 @@ export function useGuideSession(): UseGuideSessionReturn {
 
   // Show temporary hint before language is fully initialized/switched.
   useEffect(() => {
-    if (!isLanguageReady && messages.length === 0 && !greetingInitializedRef.current) {
-      const hint = 'Detecting your language...'
-      setMessages([
-        {
-          id: generateMessageId(),
-          role: 'assistant',
-          content: hint,
-          parts: [{ type: 'text', text: hint }],
-        },
-      ])
+    if (!isLanguageReady && !greetingInitializedRef.current) {
+      const hint = String(
+        t('Detecting your language...', {
+          lng: isChineseGuide(language) ? language : 'en',
+        })
+      )
+      setMessages((currentMessages) => {
+        const currentMessage = currentMessages[0]
+        const isLanguageHint = currentMessages.length === 1 && currentMessage?.id === GUIDE_LANGUAGE_HINT_MESSAGE_ID
+
+        if (currentMessages.length > 0 && !isLanguageHint) {
+          return currentMessages
+        }
+        if (currentMessage?.content === hint) {
+          return currentMessages
+        }
+
+        return [
+          {
+            id: GUIDE_LANGUAGE_HINT_MESSAGE_ID,
+            role: 'assistant',
+            content: hint,
+            parts: [{ type: 'text', text: hint }],
+          },
+        ]
+      })
     }
-  }, [isLanguageReady, messages.length])
+  }, [isLanguageReady, language, t])
 
   // Initialize with greeting message when entering the guide
   // biome-ignore lint/correctness/useExhaustiveDependencies: greetingInitializedRef prevents re-execution

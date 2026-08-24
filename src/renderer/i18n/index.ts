@@ -5,6 +5,7 @@ import { authErrorOverrides } from './auth-error-overrides'
 import changelogEn from './changelogs/changelog_en'
 import changelogZhHans from './changelogs/changelog_zh_Hans'
 import changelogZhHant from './changelogs/changelog_zh_Hant'
+import { kodCopyOverrides } from './kod-copy-overrides'
 import ar from './locales/ar/translation.json'
 import de from './locales/de/translation.json'
 import en from './locales/en/translation.json'
@@ -23,13 +24,13 @@ import zhHant from './locales/zh-Hant/translation.json'
 i18n.use(initReactI18next).init({
   resources: {
     'zh-Hans': {
-      translation: { ...zhHans, ...authErrorOverrides['zh-Hans'] },
+      translation: { ...zhHans, ...authErrorOverrides['zh-Hans'], ...kodCopyOverrides['zh-Hans'] },
     },
     'zh-Hant': {
-      translation: { ...zhHant, ...authErrorOverrides['zh-Hant'] },
+      translation: { ...zhHant, ...authErrorOverrides['zh-Hant'], ...kodCopyOverrides['zh-Hant'] },
     },
     en: {
-      translation: { ...en, ...authErrorOverrides.en },
+      translation: { ...en, ...authErrorOverrides.en, ...kodCopyOverrides.en },
     },
     ja: {
       translation: ja,
