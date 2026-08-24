@@ -6,6 +6,7 @@ import DesktopDownloadReminder from '@/components/layout/DesktopDownloadReminder
 import ExitFullscreenButton from '@/components/layout/ExitFullscreenButton'
 import WindowControls from '@/components/layout/WindowControls'
 import useAppTheme from '@/hooks/useAppTheme'
+import { useSystemLanguageWhenInit } from '@/hooks/useDefaultSystemLanguage'
 import { useI18nEffect } from '@/hooks/useI18nEffect'
 import useNeedRoomForWinControls from '@/hooks/useNeedRoomForWinControls'
 import { useSidebarWidth } from '@/hooks/useScreenChange'
@@ -702,6 +703,7 @@ export const Route = createRootRoute({
   }),
   component: () => {
     useI18nEffect()
+    useSystemLanguageWhenInit()
     premiumActions.useAutoValidate() // 每次启动都执行 license 检查，防止用户在lemonsqueezy管理页面中取消了当前设备的激活
     useShortcut()
     const theme = useAppTheme()

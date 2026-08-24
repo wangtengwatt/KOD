@@ -28,6 +28,18 @@ function jsxElements(tree: ts.SourceFile, elementName: string): ts.JsxOpeningLik
   return elements
 }
 
+function callsNamed(tree: ts.SourceFile, functionName: string): ts.CallExpression[] {
+  const calls: ts.CallExpression[] = []
+
+  function visit(node: ts.Node) {
+    if (ts.isCallExpression(node) && node.expression.getText(tree) === functionName) calls.push(node)
+    ts.forEachChild(node, visit)
+  }
+
+  visit(tree)
+  return calls
+}
+
 function meaningfulChildren(parent: ts.JsxElement) {
   return parent.children.filter(
     (child) =>
@@ -90,5 +102,11 @@ describe('mobile route contract', () => {
 
     expect(child.parent && ts.isBinaryExpression(child.parent)).toBe(true)
     expect(child.parent?.getText(tree)).toContain("platform.type === 'mobile'")
+  })
+
+  it('mounts the startup language initializer from the root runtime', () => {
+    const tree = parseTsx('src/renderer/routes/__root.tsx')
+
+    expect(callsNamed(tree, 'useSystemLanguageWhenInit')).toHaveLength(1)
   })
 })
