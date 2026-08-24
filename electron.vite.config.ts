@@ -187,6 +187,7 @@ export default defineConfig(({ mode }) => {
         'process.env.USE_LOCAL_CHATBOX': JSON.stringify(process.env.USE_LOCAL_CHATBOX || ''),
         'process.env.USE_BETA_CHATBOX': JSON.stringify(process.env.USE_BETA_CHATBOX || ''),
         'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
+        'process.env.KOD_MARKET_API_ORIGIN': JSON.stringify(process.env.KOD_MARKET_API_ORIGIN || ''),
         'process.env.KOD_PAYMENT_HOSTS': JSON.stringify(process.env.KOD_PAYMENT_HOSTS || 'kod.kai.com,mzf.mapay.cc'),
       },
     },
@@ -341,6 +342,7 @@ export default defineConfig(({ mode }) => {
         'process.env.USE_LOCAL_CHATBOX': JSON.stringify(process.env.USE_LOCAL_CHATBOX || ''),
         'process.env.USE_BETA_CHATBOX': JSON.stringify(process.env.USE_BETA_CHATBOX || ''),
         'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
+        'process.env.KOD_MARKET_API_ORIGIN': JSON.stringify(process.env.KOD_MARKET_API_ORIGIN || ''),
         'process.env.KOD_PAYMENT_HOSTS': JSON.stringify(process.env.KOD_PAYMENT_HOSTS || 'kod.kai.com,mzf.mapay.cc'),
       },
       optimizeDeps: {

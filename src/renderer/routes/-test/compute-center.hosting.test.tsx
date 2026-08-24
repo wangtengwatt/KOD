@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   listSupplierNodes: vi.fn(),
   listSupplierProducts: vi.fn(),
   platformGetConfig: vi.fn(),
+  platformGetStoreValue: vi.fn(),
+  platformSetStoreValue: vi.fn(),
 }))
 
 const routeSearch = vi.hoisted(() => ({ current: {} as { invite?: string } }))
@@ -88,6 +90,8 @@ vi.mock('@/platform', async (importOriginal) => {
       ...original.default,
       type: 'desktop',
       getConfig: mocks.platformGetConfig,
+      getStoreValue: mocks.platformGetStoreValue,
+      setStoreValue: mocks.platformSetStoreValue,
       getPlatform: vi.fn().mockResolvedValue('win32'),
       isFullscreen: vi.fn().mockResolvedValue(false),
       openLink: vi.fn(),
@@ -232,6 +236,8 @@ beforeEach(() => {
     reason: '',
   })
   mocks.platformGetConfig.mockResolvedValue({ uuid: 'device-a' })
+  mocks.platformGetStoreValue.mockResolvedValue(undefined)
+  mocks.platformSetStoreValue.mockResolvedValue(undefined)
   mocks.getComputeSupplier.mockResolvedValue({ status: 'APPROVED', displayName: 'Test supplier' })
   mocks.getComputeConfig.mockResolvedValue({
     cardHourCnyRate: 1,

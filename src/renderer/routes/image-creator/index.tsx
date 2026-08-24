@@ -27,8 +27,6 @@ import {
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { JK_PAGE_NAMES } from '@/analytics/jk-events'
-import { ChatboxWelcomeCard } from '@/components/common/ChatboxWelcomeCard'
 import { ImageModelSelect } from '@/components/ImageModelSelect'
 import Page from '@/components/layout/Page'
 import { type ImageModelGroup, useImageModelGroups } from '@/hooks/useImageModelGroups'
@@ -50,9 +48,7 @@ import {
   useImageGenerationRecord,
 } from '@/stores/imageGenerationStore'
 import { queryClient } from '@/stores/queryClient'
-import { useSettingsStore } from '@/stores/settingsStore'
 import * as toastActions from '@/stores/toastActions'
-import { getHomeWelcomeCardMode } from '@/utils/homeWelcomeCard'
 import {
   getRatioOptionsForModel,
   HISTORY_IMAGE_MODEL_DISPLAY_NAMES,
@@ -216,13 +212,7 @@ function ImageCreatorPage() {
   const { providers } = useProviders()
   const relay = useKodRelay()
   const imageModelGroups = useImageModelGroups()
-  const hasLicense = useSettingsStore((s) => Boolean(s.licenseKey))
-  const hasExpiredLicense = useSettingsStore((s) => s.hasExpiredLicense)
   const isLoggedIn = useAuthInfoStore((s) => Boolean(s.accessToken && s.refreshToken))
-  const welcomeCardMode = useMemo(
-    () => getHomeWelcomeCardMode({ providerCount: providers.length, isLoggedIn, hasLicense, hasExpiredLicense }),
-    [providers.length, isLoggedIn, hasLicense, hasExpiredLicense]
-  )
 
   const [prompt, setPrompt] = useState('')
   const [referenceImages, setReferenceImages] = useState<
@@ -627,10 +617,6 @@ function ImageCreatorPage() {
                 <Alert color="yellow" title="当前零售站暂不支持图片生成">
                   当前零售站（{relay.selection.stationUrl}）没有可用的图片模型，请在左侧切换支持生图的零售站或节点。
                 </Alert>
-              )}
-
-              {!currentRecord && welcomeCardMode !== 'none' && (
-                <ChatboxWelcomeCard mode={welcomeCardMode} pageName={JK_PAGE_NAMES.IMAGE_PAGE} />
               )}
 
               <ReferenceImagesPreview

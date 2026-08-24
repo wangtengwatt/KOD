@@ -36,6 +36,11 @@ const ITEMS = [
     icon: <IconSparkles className="w-full h-full" />,
   },
   {
+    key: 'general',
+    label: '常规设置',
+    icon: <IconAdjustmentsHorizontal className="w-full h-full" />,
+  },
+  {
     key: 'wallet',
     label: '钱包',
     icon: <IconWallet className="w-full h-full" />,
@@ -105,11 +110,6 @@ const ITEMS = [
     key: 'suanbao',
     label: '蒜宝',
     icon: <IconPlant className="w-full h-full" />,
-  },
-  {
-    key: 'general',
-    label: '常规设置',
-    icon: <IconAdjustmentsHorizontal className="w-full h-full" />,
   },
 ]
 

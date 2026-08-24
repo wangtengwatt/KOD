@@ -69,6 +69,7 @@ import * as settingActions from '@/stores/settingActions'
 import { initSettingsStore, settingsStore, useLanguage, useSettingsStore, useTheme } from '@/stores/settingsStore'
 import { getTaskSession } from '@/stores/taskSessionStore'
 import { useUIStore } from '@/stores/uiStore'
+import { kodVariantColorResolver } from '@/theme/variantColorResolver'
 import { CHATBOX_BUILD_CHANNEL, CHATBOX_BUILD_PLATFORM } from '@/variables'
 import { blobToDataUrl } from './image-creator/-components/constants'
 
@@ -422,6 +423,7 @@ const creteMantineTheme = (scale = 1) =>
     /** Put your mantine theme override here */
     scale,
     primaryColor: 'chatbox-brand',
+    variantColorResolver: kodVariantColorResolver,
     defaultRadius: 'md',
     colors: {
       'chatbox-brand': colorsTuple(Array.from({ length: 10 }, () => 'var(--chatbox-tint-brand)')),

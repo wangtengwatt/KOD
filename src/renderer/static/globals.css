@@ -36,13 +36,14 @@
 
   --chatbox-tint-disabled: #adb5bd;
   --chatbox-tint-brand: #171717;
+  --chatbox-tint-on-brand: #ffffff;
   --chatbox-tint-placeholder: #9a9a9a;
   --chatbox-tint-error: #fa5252;
   --chatbox-tint-error-disabled: #ff8787;
   --chatbox-tint-warning: #fab005;
   --chatbox-tint-success: #12b886;
 
-  --chatbox-border-primary: rgba(17, 17, 17, 0.10);
+  --chatbox-border-primary: rgba(17, 17, 17, 0.1);
   --chatbox-border-secondary: rgba(17, 17, 17, 0.16);
   --chatbox-border-warning: #fab005;
   --chatbox-border-error: #fa5252;
@@ -55,7 +56,7 @@
   --chatbox-background-secondary: rgba(255, 255, 255, 0.56);
   --chatbox-background-secondary-hover: rgba(255, 255, 255, 0.82);
   --chatbox-background-tertiary: rgba(17, 17, 17, 0.065);
-  --chatbox-background-tertiary-hover: rgba(17, 17, 17, 0.10);
+  --chatbox-background-tertiary-hover: rgba(17, 17, 17, 0.1);
   --chatbox-background-disabled: rgba(17, 17, 17, 0.06);
 
   --chatbox-background-brand-primary: #171717;
@@ -99,13 +100,14 @@
 
   --chatbox-tint-disabled: #696969;
   --chatbox-tint-brand: #ffffff;
+  --chatbox-tint-on-brand: #111111;
   --chatbox-tint-placeholder: #828282;
   --chatbox-tint-error: #f03e3e;
   --chatbox-tint-error-disabled: rgb(224, 49, 49, 0.5);
   --chatbox-tint-warning: #ffe066;
   --chatbox-tint-success: #63e6be;
 
-  --chatbox-border-primary: rgba(255, 255, 255, 0.10);
+  --chatbox-border-primary: rgba(255, 255, 255, 0.1);
   --chatbox-border-secondary: rgba(255, 255, 255, 0.17);
   --chatbox-border-warning: #ffe066;
   --chatbox-border-error: #f03e3e;

@@ -8,6 +8,7 @@ import {
 } from '@/packages/computeImageUpload'
 import { getKodApiOrigin } from '@/packages/remote'
 import { authInfoStore } from '@/stores/authInfoStore'
+import { KOD_MARKET_API_ORIGIN } from '@/variables'
 import type { ComputeEscrowProjection, ComputeFundsEvent } from './computeMarketplace/types'
 
 export type ProductType = 'API' | 'GPU'
@@ -46,6 +47,10 @@ export interface ComputeProduct {
   slaDescription?: string | null
   isTest?: number | boolean
   rejectionReason?: string | null
+  likeCount?: number | null
+  commentCount?: number | null
+  performanceScore?: number | null
+  heatScore?: number | null
   createTime: string
 }
 
@@ -134,6 +139,14 @@ export interface ComputeReservation {
   incidentReason?: string
   resolutionType?: string | null
   resolutionCardHours?: number | null
+  manualReviewRequired?: boolean | null
+  manualReviewReasons?: string[] | null
+  manualReviewRequestedAt?: string | null
+  manualReviewPolicyVersion?: string | null
+  reviewedAt?: string | null
+  reviewedByEmail?: string | null
+  resolutionReason?: string | null
+  version?: number | null
   nodeId?: number | null
   nodeName?: string | null
   nodeStatus?: string | null
@@ -210,12 +223,38 @@ export interface ComputeAdminOverview {
   reservationsActive: number
   circulatingCardHours: number
   transferReviewThreshold: number
+  reservationManualReviewThreshold?: number | null
+  reservationsPendingManualReview?: number
   platformFeeRate: number
   usdCnyRate: number
 }
 
-export type ComputeMarketPriceSource = 'VAST_AI' | 'AKAMAI'
+export type ComputeMarketPriceSource = 'VAST_AI' | 'GETDEPLOYING' | 'AUTODL' | 'AKAMAI'
 export type ComputeMarketPriceStatus = 'OK' | 'STALE' | 'NO_QUOTE' | 'UNAVAILABLE' | 'UNCONFIGURED'
+export type ComputeMarketPriceRange = '1h' | '6h' | '24h' | '7d' | '30d' | '90d' | '365d'
+export type ComputeMarketRentalTerm = 'HOURLY' | 'DAILY' | 'WEEKLY' | 'MONTHLY'
+export type ComputeMarketPriceCurrency = 'CNY' | 'USD'
+export type ComputeMarketBillingUnit = 'HOUR' | 'DAY' | 'WEEK' | 'MONTH'
+export type ComputeMarketAvailabilityStatus = 'AVAILABLE' | 'UNAVAILABLE' | 'WAITLIST' | 'UNKNOWN'
+export type ComputeMarketPriceQuoteType =
+  | 'MIN_AVAILABLE'
+  | 'MEDIAN_AVAILABLE'
+  | 'VERIFIED_MIN'
+  | 'OFFICIAL_LIST'
+  | 'MEMBER_PRICE'
+
+export interface ComputeMarketRegionOption {
+  value: string
+  label: string
+  source?: ComputeMarketPriceSource
+}
+
+export interface ComputeMarketPriceHistoryFilters {
+  rentalTerm?: ComputeMarketRentalTerm
+  regions?: string[]
+  vramMiB?: number
+  formFactor?: string | null
+}
 
 export interface ComputeMarketPriceQuote {
   source: ComputeMarketPriceSource
@@ -223,7 +262,7 @@ export interface ComputeMarketPriceQuote {
   gpuModel: string
   sourceUrl: string
   status: ComputeMarketPriceStatus
-  quoteType?: 'MEDIAN_AVAILABLE' | 'OFFICIAL_LIST'
+  quoteType?: ComputeMarketPriceQuoteType
   priceUsdPerGpuHour?: number
   priceCnyPerGpuHour?: number
   cardHoursPerGpuHour?: number
@@ -232,36 +271,87 @@ export interface ComputeMarketPriceQuote {
   lastAttemptAt?: string
   lastSuccessAt?: string
   errorMessage?: string
+  modelKey?: string
+  sourceModel?: string
+  vramMiB?: number
+  formFactor?: string | null
+  rentalTerm?: ComputeMarketRentalTerm
+  regionCode?: string
+  regionLabel?: string
+  originalCurrency?: ComputeMarketPriceCurrency
+  originalPricePerGpuHour?: number
+  originalBillingPrice?: number
+  originalBillingUnit?: ComputeMarketBillingUnit
+  medianPricePerGpuHour?: number
+  verifiedPricePerGpuHour?: number
+  availableGpuCount?: number
+  priceCondition?: string
+  providerUpdatedAt?: string
+  providerId?: string
+  providerName?: string
+  providerCountry?: string
+  externalOfferingId?: string
+  availabilityStatus?: ComputeMarketAvailabilityStatus
 }
 
 export interface ComputeMarketPriceSnapshot {
   trackedModels: string[]
   quotes: ComputeMarketPriceQuote[]
-  usdCnyRate: number
-  cardHourCnyRate: number
+  usdCnyRate?: number
+  cardHourCnyRate?: number
+  usdCnyRateUpdatedAt?: string
+  cardHourCnyRateUpdatedAt?: string
   refreshIntervalSeconds: number
   historySampleSeconds: number
   historyRetentionDays: number
   generatedAt: string
+  availableRegions?: ComputeMarketRegionOption[]
+  availableRentalTerms?: ComputeMarketRentalTerm[]
 }
 
 export interface ComputeMarketPricePoint {
   source: ComputeMarketPriceSource
   gpuModel: string
-  quoteType: 'MEDIAN_AVAILABLE' | 'OFFICIAL_LIST'
-  priceUsdPerGpuHour: number
-  priceCnyPerGpuHour: number
-  cardHoursPerGpuHour: number
-  sampleSize: number
+  quoteType: ComputeMarketPriceQuoteType
+  status?: ComputeMarketPriceStatus
+  priceUsdPerGpuHour?: number
+  priceCnyPerGpuHour?: number
+  cardHoursPerGpuHour?: number
+  sampleSize?: number
   sampledAt: string
+  modelKey?: string
+  sourceModel?: string
+  vramMiB?: number
+  formFactor?: string | null
+  rentalTerm?: ComputeMarketRentalTerm
+  regionCode?: string
+  regionLabel?: string
+  originalCurrency?: ComputeMarketPriceCurrency
+  originalPricePerGpuHour?: number
+  originalBillingPrice?: number
+  originalBillingUnit?: ComputeMarketBillingUnit
+  medianPricePerGpuHour?: number
+  verifiedPricePerGpuHour?: number
+  availableGpuCount?: number
+  priceCondition?: string
+  providerUpdatedAt?: string
+  providerId?: string
+  providerName?: string
+  providerCountry?: string
+  externalOfferingId?: string
+  availabilityStatus?: ComputeMarketAvailabilityStatus
 }
 
 export interface ComputeMarketPriceHistory {
   gpuModel: string
-  range: '1h' | '6h' | '24h' | '7d'
+  range: ComputeMarketPriceRange
   points: ComputeMarketPricePoint[]
-  usdCnyRate: number
-  cardHourCnyRate: number
+  usdCnyRate?: number
+  cardHourCnyRate?: number
+  usdCnyRateUpdatedAt?: string
+  cardHourCnyRateUpdatedAt?: string
+  rentalTerm?: ComputeMarketRentalTerm
+  regions?: string[]
 }
 
 export interface ComputeWithdrawal {
@@ -857,12 +947,26 @@ export class ComputeCenterApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options?: FetchOptions<'json'>, authenticated = true): Promise<T> {
+export function resolveComputeMarketApiOrigin(configuredOrigin: string, fallbackOrigin: string) {
+  const origin = configuredOrigin.trim() || fallbackOrigin.trim()
+  return origin.replace(/\/+$/, '')
+}
+
+function getComputeMarketApiOrigin() {
+  return resolveComputeMarketApiOrigin(KOD_MARKET_API_ORIGIN, getKodApiOrigin())
+}
+
+async function request<T>(
+  path: string,
+  options?: FetchOptions<'json'>,
+  authenticated = true,
+  origin = getKodApiOrigin()
+): Promise<T> {
   const token = authInfoStore.getState().accessToken
   if (authenticated && !token) {
     throw new Error('请先登录 KOD 账号')
   }
-  const json = await ofetch<KodResult<T>>(`${getKodApiOrigin()}${path}`, {
+  const json = await ofetch<KodResult<T>>(`${origin.replace(/\/+$/, '')}${path}`, {
     ...options,
     headers: {
       ...(options?.headers || {}),
@@ -892,14 +996,37 @@ export function getComputeConfig() {
 }
 
 export function getComputeMarketPrices() {
-  return request<ComputeMarketPriceSnapshot>('/api/compute/market-prices/latest', undefined, false)
+  return request<ComputeMarketPriceSnapshot>(
+    '/api/compute/market-prices/latest',
+    { timeout: 15_000 },
+    false,
+    getComputeMarketApiOrigin()
+  )
 }
 
-export function getComputeMarketPriceHistory(model: string, range: '1h' | '6h' | '24h' | '7d') {
+export function getComputeMarketPriceHistory(
+  model: string,
+  range: ComputeMarketPriceRange,
+  filters: ComputeMarketPriceHistoryFilters = {}
+) {
+  const query = new URLSearchParams({ model, range })
+  if (filters.rentalTerm) {
+    query.set('rentalTerm', filters.rentalTerm)
+  }
+  if (filters.regions?.length) {
+    query.set('regions', filters.regions.join(','))
+  }
+  if (filters.vramMiB != null) {
+    query.set('vramMiB', String(filters.vramMiB))
+  }
+  if (filters.formFactor) {
+    query.set('formFactor', filters.formFactor)
+  }
   return request<ComputeMarketPriceHistory>(
-    `/api/compute/market-prices/history?model=${encodeURIComponent(model)}&range=${encodeURIComponent(range)}`,
-    undefined,
-    false
+    `/api/compute/market-prices/history?${query.toString()}`,
+    { timeout: 15_000 },
+    false,
+    getComputeMarketApiOrigin()
   )
 }
 
@@ -1489,6 +1616,7 @@ export function getComputeAdminOverview() {
 
 export function updateComputeAdminSettings(input: {
   transferReviewThreshold: number
+  reservationManualReviewThreshold?: number
   platformFeeRate: number
   usdCnyRate: number
 }) {
@@ -1604,15 +1732,21 @@ export function listAdminReservations() {
   return request<ComputeReservation[]>('/api/compute/admin/reservations')
 }
 
-export function settleAdminReservation(reservationId: number) {
+export function settleAdminReservation(reservationId: number, expectedVersion?: number | null) {
   return request<ComputeReservation>(`/api/compute/admin/reservations/${reservationId}/settle`, {
     method: 'POST',
+    ...(expectedVersion == null ? {} : { body: { expectedVersion } }),
   })
 }
 
 export function resolveAdminReservation(
   reservationId: number,
-  input: { resolution: 'FULL_REFUND' | 'ACTUAL_USAGE' | 'FULL_SETTLEMENT'; actualCardHours?: number; reason: string }
+  input: {
+    resolution: 'FULL_REFUND' | 'ACTUAL_USAGE' | 'FULL_SETTLEMENT'
+    actualCardHours?: number
+    reason: string
+    expectedVersion?: number
+  }
 ) {
   return request<ComputeReservation>(`/api/compute/admin/reservations/${reservationId}/resolve`, {
     method: 'POST',
