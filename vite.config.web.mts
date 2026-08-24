@@ -6,6 +6,13 @@ import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
+const computeMarketSimulation = process.env.COMPUTE_MARKET_SIMULATION ?? 'true'
+const computeMarketSimulationApiBase =
+  process.env.COMPUTE_MARKET_SIMULATION_API_BASE ?? 'https://kod.kai.com/api/v1'
+const computeMarketSimulationAllowedOrigins =
+  process.env.COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS ?? 'https://kod.kai.com'
+const computeMarketSimulationRemoteRequired = process.env.COMPUTE_MARKET_SIMULATION_REMOTE_REQUIRED ?? 'true'
+
 /** Replaces dvh units with vh units (copied from electron.vite.config.ts) */
 function dvhToVh() {
   return {
@@ -99,6 +106,11 @@ export default defineConfig({
     'process.env.USE_BETA_CHATBOX': JSON.stringify(''),
     'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
     'process.env.KOD_MARKET_API_ORIGIN': JSON.stringify(process.env.KOD_MARKET_API_ORIGIN || ''),
+    'process.env.COMPUTE_MARKET_V2': JSON.stringify(process.env.COMPUTE_MARKET_V2 ?? 'true'),
+    'process.env.COMPUTE_MARKET_SIMULATION': JSON.stringify(computeMarketSimulation),
+    'process.env.COMPUTE_MARKET_SIMULATION_API_BASE': JSON.stringify(computeMarketSimulationApiBase),
+    'process.env.COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS': JSON.stringify(computeMarketSimulationAllowedOrigins),
+    'process.env.COMPUTE_MARKET_SIMULATION_REMOTE_REQUIRED': JSON.stringify(computeMarketSimulationRemoteRequired),
   },
   optimizeDeps: {
     // Disabled to avoid esbuild OOM on this machine — the pre-bundling step

@@ -55,9 +55,12 @@ import { CardHourAdminPanel, CardHourBusiness, CardHourMarketplace } from '@/com
 import { HostedComputePanel } from '@/components/compute/HostedComputePanel'
 import { MarketplaceOrderWorkspace } from '@/components/compute/MarketplaceOrderWorkspace'
 import { PlatformHostingPanel } from '@/components/compute/PlatformHostingPanel'
+import { MarketIntelligencePanel } from '@/components/compute-market'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { useComputeQueryKey, useWalletIdentity } from '@/hooks/useWallet'
+import { isTrustedMarketSourceUrl } from '@/packages/compute-market/marketIntelligence'
+import { createSimulatedMarketApi } from '@/packages/compute-market/simulatedMarket'
 import {
   acceptComputeTransfer,
   activateComputeApi,
@@ -154,23 +157,22 @@ import {
   withdrawComputeCardHours,
 } from '@/packages/computeCenter'
 import { addHoursToLocalDateTime, resolvePackageDurationHours } from '@/packages/computeDeliveryTime'
-import { ORDER_MESSAGE_NOTIFICATION, shouldNotifyOrderUnread } from '@/packages/computeMarketplace/projections'
 import {
+  buildComputeMarketMonotoneSvgPath,
   COMPUTE_MARKET_DEFAULT_REGION,
   type ComputeMarketComparisonPoint,
   type ComputeMarketGetDeployingVastComparison,
   compareGetDeployingAndVastPrices,
-  buildComputeMarketMonotoneSvgPath,
   deriveComputeMarketRegions,
   filterComputeMarketPricePoints,
   getComputeMarketDisplayCnyPrice,
   getComputeMarketExactSpecKey,
   getComputeMarketRegionCode,
-  getComputeMarketRegionLabel,
   getComputeMarketRentalTerm,
   groupComputeMarketPricePointsBySource,
   mergeComputeMarketPricePoints,
 } from '@/packages/computeMarketPriceComparison'
+import { ORDER_MESSAGE_NOTIFICATION, shouldNotifyOrderUnread } from '@/packages/computeMarketplace/projections'
 import {
   COMPUTE_PRODUCT_LIKE_COUNTS_KEY,
   COMPUTE_PRODUCT_SORT_OPTIONS,
@@ -184,9 +186,22 @@ import {
 import { classifyComputeReservationReview } from '@/packages/computeReservationReview'
 import { copyToClipboard } from '@/packages/navigator'
 import platform from '@/platform'
+import { featureFlags } from '@/utils/feature-flags'
+import {
+  COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS,
+  COMPUTE_MARKET_SIMULATION_API_BASE,
+  parseComputeMarketSimulationAllowedOrigins,
+} from '@/variables'
 
 const computeSearchSchema = z.object({
   invite: z.string().max(64).optional(),
+})
+
+const simulatedMarketApi = createSimulatedMarketApi({
+  apiBase: COMPUTE_MARKET_SIMULATION_API_BASE,
+  allowedOrigins: parseComputeMarketSimulationAllowedOrigins(COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS),
+  remoteRequired: featureFlags.computeMarketSimulationRemoteRequired,
+  allowLoopback: featureFlags.computeMarketSimulationAllowLoopback,
 })
 
 export const Route = createFileRoute('/compute-center')({
@@ -1296,6 +1311,20 @@ const MARKET_DEFAULT_MODELS: MarketModelOption[] = [
 const MARKET_COMPARISON_SOURCES: ComputeMarketPriceSource[] = ['GETDEPLOYING', 'VAST_AI']
 
 function MarketPricePanel() {
+  if (featureFlags.computeMarketV2) {
+    return (
+      <MarketIntelligencePanel
+        api={featureFlags.computeMarketSimulation ? simulatedMarketApi : undefined}
+        enableFullscreen={featureFlags.computeMarketFullscreen}
+        enableAdvanced={featureFlags.computeMarketAdvanced}
+        simulationMode={featureFlags.computeMarketSimulation}
+      />
+    )
+  }
+  return <LegacyMarketPricePanel />
+}
+
+function LegacyMarketPricePanel() {
   const [gpuModel, setGpuModel] = useState(MARKET_DEFAULT_MODELS[0].value)
   const [rentalTerm, setRentalTerm] = useState<ComputeMarketRentalTerm>('HOURLY')
   const [regions, setRegions] = useState<string[]>([])
@@ -1655,6 +1684,7 @@ function MarketPriceQuoteCard({
     quote.priceUsdPerGpuHour != null
   const status = clientStale ? { label: '缓存报价', color: 'orange' } : marketPriceStatus(quote)
   const originalPrice = marketOriginalPrice(quote)
+  const trustedSource = isTrustedMarketSourceUrl(quote.sourceUrl)
   return (
     <Paper withBorder radius="lg" p={{ base: 'md', sm: 'lg' }}>
       <Flex justify="space-between" align="flex-start" gap="md">
@@ -1733,11 +1763,12 @@ function MarketPriceQuoteCard({
         size="xs"
         px={0}
         mt="sm"
-        rightSection={<IconExternalLink size={14} />}
-        aria-label={`打开 ${marketSourceLabel(quote.source, quote.sourceLabel)} 官方来源`}
-        onClick={() => void platform.openLink(quote.sourceUrl)}
+        disabled={!trustedSource}
+        rightSection={trustedSource ? <IconExternalLink size={14} /> : undefined}
+        aria-label={trustedSource ? `打开 ${marketSourceLabel(quote.source, quote.sourceLabel)} 官方来源` : undefined}
+        onClick={trustedSource ? () => void platform.openLink(quote.sourceUrl) : undefined}
       >
-        查看官方来源
+        {trustedSource ? '查看官方来源' : '来源链接不可用'}
       </Button>
     </Paper>
   )

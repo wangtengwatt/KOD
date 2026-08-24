@@ -28,3 +28,24 @@ export const KOD_MARKET_API_ORIGIN = process.env.KOD_MARKET_API_ORIGIN || ''
 export const NODE_ENV = process.env.NODE_ENV || 'development'
 
 export const KOD_PAYMENT_HOSTS = process.env.KOD_PAYMENT_HOSTS || ''
+
+// Shared compute-market feed. Vite injects these at build time; the source
+// defaults let a fresh checkout and a newly packaged client observe the same
+// server-owned simulation without relying on a developer workstation.
+export const COMPUTE_MARKET_SIMULATION_API_BASE =
+  process.env.COMPUTE_MARKET_SIMULATION_API_BASE || 'https://kod.kai.com/api/v1'
+export const COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS =
+  process.env.COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS || 'https://kod.kai.com'
+export const COMPUTE_MARKET_SIMULATION_REMOTE_REQUIRED =
+  process.env.COMPUTE_MARKET_SIMULATION_REMOTE_REQUIRED !== 'false'
+
+export function parseComputeMarketSimulationAllowedOrigins(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    ),
+  ]
+}

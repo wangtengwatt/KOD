@@ -123,6 +123,14 @@ export default defineConfig(({ mode }) => {
   const isWeb = process.env.CHATBOX_BUILD_PLATFORM === 'web'
   const isMobile = process.env.CHATBOX_BUILD_TARGET === 'mobile_app'
   const isDesktop = !isWeb && !isMobile
+  const computeMarketSimulation = process.env.COMPUTE_MARKET_SIMULATION ?? 'true'
+  const computeMarketSimulationApiBase = process.env.COMPUTE_MARKET_SIMULATION_API_BASE ?? 'https://kod.kai.com/api/v1'
+  const computeMarketSimulationAllowedOrigins =
+    process.env.COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS ?? 'https://kod.kai.com'
+  const computeMarketSimulationRemoteRequired =
+    isProduction && computeMarketSimulation === 'true'
+      ? 'true'
+      : (process.env.COMPUTE_MARKET_SIMULATION_REMOTE_REQUIRED ?? 'true')
 
   return {
     main: {
@@ -177,7 +185,7 @@ export default defineConfig(({ mode }) => {
       },
       define: {
         'process.type': '"browser"',
-        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || (isProduction ? 'production' : 'development')),
         'process.env.CHATBOX_BUILD_TARGET': JSON.stringify(process.env.CHATBOX_BUILD_TARGET || 'unknown'),
         'process.env.CHATBOX_BUILD_PLATFORM': JSON.stringify(process.env.CHATBOX_BUILD_PLATFORM || 'unknown'),
         'process.env.CHATBOX_BUILD_CHANNEL': JSON.stringify(process.env.CHATBOX_BUILD_CHANNEL || 'unknown'),
@@ -332,7 +340,7 @@ export default defineConfig(({ mode }) => {
       },
       define: {
         'process.type': '"renderer"',
-        'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+        'process.env.NODE_ENV': JSON.stringify(isProduction ? 'production' : process.env.NODE_ENV || 'development'),
         'process.env.CHATBOX_BUILD_TARGET': JSON.stringify(process.env.CHATBOX_BUILD_TARGET || 'unknown'),
         'process.env.CHATBOX_BUILD_PLATFORM': JSON.stringify(process.env.CHATBOX_BUILD_PLATFORM || 'unknown'),
         'process.env.CHATBOX_BUILD_CHANNEL': JSON.stringify(process.env.CHATBOX_BUILD_CHANNEL || 'unknown'),
@@ -344,6 +352,11 @@ export default defineConfig(({ mode }) => {
         'process.env.KOD_API_ORIGIN': JSON.stringify(process.env.KOD_API_ORIGIN || 'https://kod.kai.com'),
         'process.env.KOD_MARKET_API_ORIGIN': JSON.stringify(process.env.KOD_MARKET_API_ORIGIN || ''),
         'process.env.KOD_PAYMENT_HOSTS': JSON.stringify(process.env.KOD_PAYMENT_HOSTS || 'kod.kai.com,mzf.mapay.cc'),
+        'process.env.COMPUTE_MARKET_V2': JSON.stringify(process.env.COMPUTE_MARKET_V2 ?? 'true'),
+        'process.env.COMPUTE_MARKET_SIMULATION': JSON.stringify(computeMarketSimulation),
+        'process.env.COMPUTE_MARKET_SIMULATION_API_BASE': JSON.stringify(computeMarketSimulationApiBase),
+        'process.env.COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS': JSON.stringify(computeMarketSimulationAllowedOrigins),
+        'process.env.COMPUTE_MARKET_SIMULATION_REMOTE_REQUIRED': JSON.stringify(computeMarketSimulationRemoteRequired),
       },
       optimizeDeps: {
         // KOD opt: disabled force to allow Vite dependency cache (saves ~200MB on repeated dev starts).
