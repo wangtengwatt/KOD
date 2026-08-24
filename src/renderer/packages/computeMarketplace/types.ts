@@ -12,14 +12,14 @@ export interface ComputeFundsEvent {
   eventType: string
   cardHours?: number | null
   detailJson?: string | null
-  actorUserId?: number | null
+  actorUserId?: string | null
   createTime: string
 }
 
 export interface ComputeOrderMessage {
   id: number
   reservationId: number
-  senderUserId?: number | null
+  senderUserId?: string | null
   senderEmail?: string | null
   messageType: 'TEXT' | 'IMAGE' | 'SYSTEM'
   content: string
@@ -31,11 +31,11 @@ export interface ComputeOrderMessage {
 
 export interface ComputeScheduleProposal {
   id: number
-  proposerUserId: number
+  proposerUserId: string
   proposedStart: string
   proposedEnd: string
   status: 'PENDING' | 'COUNTERED' | 'ACCEPTED'
-  respondedBy?: number | null
+  respondedBy?: string | null
   respondedAt?: string | null
   createTime: string
 }
@@ -81,9 +81,9 @@ export interface ComputeProductReviewDetail {
     id: number
     revisionNo: number
     status: string
-    submittedBy: number
+    submittedBy: string
     submittedAt: string
-    reviewedBy?: number | null
+    reviewedBy?: string | null
     reviewReason?: string
     reviewedAt?: string | null
   }
@@ -96,7 +96,7 @@ export interface ComputeReviewHistoryEntry {
   category: string
   targetType: string
   targetId: string
-  reviewerUserId: number
+  reviewerUserId: string
   reviewerEmail?: string | null
   status: 'APPROVED' | 'REJECTED'
   reason?: string

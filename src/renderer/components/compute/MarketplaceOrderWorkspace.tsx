@@ -30,7 +30,7 @@ export function MarketplaceOrderWorkspace({
   run,
 }: {
   reservation: ComputeReservation
-  currentUserId?: number
+  currentUserId?: string
   busy: string | null
   run: RunAction
 }) {
@@ -309,7 +309,7 @@ function OrderMessage({
 }: {
   reservationId: number
   message: ComputeOrderMessage
-  currentUserId?: number
+  currentUserId?: string
 }) {
   const computeQueryKey = useComputeQueryKey()
   const mine = message.senderUserId === currentUserId

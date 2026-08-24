@@ -3290,7 +3290,7 @@ function ReservationsPanel({
   busy,
   run,
 }: {
-  currentUserId?: number
+  currentUserId?: string
   busy: string | null
   run: RunAction
 }) {
@@ -3368,7 +3368,7 @@ function ReservationCard({
   busy: string | null
   run: RunAction
   view: 'buyer' | 'supplier'
-  currentUserId?: number
+  currentUserId?: string
   productPackageDurationHours?: number | null
 }) {
   const [sshDelivery, setSshDelivery] = useState({
@@ -3704,7 +3704,7 @@ function TransferCard({
   run,
 }: {
   transfer: ComputeTransfer
-  currentUserId?: number
+  currentUserId?: string
   busy: string | null
   run: RunAction
 }) {

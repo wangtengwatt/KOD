@@ -29,7 +29,7 @@ export function PlatformHostingPanel() {
   const [checkout, setCheckout] = useState<{
     sku: PlatformServerSku
     requestId: string
-    userId: number
+    userId: string
     identity: string
   } | null>(null)
   const [rentError, setRentError] = useState<string | null>(null)
@@ -75,7 +75,7 @@ export function PlatformHostingPanel() {
   }
 
   const rentMutation = useMutation({
-    mutationFn: ({ skuId, requestId }: { skuId: string; requestId: string; userId: number; identity: string }) =>
+    mutationFn: ({ skuId, requestId }: { skuId: string; requestId: string; userId: string; identity: string }) =>
       rentPlatformServer(skuId, requestId),
     onMutate: () => setRentError(null),
     onSuccess: async (createdLease, variables) => {
@@ -426,7 +426,7 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : '操作失败'
 }
 
-function rentRequestId(userId: number, skuId: string) {
+function rentRequestId(userId: string, skuId: string) {
   const storageKey = `${RENT_REQUEST_STORAGE_PREFIX}${userId}.${skuId}`
   try {
     const existing = localStorage.getItem(storageKey)
@@ -447,7 +447,7 @@ function rentRequestId(userId: number, skuId: string) {
   }
 }
 
-function clearRentRequestId(userId: number, skuId: string) {
+function clearRentRequestId(userId: string, skuId: string) {
   const storageKey = `${RENT_REQUEST_STORAGE_PREFIX}${userId}.${skuId}`
   pendingRentRequestIds.delete(storageKey)
   try {

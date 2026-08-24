@@ -86,11 +86,11 @@ const lease = {
 } satisfies PlatformServerLease
 
 const account = {
-  userId: 7,
+  userId: '7',
   redeemableCardHours: 90,
   withdrawableCardHours: 90,
   rewardCardHours: 50,
-} as ComputeAccount
+} as unknown as ComputeAccount
 
 function renderPanel(ui = <PlatformHostingPanel />) {
   const queryClient = new QueryClient({

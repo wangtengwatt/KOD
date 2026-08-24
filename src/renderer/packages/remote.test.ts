@@ -38,12 +38,17 @@ describe('deleteKodAccount', () => {
 describe('loginWithKod', () => {
   beforeEach(() => ofetchMock.mockReset())
   it('uses the unified login endpoint and maps the token', async () => {
-    ofetchMock.mockResolvedValue({ code: 0, message: '', data: { token: 'kod-token', newUser: true } })
+    ofetchMock.mockResolvedValue({
+      code: 0,
+      message: '',
+      data: { token: 'kod-token', refreshToken: 'kod-refresh', accountId: 'account-1', newUser: true },
+    })
     await expect(
       loginWithKod({ email: 'user@example.com', password: 'secret', inviteCode: 'invite' })
     ).resolves.toEqual({
       accessToken: 'kod-token',
-      refreshToken: 'kod-token',
+      refreshToken: 'kod-refresh',
+      accountId: 'account-1',
       newUser: true,
     })
     expect(ofetchMock).toHaveBeenCalledWith(

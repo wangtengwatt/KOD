@@ -78,13 +78,8 @@ async function initAuthenticatedAfetch(): Promise<ReturnType<typeof createAuthen
         const tokens = authInfoStore.getState().getTokens()
         return tokens
       },
-      refreshTokens: async (refreshToken: string) => {
-        const result = await refreshAccessToken({ refreshToken })
-        authInfoStore.getState().setTokens(result, { preserveEmail: true })
-        return result
-      },
-      clearTokens: async () => {
-        authInfoStore.getState().clearTokens()
+      refreshTokens: async (rejectedTokens) => {
+        return refreshKodSession(rejectedTokens.accessToken, rejectedTokens.accountId ?? null)
       },
     })
     return _authenticatedAfetch
@@ -176,6 +171,87 @@ function unwrapKodResult<T>(result: { code: number; message?: string; data?: T |
   return result.data
 }
 
+const KodSessionSchema = z.object({
+  token: z.string().min(1),
+  refreshToken: z.string().min(1),
+  accountId: z.string().min(1),
+})
+
+let kodSessionRefresh:
+  | {
+      rejectedAccessToken: string
+      rejectedAccountId: string | null
+      promise: Promise<{ accessToken: string; refreshToken: string; accountId: string }>
+    }
+  | undefined
+
+/** Rotate one rejected KOD access session and persist the fresh token pair. */
+export async function refreshKodSession(rejectedAccessToken: string, rejectedAccountId: string | null = null) {
+  const current = authInfoStore.getState()
+  if (current.accessToken !== rejectedAccessToken) {
+    if (rejectedAccountId && current.accountId === rejectedAccountId && current.accessToken && current.refreshToken) {
+      return { accessToken: current.accessToken, refreshToken: current.refreshToken, accountId: current.accountId }
+    }
+    throw new Error('KOD 登录账号已变化，请重试')
+  }
+  if (!current.refreshToken) {
+    current.clearTokens()
+    throw new Error('登录状态已失效，请重新登录')
+  }
+  if (
+    kodSessionRefresh?.rejectedAccessToken === rejectedAccessToken &&
+    kodSessionRefresh.rejectedAccountId === rejectedAccountId
+  ) {
+    return kodSessionRefresh.promise
+  }
+
+  const refreshToken = current.refreshToken
+  let invalidRefreshToken = false
+  const promise = (async () => {
+    try {
+      const json = await ofetch(`${getKodApiOrigin()}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { refreshToken },
+        ignoreResponseError: true,
+        retry: 0,
+        timeout: KOD_AUTH_REQUEST_TIMEOUT_MS,
+      })
+      const result = KodResultSchema(KodSessionSchema).parse(json)
+      invalidRefreshToken = result.code === 401
+      const data = unwrapKodResult(result)
+      if (rejectedAccountId && data.accountId !== rejectedAccountId) {
+        throw new Error('KOD 登录账号已变化，请重试')
+      }
+      if (
+        authInfoStore.getState().accessToken !== rejectedAccessToken ||
+        authInfoStore.getState().refreshToken !== refreshToken
+      ) {
+        throw new Error('KOD 登录状态已变化，请重试')
+      }
+      const next = {
+        accessToken: data.token,
+        refreshToken: data.refreshToken,
+        accountId: data.accountId,
+      }
+      authInfoStore.getState().setTokens(next, { preserveEmail: true })
+      return next
+    } catch (error) {
+      const latest = authInfoStore.getState()
+      if (invalidRefreshToken && latest.accessToken === rejectedAccessToken && latest.refreshToken === refreshToken) {
+        latest.clearTokens()
+      }
+      throw error
+    }
+  })()
+  kodSessionRefresh = { rejectedAccessToken, rejectedAccountId, promise }
+  try {
+    return await promise
+  } finally {
+    if (kodSessionRefresh?.promise === promise) kodSessionRefresh = undefined
+  }
+}
+
 export const KOD_ACCOUNT_DELETE_CONFIRMATION = 'DELETE'
 
 export async function deleteKodAccount(params: { accessToken: string; password: string; confirmation?: string }) {
@@ -227,6 +303,8 @@ export async function loginWithKod(params: {
     KodResultSchema(
       z.object({
         token: z.string(),
+        refreshToken: z.string().min(1),
+        accountId: z.string().min(1),
         newUser: z.boolean(),
       })
     ).parse(json)
@@ -234,7 +312,8 @@ export async function loginWithKod(params: {
 
   return {
     accessToken: data.token,
-    refreshToken: data.token,
+    refreshToken: data.refreshToken,
+    accountId: data.accountId,
     newUser: data.newUser,
   }
 }
@@ -269,6 +348,8 @@ export async function loginWithKaiIdentity(accessToken: string) {
     KodResultSchema(
       z.object({
         token: z.string(),
+        refreshToken: z.string().min(1),
+        accountId: z.string().min(1),
         newUser: z.boolean(),
         email: z.string().email(),
       })
@@ -276,7 +357,8 @@ export async function loginWithKaiIdentity(accessToken: string) {
   )
   return {
     accessToken: data.token,
-    refreshToken: data.token,
+    refreshToken: data.refreshToken,
+    accountId: data.accountId,
     newUser: data.newUser,
     email: data.email,
   }

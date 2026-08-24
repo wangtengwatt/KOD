@@ -7,7 +7,7 @@ import type { ComputeAccount } from '@/packages/computeCenter'
 import { AssetDashboard, ReferralInviteModal } from '../compute-center'
 
 const account: ComputeAccount = {
-  userId: 7,
+  userId: '7',
   email: 'member@example.com',
   cnyBalance: 25,
   availableCardHours: 100,

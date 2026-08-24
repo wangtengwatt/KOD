@@ -1,9 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ ofetch: vi.fn(), prepareComputeImageUpload: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  ofetch: vi.fn(),
+  prepareComputeImageUpload: vi.fn(),
+  refreshKodSession: vi.fn(),
+  authState: { accessToken: 'test-access-token' as string | null, accountId: 'account-7' as string | null },
+}))
 
 vi.mock('ofetch', () => ({ ofetch: mocks.ofetch }))
-vi.mock('@/packages/remote', () => ({ getKodApiOrigin: () => 'https://kod.test' }))
+vi.mock('@/packages/remote', () => ({
+  getKodApiOrigin: () => 'https://kod.test',
+  refreshKodSession: mocks.refreshKodSession,
+}))
 vi.mock('@/packages/computeImageUpload', () => ({
   COMPUTE_IMAGE_UPLOAD_MAX_BYTES: 800_000,
   COMPUTE_IMAGE_UPLOAD_RETRY_BYTES: 500_000,
@@ -11,7 +19,7 @@ vi.mock('@/packages/computeImageUpload', () => ({
   prepareComputeImageUpload: mocks.prepareComputeImageUpload,
 }))
 vi.mock('@/stores/authInfoStore', () => ({
-  authInfoStore: { getState: () => ({ accessToken: 'test-access-token' }) },
+  authInfoStore: { getState: () => mocks.authState },
 }))
 
 import {
@@ -87,7 +95,7 @@ const platformLease = {
 } as const
 
 const computeAccount = {
-  userId: 7,
+  userId: '2084099947250954241',
   email: 'user@example.com',
   cnyBalance: '25.000',
   availableCardHours: '100.000',
@@ -130,6 +138,16 @@ describe('reward referral and platform hosting contracts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useRealTimers()
+    mocks.authState.accessToken = 'test-access-token'
+    mocks.authState.accountId = 'account-7'
+    mocks.refreshKodSession.mockImplementation(() => {
+      mocks.authState.accessToken = 'fresh-access-token'
+      return Promise.resolve({
+        accessToken: 'fresh-access-token',
+        refreshToken: 'fresh-refresh-token',
+        accountId: 'account-7',
+      })
+    })
   })
 
   it('parses complete pending and accepted invitation records', () => {
@@ -168,6 +186,31 @@ describe('reward referral and platform hosting contracts', () => {
       'https://kod.test/api/compute/account',
       expect.objectContaining({ headers: { Authorization: 'Bearer test-access-token' } })
     )
+  })
+
+  it('refreshes one rejected session and retries the card-hour account with the fresh access token', async () => {
+    mocks.ofetch
+      .mockResolvedValueOnce({ code: 401, message: 'token expired', data: null })
+      .mockResolvedValueOnce({ code: 0, data: computeAccount })
+
+    await expect(getComputeAccount()).resolves.toMatchObject({ availableCardHours: 100, rewardCardHours: 10 })
+    expect(mocks.refreshKodSession).toHaveBeenCalledTimes(1)
+    expect(mocks.refreshKodSession).toHaveBeenCalledWith('test-access-token', 'account-7')
+    expect(mocks.ofetch).toHaveBeenNthCalledWith(
+      2,
+      'https://kod.test/api/compute/account',
+      expect.objectContaining({ headers: { Authorization: 'Bearer fresh-access-token' } })
+    )
+  })
+
+  it('does not loop when the retried card-hour account request is still unauthorized', async () => {
+    mocks.ofetch
+      .mockResolvedValueOnce({ code: 401, message: 'token expired', data: null })
+      .mockResolvedValueOnce({ code: 401, message: 'still unauthorized', data: null })
+
+    await expect(getComputeAccount()).rejects.toThrow('still unauthorized')
+    expect(mocks.refreshKodSession).toHaveBeenCalledTimes(1)
+    expect(mocks.ofetch).toHaveBeenCalledTimes(2)
   })
 
   it('compares qualified balances as integer thousandths', () => {

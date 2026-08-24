@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { authInfoStore } from '@/stores/authInfoStore'
 import {
   getKaiIdentityConfig,
   KOD_AUTH_REQUEST_TIMEOUT_MS,
   loginWithKaiIdentity,
   loginWithKod,
+  refreshKodSession,
   sendKodEmailCode,
 } from './remote'
 
@@ -22,14 +24,19 @@ function readBody(init: RequestInit | undefined) {
 }
 
 afterEach(() => {
+  authInfoStore.getState().clearTokens()
   vi.unstubAllGlobals()
 })
 
 describe('loginWithKod', () => {
   it('sends email, password, inviteCode and emailCode to /api/auth/login', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ code: 0, message: '', data: { token: 'tok-1', newUser: true } }))
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        code: 0,
+        message: '',
+        data: { token: 'tok-1', refreshToken: 'refresh-1', accountId: 'account-1', newUser: true },
+      })
+    )
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await loginWithKod({
@@ -39,7 +46,7 @@ describe('loginWithKod', () => {
       emailCode: '123456',
     })
 
-    expect(result).toEqual({ accessToken: 'tok-1', refreshToken: 'tok-1', newUser: true })
+    expect(result).toEqual({ accessToken: 'tok-1', refreshToken: 'refresh-1', accountId: 'account-1', newUser: true })
 
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe(`${KOD_ORIGIN}/api/auth/login`)
@@ -53,14 +60,18 @@ describe('loginWithKod', () => {
   })
 
   it('omits inviteCode and emailCode when not provided (ordinary login)', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ code: 0, message: '', data: { token: 'tok-2', newUser: false } }))
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        code: 0,
+        message: '',
+        data: { token: 'tok-2', refreshToken: 'refresh-2', accountId: 'account-2', newUser: false },
+      })
+    )
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await loginWithKod({ email: 'user@example.com ', password: 'pw' })
 
-    expect(result).toEqual({ accessToken: 'tok-2', refreshToken: 'tok-2', newUser: false })
+    expect(result).toEqual({ accessToken: 'tok-2', refreshToken: 'refresh-2', accountId: 'account-2', newUser: false })
     const [, init] = fetchMock.mock.calls[0]
     const body = readBody(init)
     expect(body).toEqual({ email: 'user@example.com ', password: 'pw' })
@@ -151,14 +162,21 @@ describe('KAI Identity login', () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
         code: 0,
-        data: { token: 'kod-jwt', newUser: false, email: 'user@kai.com' },
+        data: {
+          token: 'kod-jwt',
+          refreshToken: 'kod-refresh',
+          accountId: 'account-7',
+          newUser: false,
+          email: 'user@kai.com',
+        },
       })
     )
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(loginWithKaiIdentity('identity-access-token')).resolves.toEqual({
       accessToken: 'kod-jwt',
-      refreshToken: 'kod-jwt',
+      refreshToken: 'kod-refresh',
+      accountId: 'account-7',
       newUser: false,
       email: 'user@kai.com',
     })
@@ -166,5 +184,96 @@ describe('KAI Identity login', () => {
     expect(url).toBe(`${KOD_ORIGIN}/api/auth/kai/exchange`)
     expect(init.method).toBe('POST')
     expect(readBody(init)).toEqual({ accessToken: 'identity-access-token' })
+  })
+})
+
+describe('KOD session refresh', () => {
+  it('rotates a rejected access session and persists the new token pair', async () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'expired-access',
+      refreshToken: 'refresh-one',
+      accountId: 'account-9',
+      email: 'member@example.com',
+    })
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        code: 0,
+        data: { token: 'fresh-access', refreshToken: 'refresh-two', accountId: 'account-9' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(refreshKodSession('expired-access', 'account-9')).resolves.toEqual({
+      accessToken: 'fresh-access',
+      refreshToken: 'refresh-two',
+      accountId: 'account-9',
+    })
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: 'fresh-access',
+      refreshToken: 'refresh-two',
+      accountId: 'account-9',
+      loginEmail: 'member@example.com',
+    })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe(`${KOD_ORIGIN}/api/auth/refresh`)
+    expect(init.method).toBe('POST')
+    expect(readBody(init)).toEqual({ refreshToken: 'refresh-one' })
+  })
+
+  it('clears only the still-rejected session when refresh is rejected', async () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'expired-access',
+      refreshToken: 'expired-refresh',
+      accountId: 'account-9',
+      email: 'member@example.com',
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ code: 401, message: 'refresh expired' })))
+
+    await expect(refreshKodSession('expired-access', 'account-9')).rejects.toThrow('refresh expired')
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: null,
+      refreshToken: null,
+      accountId: null,
+      loginEmail: null,
+    })
+  })
+
+  it('does not replay an account-a request after the user switches to account b', async () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'account-a-access',
+      refreshToken: 'account-a-refresh',
+      accountId: 'account-a',
+    })
+    authInfoStore.getState().setTokens({
+      accessToken: 'account-b-access',
+      refreshToken: 'account-b-refresh',
+      accountId: 'account-b',
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(refreshKodSession('account-a-access', 'account-a')).rejects.toThrow('登录账号已变化')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: 'account-b-access',
+      refreshToken: 'account-b-refresh',
+      accountId: 'account-b',
+    })
+  })
+
+  it('keeps the current session when refresh fails transiently', async () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'expired-access',
+      refreshToken: 'still-valid-refresh',
+      accountId: 'account-9',
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ code: 503, message: 'temporarily unavailable' })))
+
+    await expect(refreshKodSession('expired-access', 'account-9')).rejects.toThrow('temporarily unavailable')
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: 'expired-access',
+      refreshToken: 'still-valid-refresh',
+      accountId: 'account-9',
+    })
   })
 })

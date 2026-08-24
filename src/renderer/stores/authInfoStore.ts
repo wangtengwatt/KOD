@@ -6,11 +6,12 @@ import type { AuthTokens } from '../routes/settings/provider/chatbox-ai/-compone
 interface AuthTokensState {
   accessToken: string | null
   refreshToken: string | null
+  accountId: string | null
   loginEmail: string | null
 }
 
 interface AuthTokensActions {
-  setTokens: (tokens: AuthTokens, options?: { preserveEmail?: boolean }) => void
+  setTokens: (tokens: AuthTokens, options?: { preserveEmail?: boolean; preserveAccountId?: boolean }) => void
   clearTokens: () => void
   getTokens: () => AuthTokens | null
 }
@@ -18,6 +19,7 @@ interface AuthTokensActions {
 const initialState: AuthTokensState = {
   accessToken: null,
   refreshToken: null,
+  accountId: null,
   loginEmail: null,
 }
 
@@ -31,6 +33,9 @@ export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
           set((state) => {
             state.accessToken = tokens.accessToken
             state.refreshToken = tokens.refreshToken
+            if (!options?.preserveAccountId || tokens.accountId) {
+              state.accountId = tokens.accountId ?? null
+            }
             if (!options?.preserveEmail || tokens.email) {
               state.loginEmail = tokens.email ? tokens.email.trim().toLowerCase() : null
             }
@@ -41,6 +46,7 @@ export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
           set((state) => {
             state.accessToken = null
             state.refreshToken = null
+            state.accountId = null
             state.loginEmail = null
           })
         },
@@ -51,6 +57,7 @@ export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
             return {
               accessToken: state.accessToken,
               refreshToken: state.refreshToken,
+              accountId: state.accountId ?? undefined,
             }
           }
           return null
@@ -62,6 +69,7 @@ export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
         partialize: (state) => ({
           accessToken: state.accessToken,
           refreshToken: state.refreshToken,
+          accountId: state.accountId,
           loginEmail: state.loginEmail,
         }),
       }
@@ -77,6 +85,7 @@ export const useAuthTokens = () => {
   return useAuthInfoStore((state) => ({
     accessToken: state.accessToken,
     refreshToken: state.refreshToken,
+    accountId: state.accountId,
     setTokens: state.setTokens,
     clearTokens: state.clearTokens,
     getTokens: state.getTokens,

@@ -12,7 +12,7 @@ function createReservation(overrides: Partial<ComputeReservationForReview> = {})
     id: 1,
     orderId: 2,
     productId: 3,
-    buyerUserId: 4,
+    buyerUserId: '4',
     gpuCount: 1,
     startTime: '2026-08-20T00:00:00.000Z',
     endTime: '2026-08-21T00:00:00.000Z',

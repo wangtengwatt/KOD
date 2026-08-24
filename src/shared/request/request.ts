@@ -187,20 +187,38 @@ export async function uploadFile(file: File, url: string) {
 interface AuthTokens {
   accessToken: string
   refreshToken: string
+  accountId?: string
 }
 
 interface AuthenticatedAfetchConfig {
   platformInfo: PlatformInfo
   getTokens: () => Promise<AuthTokens | null>
-  refreshTokens: (refreshToken: string) => Promise<AuthTokens>
-  clearTokens: () => Promise<void>
+  refreshTokens: (rejectedTokens: AuthTokens) => Promise<AuthTokens>
+}
+
+function isSameAuthSession(left: AuthTokens | null, right: AuthTokens) {
+  return (
+    left?.accessToken === right.accessToken &&
+    left.refreshToken === right.refreshToken &&
+    (left.accountId ?? null) === (right.accountId ?? null)
+  )
+}
+
+function authSessionKey(tokens: AuthTokens) {
+  return JSON.stringify([tokens.accountId ?? null, tokens.accessToken, tokens.refreshToken])
+}
+
+class AuthenticationSessionChangedError extends ApiError {
+  constructor() {
+    super('Authentication session changed')
+  }
 }
 
 export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
-  const { platformInfo, getTokens, refreshTokens, clearTokens } = config
+  const { platformInfo, getTokens, refreshTokens } = config
 
   // 用于防止并发刷新 token
-  let refreshPromise: Promise<AuthTokens> | null = null
+  const refreshPromises = new Map<string, Promise<AuthTokens>>()
 
   return async function authenticatedAfetch(
     url: RequestInfo | URL,
@@ -252,32 +270,44 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
         if (res.status === 401) {
           console.debug('🔄 Access token expired, refreshing...')
 
-          // 防止并发刷新：如果已有刷新请求，等待它完成
-          if (!refreshPromise) {
-            refreshPromise = (async () => {
-              try {
-                const currentTokens = await getTokens()
-                if (!currentTokens) {
-                  throw new ApiError('No refresh token available')
+          const currentTokens = await getTokens()
+          let newTokens: AuthTokens
+          if (!isSameAuthSession(currentTokens, tokens)) {
+            if (tokens.accountId && currentTokens?.accountId === tokens.accountId) {
+              // A sibling request already rotated the same account's token.
+              newTokens = currentTokens
+            } else {
+              throw new AuthenticationSessionChangedError()
+            }
+          } else {
+            const refreshKey = authSessionKey(tokens)
+            let refreshPromise = refreshPromises.get(refreshKey)
+            if (!refreshPromise) {
+              refreshPromise = (async () => {
+                try {
+                  console.debug('🔑 Refreshing access token with refresh token...')
+                  const refreshed = await refreshTokens(tokens)
+                  console.debug('✅ Token refreshed successfully')
+                  return refreshed
+                } catch (error) {
+                  console.error('❌ Failed to refresh token:', error)
+                  throw error
+                } finally {
+                  refreshPromises.delete(refreshKey)
                 }
-
-                console.debug('🔑 Refreshing access token with refresh token...')
-                const newTokens = await refreshTokens(currentTokens.refreshToken)
-                console.debug('✅ Token refreshed successfully')
-                return newTokens
-              } catch (error) {
-                console.error('❌ Failed to refresh token:', error)
-                // 刷新失败，清除所有 tokens
-                await clearTokens()
-                throw new ApiError('Token refresh failed, please login again')
-              } finally {
-                refreshPromise = null
-              }
-            })()
+              })()
+              refreshPromises.set(refreshKey, refreshPromise)
+            }
+            newTokens = await refreshPromise
           }
 
-          // 等待刷新完成
-          const newTokens = await refreshPromise
+          if (tokens.accountId && newTokens.accountId !== tokens.accountId) {
+            throw new AuthenticationSessionChangedError()
+          }
+          const latestTokens = await getTokens()
+          if (!isSameAuthSession(latestTokens, newTokens)) {
+            throw new AuthenticationSessionChangedError()
+          }
 
           // 使用新 token 重试请求
           init = {
@@ -337,6 +367,9 @@ export function createAuthenticatedAfetch(config: AuthenticatedAfetchConfig) {
         return res
       } catch (e) {
         if (isAbortError(e, init?.signal)) {
+          throw e
+        }
+        if (e instanceof AuthenticationSessionChangedError) {
           throw e
         }
         if (e instanceof BaseError) {

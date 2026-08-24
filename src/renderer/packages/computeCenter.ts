@@ -6,7 +6,7 @@ import {
   isComputeUploadSizeExceeded,
   prepareComputeImageUpload,
 } from '@/packages/computeImageUpload'
-import { getKodApiOrigin } from '@/packages/remote'
+import { getKodApiOrigin, refreshKodSession } from '@/packages/remote'
 import { authInfoStore } from '@/stores/authInfoStore'
 import { KOD_MARKET_API_ORIGIN } from '@/variables'
 import type { ComputeEscrowProjection, ComputeFundsEvent } from './computeMarketplace/types'
@@ -16,7 +16,7 @@ export type ProductStatus = 'DRAFT' | 'PENDING' | 'PUBLISHED' | 'PAUSED' | 'REJE
 
 export interface ComputeProduct {
   id: number
-  supplierUserId?: number | null
+  supplierUserId?: string | null
   nodeId?: number | null
   supplierName?: string | null
   productType: ProductType
@@ -55,7 +55,7 @@ export interface ComputeProduct {
 }
 
 export interface ComputeAccount {
-  userId: number
+  userId: string
   email: string
   cnyBalance: number
   availableCardHours: number
@@ -124,8 +124,8 @@ export interface ComputeReservation {
   id: number
   orderId: number
   productId: number
-  buyerUserId: number
-  supplierUserId?: number | null
+  buyerUserId: string
+  supplierUserId?: string | null
   buyerEmail?: string
   supplierEmail?: string
   gpuCount: number
@@ -176,8 +176,8 @@ export interface ComputeReservation {
 export interface ComputeTransfer {
   id: number
   transferNo: string
-  senderUserId: number
-  recipientUserId: number
+  senderUserId: string
+  recipientUserId: string
   senderEmail: string
   recipientEmail: string
   amount: number
@@ -190,7 +190,7 @@ export interface ComputeTransfer {
 
 export interface ComputeSupplier {
   id?: number
-  userId?: number
+  userId?: string
   email?: string
   displayName?: string
   contact?: string
@@ -483,7 +483,7 @@ const contractCount = z.number().int().nonnegative().safe()
 
 export const ComputeAccountSchema: z.ZodType<ComputeAccount> = z
   .object({
-    userId: z.number().int().positive().safe(),
+    userId: contractLongId,
     email: z.string().min(1),
     cnyBalance: contractNonnegativeNumber,
     availableCardHours: contractNonnegativeDecimal,
@@ -617,7 +617,7 @@ export interface CardHourLot {
   id: number
   assetType: CardHourAssetType
   gpuModel?: string | null
-  issuerUserId?: number | null
+  issuerUserId?: string | null
   nodeId?: number | null
   nodeName?: string | null
   sourceType: string
@@ -647,7 +647,7 @@ export interface CardHourRateRule {
 export interface CardHourListing {
   id: number
   listingNo: string
-  sellerUserId?: number
+  sellerUserId?: string
   sellerEmail?: string
   sellerName?: string
   identityVerified?: number | boolean
@@ -674,7 +674,7 @@ export interface CardHourPurchaseQuote {
   id: number
   quoteNo: string
   listingId: number
-  buyerUserId: number
+  buyerUserId: string
   quantity: number
   unitPrice: number
   priceCurrency: 'CNY' | 'CARD_HOUR'
@@ -708,7 +708,7 @@ export interface CardHourTrade {
 export interface CardHourRfq {
   id: number
   rfqNo: string
-  buyerUserId: number
+  buyerUserId: string
   buyerEmail: string
   assetType: CardHourAssetType
   gpuModel?: string | null
@@ -725,7 +725,7 @@ export interface CardHourRfqQuote {
   id: number
   quoteNo: string
   rfqId: number
-  supplierUserId: number
+  supplierUserId: string
   supplierEmail: string
   supplierName?: string
   listingId: number
@@ -739,7 +739,7 @@ export interface CardHourRfqQuote {
 export interface CardHourDeposit {
   id: number
   depositNo: string
-  supplierUserId: number
+  supplierUserId: string
   email?: string
   nodeId: number
   nodeName?: string
@@ -762,8 +762,8 @@ export interface CardHourDeposit {
 export interface CardHourRedemption {
   id: number
   redemptionNo: string
-  buyerUserId: number
-  supplierUserId: number
+  buyerUserId: string
+  supplierUserId: string
   buyerEmail: string
   supplierEmail: string
   nodeId: number
@@ -871,7 +871,7 @@ export interface ComputeUpstreamOption {
 
 export interface ComputeSuspendedProxyKey {
   id: number
-  userId: number
+  userId: string
   email: string
   productId: number
   productName: string
@@ -885,7 +885,7 @@ export interface ComputeSuspendedProxyKey {
 
 export interface ComputeIdentity {
   id?: number
-  userId?: number
+  userId?: string
   email?: string
   verificationType?: 'REAL' | 'TEST'
   identityNoMasked?: string
@@ -898,7 +898,7 @@ export interface ComputeIdentity {
 
 export interface ComputeGpuNode {
   id: number
-  supplierUserId: number
+  supplierUserId: string
   email?: string
   nodeName: string
   region: string
@@ -960,9 +960,12 @@ async function request<T>(
   path: string,
   options?: FetchOptions<'json'>,
   authenticated = true,
-  origin = getKodApiOrigin()
+  origin = getKodApiOrigin(),
+  authRefreshAttempted = false
 ): Promise<T> {
-  const token = authInfoStore.getState().accessToken
+  const session = authInfoStore.getState()
+  const token = session.accessToken
+  const accountId = session.accountId
   if (authenticated && !token) {
     throw new Error('请先登录 KOD 账号')
   }
@@ -974,6 +977,11 @@ async function request<T>(
     },
     ignoreResponseError: true,
   })
+  const isSafeToReplay = !options?.method || options.method === 'GET'
+  if (json.code === 401 && authenticated && token && isSafeToReplay && !authRefreshAttempted) {
+    await refreshKodSession(token, accountId)
+    return request(path, options, authenticated, origin, true)
+  }
   if (json.code !== 0) {
     throw new ComputeCenterApiError(json.code, json.message || '算力中心请求失败', json.data)
   }
@@ -1539,7 +1547,7 @@ export interface ComputeProductInput {
   availableTo?: string
   deliveryMode?: string
   slaDescription?: string
-  supplierUserId?: number
+  supplierUserId?: string
   nodeId?: number
   packagePromptTokens?: number
   packageCompletionTokens?: number

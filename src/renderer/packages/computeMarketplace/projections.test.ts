@@ -93,7 +93,7 @@ describe('compute marketplace projections', () => {
     const message = (id: number): ComputeOrderMessage => ({
       id,
       reservationId: 7,
-      senderUserId: 1,
+      senderUserId: '1',
       messageType: 'TEXT',
       content: `message-${id}`,
       createTime: `2026-08-21T10:00:0${id}`,

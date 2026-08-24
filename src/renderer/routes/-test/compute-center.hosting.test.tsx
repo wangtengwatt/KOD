@@ -121,7 +121,7 @@ vi.mock('@/packages/computeCenter', async (importOriginal) => {
 import { ComputeCenterPage } from '../compute-center'
 
 const account = {
-  userId: 7,
+  userId: '7',
   email: 'member@example.com',
   cnyBalance: 0,
   availableCardHours: 100,
@@ -185,7 +185,7 @@ const sku = {
 const supplierNodes = [
   {
     id: 200,
-    supplierUserId: 7,
+    supplierUserId: '7',
     nodeName: '用户自有 RTX 4090',
     region: '上海',
     gpuModel: 'RTX 4090',
@@ -202,7 +202,7 @@ const supplierNodes = [
   },
   {
     id: 1088,
-    supplierUserId: 7,
+    supplierUserId: '7',
     nodeName: '平台月租 RTX 4090',
     region: '香港',
     gpuModel: 'RTX 4090',
