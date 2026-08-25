@@ -32,3 +32,9 @@ Task 2 contract-alignment fix: explicit server allocation, backend SKU normaliza
 Task 2: fix round 1/5 (4 addressed, 0 open; backend f34969f..5ea9838; client edffdd7..edfdfb3)
 
 Task 2: complete (client d1b30f5..edfdfb3, backend contract 5ea9838, independent re-review clean)
+
+Task 3 TDD: RED 3/3 new financial/log/account-switch cases; GREEN focused 22/22 and related suites clean.
+
+Task 3 verification: TypeScript, changed Biome, strict OpenSpec, production build, diff/protected/secret scans clean; full 1,707 pass / 54 skip with the same 6 unrelated baseline failures.
+
+Task 3: implementation complete (feature range ff3f1c0..4c16444); independent re-review pending.
