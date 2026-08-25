@@ -480,6 +480,10 @@ const contractNumber = z
   .pipe(z.number().finite())
 const contractNonnegativeNumber = contractNumber.pipe(z.number().nonnegative())
 const contractCount = z.number().int().nonnegative().safe()
+const strictContractId = z.string().regex(/^[1-9]\d{0,18}$/, { message: 'ID must be a positive digit string' })
+const strictContractDecimal = z.string().regex(/^\d{1,17}(?:\.\d{1,3})?$/, {
+  message: 'value must be a nonnegative decimal string with at most three places',
+})
 
 export const ComputeAccountSchema: z.ZodType<ComputeAccount> = z
   .object({
@@ -609,6 +613,140 @@ export type PlatformServerLease = z.infer<typeof PlatformServerLeaseSchema>
 const EmailInvitationListSchema = z.array(EmailInvitationSchema)
 const PlatformServerSkuListSchema = z.array(PlatformServerSkuSchema)
 export const PlatformServerLeaseListSchema = z.array(PlatformServerLeaseSchema)
+
+const PlatformLeaseSnapshotSchema = z.object({
+  id: strictContractId,
+  leaseNo: z.string().min(1),
+  userId: strictContractId,
+  skuId: strictContractId,
+  requestId: z.string().min(1),
+  hostedNodeId: strictContractId,
+  productId: strictContractId,
+  monthlyRent: strictContractDecimal,
+  salePrice: strictContractDecimal,
+  status: z.enum(['ACTIVE', 'STOPPING', 'RELEASED']),
+  autoRenew: z.boolean(),
+  startedAt: contractDateTime,
+  expiresAt: contractDateTime,
+  stoppingAt: contractDateTime.nullable(),
+  releasedAt: contractDateTime.nullable(),
+  renewalCount: z.number().int().nonnegative(),
+})
+
+export const PlatformLeasePeriodSchema = z.object({
+  id: strictContractId,
+  leaseId: strictContractId,
+  periodNo: z.number().int().positive(),
+  rentCardHours: strictContractDecimal,
+  startedAt: contractDateTime,
+  endsAt: contractDateTime,
+  paymentLedgerId: strictContractId,
+  status: z.enum(['ACTIVE', 'COMPLETED']),
+  completedAt: contractDateTime.nullable(),
+})
+export type PlatformLeasePeriod = z.infer<typeof PlatformLeasePeriodSchema>
+
+export const PlatformLeaseIncomeEventSchema = z.object({
+  id: strictContractId,
+  leaseId: strictContractId,
+  reservationId: strictContractId,
+  productId: strictContractId,
+  orderId: strictContractId,
+  orderNo: z.string().min(1),
+  buyerUserId: strictContractId,
+  beneficiaryUserId: strictContractId,
+  grossCardHours: strictContractDecimal,
+  platformFeeCardHours: strictContractDecimal,
+  netIncomeCardHours: strictContractDecimal,
+  supplierIncomeLedgerId: strictContractId.nullable(),
+  settlementStatus: z.enum(['PENDING', 'SETTLED']),
+  serviceStartedAt: contractDateTime.nullable(),
+  serviceEndedAt: contractDateTime.nullable(),
+  settledAt: contractDateTime.nullable(),
+})
+export type PlatformLeaseIncomeEvent = z.infer<typeof PlatformLeaseIncomeEventSchema>
+
+export const PlatformLeaseDetailsSchema = z.object({
+  lease: PlatformLeaseSnapshotSchema,
+  periods: z.array(PlatformLeasePeriodSchema),
+  incomeEvents: z.array(PlatformLeaseIncomeEventSchema),
+  totalCost: strictContractDecimal,
+  totalPendingIncome: strictContractDecimal,
+  totalSettledIncome: strictContractDecimal,
+  totalFee: strictContractDecimal,
+  totalNetIncome: strictContractDecimal,
+})
+export type PlatformLeaseDetails = z.infer<typeof PlatformLeaseDetailsSchema>
+
+export const PlatformSkuAdminInputSchema = z.object({
+  skuCode: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string(),
+  region: z.string().min(1),
+  gpuModel: z.string().min(1),
+  gpuMemoryGb: z.number().int().nonnegative(),
+  gpuCount: z.number().int().positive(),
+  cpuDescription: z.string().min(1),
+  ramGb: z.number().int().nonnegative(),
+  storageGb: z.number().int().nonnegative(),
+  networkDescription: z.string().min(1),
+  monthlyRent: strictContractDecimal,
+  platformSalePrice: strictContractDecimal,
+  packageDurationHours: z.number().int().positive(),
+  deliveryDeadlineHours: z.number().int().nonnegative(),
+  totalInventory: z.number().int().nonnegative(),
+  status: z.enum(['ACTIVE', 'DISABLED']),
+})
+export type PlatformSkuAdminInput = z.infer<typeof PlatformSkuAdminInputSchema>
+
+const PlatformSkuAdminSchema = PlatformSkuAdminInputSchema.extend({
+  id: strictContractId,
+  availableInventory: z.number().int().nonnegative(),
+}).refine((value) => value.availableInventory <= value.totalInventory, {
+  path: ['availableInventory'],
+  message: 'available inventory cannot exceed total inventory',
+})
+export type PlatformSkuAdmin = z.infer<typeof PlatformSkuAdminSchema>
+
+export const LotteryEligibilitySchema = z.object({
+  id: strictContractId,
+  beneficiaryUserId: strictContractId,
+  sourceType: z.enum(['GPU_RESERVATION', 'HOSTING_PERIOD']),
+  sourceId: strictContractId,
+  rewardBase: strictContractDecimal,
+  status: z.enum(['PENDING', 'DRAWN', 'DISMISSED']),
+  ruleVersion: z.number().int().positive(),
+  createdAt: contractDateTime,
+  drawnAt: contractDateTime.nullable(),
+  dismissedAt: contractDateTime.nullable(),
+})
+export type LotteryEligibility = z.infer<typeof LotteryEligibilitySchema>
+
+export const LotteryDrawSchema = z.object({
+  id: strictContractId,
+  eligibilityId: strictContractId,
+  ruleVersion: z.number().int().positive(),
+  rateBasisPoints: z.union([z.literal(50), z.literal(100), z.literal(200), z.literal(300), z.literal(500)]),
+  rewardAmount: strictContractDecimal,
+  requestId: z.string().min(1),
+  rewardLedgerId: strictContractId.nullable(),
+  drawnAt: contractDateTime,
+})
+export type LotteryDraw = z.infer<typeof LotteryDrawSchema>
+
+export const LocalDemoCapabilitySchema = z.object({
+  enabled: z.boolean(),
+  roles: z.array(z.enum(['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'])),
+})
+export type LocalDemoCapability = z.infer<typeof LocalDemoCapabilitySchema>
+
+const LocalDemoSessionSchema = z.object({
+  token: z.string().min(1),
+  refreshToken: z.string().min(1),
+  accountId: strictContractId,
+})
+export type LocalDemoRole = z.infer<typeof LocalDemoCapabilitySchema>['roles'][number]
+export type LocalDemoSession = z.infer<typeof LocalDemoSessionSchema>
 
 export type CardHourAssetType = 'STANDARD' | 'SPECIFIC'
 export type CardHourMarketType = 'PRIMARY_SALE' | 'IDLE_TRANSFER' | 'RFQ'
@@ -956,6 +1094,17 @@ function getComputeMarketApiOrigin() {
   return resolveComputeMarketApiOrigin(KOD_MARKET_API_ORIGIN, getKodApiOrigin())
 }
 
+function optionalAccountIdentity(accountId: string | null | undefined) {
+  return accountId?.trim() || null
+}
+
+function requireCurrentAccountIdentity(accessToken: string | null, accountId: string | null) {
+  const current = authInfoStore.getState()
+  if (current.accessToken !== accessToken || optionalAccountIdentity(current.accountId) !== accountId) {
+    throw new Error('账户已切换，已取消旧账户操作')
+  }
+}
+
 async function request<T>(
   path: string,
   options?: FetchOptions<'json'>,
@@ -965,7 +1114,7 @@ async function request<T>(
 ): Promise<T> {
   const session = authInfoStore.getState()
   const token = session.accessToken
-  const accountId = session.accountId
+  const accountId = optionalAccountIdentity(session.accountId)
   if (authenticated && !token) {
     throw new Error('请先登录 KOD 账号')
   }
@@ -977,6 +1126,7 @@ async function request<T>(
     },
     ignoreResponseError: true,
   })
+  if (authenticated) requireCurrentAccountIdentity(token, accountId)
   const isSafeToReplay = !options?.method || options.method === 'GET'
   if (json.code === 401 && authenticated && token && isSafeToReplay && !authRefreshAttempted) {
     await refreshKodSession(token, accountId)
@@ -1147,6 +1297,57 @@ export function setLeaseAutoRenew(leaseId: string, enabled: boolean) {
     body: { enabled },
     retry: 0,
   }).then((data) => PlatformServerLeaseSchema.parse(data))
+}
+
+export function getPlatformLeaseDetails(leaseId: string) {
+  strictContractId.parse(leaseId)
+  return request<unknown>(`/api/compute/platform-hosting/leases/${encodeURIComponent(leaseId)}`).then((data) =>
+    PlatformLeaseDetailsSchema.parse(data)
+  )
+}
+
+export function listAdminPlatformSkus() {
+  return request<unknown>('/api/compute/admin/platform-hosting/skus').then((data) =>
+    z.array(PlatformSkuAdminSchema).parse(data)
+  )
+}
+
+export function upsertAdminPlatformSku(input: PlatformSkuAdminInput) {
+  const body = PlatformSkuAdminInputSchema.parse(input)
+  return request<unknown>('/api/compute/admin/platform-hosting/skus', {
+    method: 'POST',
+    body,
+    retry: 0,
+  }).then((data) => PlatformSkuAdminSchema.parse(data))
+}
+
+export function listLotteryEligibilities(status?: LotteryEligibility['status']) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  return request<unknown>(`/api/compute/lottery/eligibilities${query}`).then((data) =>
+    z.array(LotteryEligibilitySchema).parse(data)
+  )
+}
+
+export function drawLotteryEligibility(eligibilityId: string, requestId: string) {
+  strictContractId.parse(eligibilityId)
+  const body = z.object({ requestId: z.string().min(1) }).parse({ requestId })
+  return request<unknown>(`/api/compute/lottery/eligibilities/${encodeURIComponent(eligibilityId)}/draw`, {
+    method: 'POST',
+    body,
+    retry: 0,
+  }).then((data) => LotteryDrawSchema.parse(data))
+}
+
+export function getLocalDemoCapability() {
+  return request<unknown>('/api/compute/local-demo/capability').then((data) => LocalDemoCapabilitySchema.parse(data))
+}
+
+export function switchLocalDemoRole(role: LocalDemoRole) {
+  const parsedRole = z.enum(['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER']).parse(role)
+  return request<unknown>(`/api/compute/local-demo/session/${encodeURIComponent(parsedRole)}`, {
+    method: 'POST',
+    retry: 0,
+  }).then((data) => LocalDemoSessionSchema.parse(data))
 }
 
 export function listCardHourMarketListings() {
