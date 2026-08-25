@@ -196,6 +196,7 @@ export function MarketIntelligencePanel({
     () => matchingContracts.find(({ contractId }) => contractId === selectedContractId) ?? null,
     [matchingContracts, selectedContractId]
   )
+  const directoryAuthoritative = inferenceEnabled && !contractDirectoryQuery.error
 
   useEffect(() => {
     if (!inferenceEnabled) {
@@ -221,12 +222,28 @@ export function MarketIntelligencePanel({
     queryKey: inferenceQueryKey,
     queryFn: ({ signal }) =>
       inferenceApi.getInference(selectedContract?.contractId as string, identity as WalletIdentity, signal),
-    enabled: inferenceEnabled && Boolean(selectedContract),
+    enabled: directoryAuthoritative && Boolean(selectedContract),
     retry: false,
   })
+  useEffect(() => {
+    if (!directoryAuthoritative || !selectedContract) return
+    return () => {
+      void queryClient.cancelQueries({ queryKey: inferenceQueryKey, exact: true })
+    }
+  }, [directoryAuthoritative, inferenceQueryKey, queryClient, selectedContract])
 
-  const inferenceOwner =
-    inferenceEnabled && identity && selectedContract ? `${identity}\u0000${selectedContract.contractId}` : null
+  const inferenceOwnerKey =
+    directoryAuthoritative && identity && selectedContract ? `${identity}\u0000${selectedContract.contractId}` : null
+  const inferenceOwnerLifecycleRef = useRef({ key: null as string | null, generation: 0 })
+  if (inferenceOwnerLifecycleRef.current.key !== inferenceOwnerKey) {
+    inferenceOwnerLifecycleRef.current = {
+      key: inferenceOwnerKey,
+      generation: inferenceOwnerLifecycleRef.current.generation + 1,
+    }
+  }
+  const inferenceOwner = inferenceOwnerKey
+    ? `${inferenceOwnerKey}\u0000${inferenceOwnerLifecycleRef.current.generation}`
+    : null
   const inferenceOwnerRef = useRef(inferenceOwner)
   inferenceOwnerRef.current = inferenceOwner
   const refreshRequestRef = useRef<{
@@ -266,9 +283,17 @@ export function MarketIntelligencePanel({
     const controller = new AbortController()
     setRefreshState({ owner, pending: true, failed: false })
 
-    const promise = Promise.resolve()
-      .then(() => inferenceApi.refreshInference(contractId, identity, controller.signal))
-      .then((nextView) => {
+    const promise = (async () => {
+      try {
+        await queryClient.cancelQueries({ queryKey, exact: true })
+        if (
+          controller.signal.aborted ||
+          refreshRequestRef.current?.controller !== controller ||
+          inferenceOwnerRef.current !== owner
+        ) {
+          return
+        }
+        const nextView = await inferenceApi.refreshInference(contractId, identity, controller.signal)
         if (
           controller.signal.aborted ||
           refreshRequestRef.current?.controller !== controller ||
@@ -278,8 +303,7 @@ export function MarketIntelligencePanel({
         }
         queryClient.setQueryData(queryKey, nextView)
         setRefreshState({ owner, pending: false, failed: false })
-      })
-      .catch(() => {
+      } catch {
         if (
           controller.signal.aborted ||
           refreshRequestRef.current?.controller !== controller ||
@@ -288,10 +312,10 @@ export function MarketIntelligencePanel({
           return
         }
         setRefreshState({ owner, pending: false, failed: true })
-      })
-      .finally(() => {
+      } finally {
         if (refreshRequestRef.current?.controller === controller) refreshRequestRef.current = null
-      })
+      }
+    })()
     refreshRequestRef.current = { owner, controller, promise }
     return promise
   }, [identity, inferenceApi, inferenceOwner, queryClient, selectedContract])
@@ -335,6 +359,7 @@ export function MarketIntelligencePanel({
       inferenceError={inferenceQuery.error}
       refreshFailed={Boolean(currentRefreshState?.failed)}
       refreshing={Boolean(currentRefreshState?.pending)}
+      refreshDisabled={!directoryAuthoritative}
       onRefresh={runInferenceRefresh}
     />
   ) : null
@@ -542,6 +567,7 @@ function MarketInferenceSection({
   inferenceError,
   refreshFailed,
   refreshing,
+  refreshDisabled,
   onRefresh,
 }: {
   gpuModel: string
@@ -556,6 +582,7 @@ function MarketInferenceSection({
   inferenceError: Error | null
   refreshFailed: boolean
   refreshing: boolean
+  refreshDisabled: boolean
   onRefresh: () => void | Promise<void>
 }) {
   if (directoryLoading && contracts.length === 0) {
@@ -609,6 +636,7 @@ function MarketInferenceSection({
             onChange={onContractChange}
             searchable
             clearable={false}
+            disabled={Boolean(directoryError)}
             w={{ base: '100%', sm: 480 }}
           />
           {selectedContractId && (
@@ -625,7 +653,17 @@ function MarketInferenceSection({
           description={inference ? '已保留最近一次成功研判，真实行情不受影响。' : '真实行情不受影响，请稍后重试。'}
           tone="red"
           action={
-            !inference && (inferenceError || refreshFailed) ? (
+            directoryError ? (
+              <Button
+                variant="light"
+                color="red"
+                size="xs"
+                leftSection={<IconRefresh size={15} />}
+                onClick={onRetryDirectory}
+              >
+                重试预测合约
+              </Button>
+            ) : !inference && (inferenceError || refreshFailed) ? (
               <Button
                 variant="light"
                 color="red"
@@ -642,7 +680,12 @@ function MarketInferenceSection({
       )}
 
       {inference ? (
-        <KaiMarketInferenceCard view={inference} onRefresh={onRefresh} refreshing={refreshing} />
+        <KaiMarketInferenceCard
+          view={inference}
+          onRefresh={onRefresh}
+          refreshing={refreshing}
+          refreshDisabled={refreshDisabled}
+        />
       ) : inferenceLoading ? (
         <InferenceStatusPanel title="正在加载 Kai AI 行情研判" description="正在读取该合约最近一次服务端研判。" />
       ) : !inferenceError ? (

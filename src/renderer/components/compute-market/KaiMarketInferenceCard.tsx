@@ -11,9 +11,15 @@ export interface KaiMarketInferenceCardProps {
   view: KaiMarketInferenceView
   onRefresh: () => void | Promise<void>
   refreshing?: boolean
+  refreshDisabled?: boolean
 }
 
-export function KaiMarketInferenceCard({ view, onRefresh, refreshing = false }: KaiMarketInferenceCardProps) {
+export function KaiMarketInferenceCard({
+  view,
+  onRefresh,
+  refreshing = false,
+  refreshDisabled = false,
+}: KaiMarketInferenceCardProps) {
   const titleId = useId()
   const lastSuccess = view.lastSuccess
   const status = statusDisplay(view.status, Boolean(lastSuccess))
@@ -67,6 +73,7 @@ export function KaiMarketInferenceCard({ view, onRefresh, refreshing = false }: 
             size="xs"
             leftSection={<IconRefresh size={15} />}
             loading={refreshing}
+            disabled={refreshDisabled}
             onClick={() => void onRefresh()}
           >
             {unavailable ? '重试预测' : '重新研判'}

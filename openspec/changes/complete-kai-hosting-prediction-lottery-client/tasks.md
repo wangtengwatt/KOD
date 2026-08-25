@@ -20,7 +20,7 @@
 
 ## 5. Add Kai market inference presentation
 
-- [ ] 5.1 Add failing tests for strict authenticated contract discovery, real-contract selection, hard deadlines, owner-scoped cancellation, single-flight refresh, cached-timestamp baselines, directory retry, cached success, server-owned refresh cadence, pipeline insufficiency, last-success fallback, next-trade verification, and account/route/contract changes.
+- [ ] 5.1 Add failing tests for strict authenticated contract discovery, real-contract selection, hard deadlines, owner-scoped cancellation and re-entry, single-flight refresh, GET-versus-POST authority, cached-timestamp baselines, initial and background directory failure/retry, cached success, server-owned refresh cadence, pipeline insufficiency, last-success fallback, next-trade verification, and account/route/contract changes.
 - [ ] 5.2 Implement `Kai AI 行情研判` and a compact `预测合约` selector inside realtime market with bounded transport and owner lifecycles, without changing real quote behavior or enabling automatic trading.
 
 ## 6. Add local demo workflow
