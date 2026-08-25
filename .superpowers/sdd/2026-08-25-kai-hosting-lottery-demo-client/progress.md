@@ -20,3 +20,9 @@ Task 1 Ruling: `/api/compute/local-demo/*` is authoritative because both approve
 Task 1 Ruling: lottery history is `GET /api/compute/lottery/history`, matching the approved platform design's sibling `/eligibilities`, `/draw`, and `/history` endpoints. Cost if wrong: a different nested URL would require a backward-compatible alias before release.
 
 Task 1 Review Round 2: administrator SKU `ramGb` and `storageGb` mirror the backend's `value < 0` rejection boundary. Zero is valid in both request and response contracts; negative values are rejected client-side before any request.
+
+Task 1: fix round 1/5 (3 addressed, 1 open; commits 3d6d7f0..38ad96a)
+
+Task 1: fix round 2/5 (1 addressed, 0 open; commits 38ad96a..9620225)
+
+Task 1: complete (commits 9f28c3b..9620225, independent re-review clean)
