@@ -123,10 +123,30 @@ describe('KaiMarketInferenceCard', () => {
     })
 
     expect(screen.getByText('缓存预测')).toBeTruthy()
-    expect(screen.getByText('成交序列未变化，展示缓存结果')).toBeTruthy()
+    expect(screen.getByText('当前展示最近一次成功研判')).toBeTruthy()
+    expect(screen.queryByText('成交序列未变化，展示缓存结果')).toBeNull()
     expect(screen.getByText('真实订单簿数据不足，未生成风险分析')).toBeTruthy()
     expect(screen.queryByText(/best bid|best ask|最佳买价|最佳卖价/i)).toBeNull()
     expect(screen.getByText('等待下一笔真实成交核验')).toBeTruthy()
+  })
+
+  it('keeps the static disclaimer non-disruptive', () => {
+    renderCard()
+
+    const note = screen.getByRole('note')
+    expect(note.textContent).toContain('不构成交易建议')
+    expect(note.closest('[role="alert"]')).toBeNull()
+  })
+
+  it('announces refreshed state and verification changes politely', () => {
+    renderCard()
+
+    expect(within(screen.getByRole('status', { name: '研判状态' })).getByText('最新预测')).toBeTruthy()
+    expect(
+      within(screen.getByRole('region', { name: '真实成交核验' })).getByRole('status', {
+        name: '真实成交核验状态',
+      })
+    ).toBeTruthy()
   })
 
   it('keeps the last success visible and marks it stale when the current service is unavailable', () => {

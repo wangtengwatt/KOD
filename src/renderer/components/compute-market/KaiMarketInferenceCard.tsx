@@ -38,13 +38,23 @@ export function KaiMarketInferenceCard({ view, onRefresh, refreshing = false }: 
               <Title id={titleId} order={4}>
                 Kai AI 行情研判
               </Title>
+            </Group>
+            <Group
+              role="status"
+              aria-label="研判状态"
+              aria-live="polite"
+              aria-atomic="true"
+              gap="xs"
+              mt={6}
+              wrap="wrap"
+            >
               <Badge color={status.color} variant="light">
                 {status.label}
               </Badge>
+              <Text size="sm" c="dimmed">
+                {status.description}
+              </Text>
             </Group>
-            <Text size="sm" c="dimmed" mt={6}>
-              {status.description}
-            </Text>
           </div>
           <Button
             variant="light"
@@ -58,9 +68,14 @@ export function KaiMarketInferenceCard({ view, onRefresh, refreshing = false }: 
           </Button>
         </Group>
 
-        <Alert color="teal" variant="light" icon={<IconShieldCheck size={18} />}>
-          AI 研判仅作行情参考，不构成交易建议；模型不会替你下单或执行交易。
-        </Alert>
+        <Paper component="aside" role="note" withBorder radius="md" p="sm" bg="var(--mantine-color-teal-light)">
+          <Group gap="sm" align="flex-start" wrap="nowrap">
+            <ThemeIcon variant="transparent" color="teal" size="sm" aria-hidden="true">
+              <IconShieldCheck size={18} />
+            </ThemeIcon>
+            <Text size="sm">AI 研判仅作行情参考，不构成交易建议；模型不会替你下单或执行交易。</Text>
+          </Group>
+        </Paper>
 
         <SimpleGrid cols={{ base: 1, sm: lastSuccess ? 2 : 1 }}>
           {lastSuccess && (
@@ -158,20 +173,24 @@ function VerificationPanel({ verification }: { verification: KaiMarketVerificati
   if (!verification) {
     return (
       <Paper component="section" aria-label="真实成交核验" withBorder radius="md" p="md">
-        <Text fw={700}>真实成交核验</Text>
-        <Text size="sm" c="dimmed" mt={4}>
-          尚无真实成交核验结果。
-        </Text>
+        <div role="status" aria-label="真实成交核验状态" aria-live="polite" aria-atomic="true">
+          <Text fw={700}>真实成交核验</Text>
+          <Text size="sm" c="dimmed" mt={4}>
+            尚无真实成交核验结果。
+          </Text>
+        </div>
       </Paper>
     )
   }
   if (verification.status === 'PENDING') {
     return (
       <Paper component="section" aria-label="真实成交核验" withBorder radius="md" p="md">
-        <Text fw={700}>真实成交核验</Text>
-        <Text size="sm" c="dimmed" mt={4}>
-          等待下一笔真实成交核验
-        </Text>
+        <div role="status" aria-label="真实成交核验状态" aria-live="polite" aria-atomic="true">
+          <Text fw={700}>真实成交核验</Text>
+          <Text size="sm" c="dimmed" mt={4}>
+            等待下一笔真实成交核验
+          </Text>
+        </div>
       </Paper>
     )
   }
@@ -184,7 +203,7 @@ function VerificationPanel({ verification }: { verification: KaiMarketVerificati
         : '真实成交已到达，模型输出无法核验'
   return (
     <Paper component="section" aria-label="真实成交核验" withBorder radius="md" p="md">
-      <Stack gap="xs">
+      <Stack role="status" aria-label="真实成交核验状态" aria-live="polite" aria-atomic="true" gap="xs">
         <Group justify="space-between" gap="sm" wrap="wrap">
           <Text fw={700}>{heading}</Text>
           <Badge
@@ -225,7 +244,7 @@ function statusDisplay(status: KaiMarketInferenceView['status']) {
     return { color: 'green', label: '最新预测', description: '实时成交序列已变化' }
   }
   if (status === 'CACHED') {
-    return { color: 'teal', label: '缓存预测', description: '成交序列未变化，展示缓存结果' }
+    return { color: 'teal', label: '缓存预测', description: '当前展示最近一次成功研判' }
   }
   return { color: 'red', label: '服务异常', description: '本次刷新失败，行情报价不受影响' }
 }
