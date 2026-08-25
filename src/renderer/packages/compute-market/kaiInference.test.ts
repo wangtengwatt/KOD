@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   auth: {
@@ -14,6 +14,10 @@ vi.mock('../computeCenter', () => ({ computeMarketplaceRequest: mocks.request })
 vi.mock('@/stores/authInfoStore', () => ({
   authInfoStore: { getState: () => mocks.auth },
 }))
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 import {
   getKaiMarketInference,
@@ -119,14 +123,16 @@ describe('KAI market inference wire contract', () => {
 
     const encoded = encodeURIComponent(CONTRACT_ID)
     expect(mocks.request).toHaveBeenNthCalledWith(1, `/api/compute/market/inference?contractId=${encoded}`, {
-      signal: getController.signal,
+      signal: expect.any(AbortSignal),
       timeout: 15_000,
     })
     expect(mocks.request).toHaveBeenNthCalledWith(2, `/api/compute/market/inference/refresh?contractId=${encoded}`, {
       method: 'POST',
-      signal: refreshController.signal,
+      signal: expect.any(AbortSignal),
       timeout: 15_000,
     })
+    expect(mocks.request.mock.calls[0]?.[1]?.signal).not.toBe(getController.signal)
+    expect(mocks.request.mock.calls[1]?.[1]?.signal).not.toBe(refreshController.signal)
   })
 
   it('loads the authenticated same-origin real-contract directory as an ordered strict string-only payload', async () => {
@@ -136,7 +142,7 @@ describe('KAI market inference wire contract', () => {
     const result = await getKaiMarketInferenceContracts(ACCOUNT_IDENTITY, controller.signal)
 
     expect(mocks.request).toHaveBeenCalledWith('/api/compute/market/inference/contracts', {
-      signal: controller.signal,
+      signal: expect.any(AbortSignal),
       timeout: 15_000,
     })
     expect(result.map(({ contractId }) => contractId)).toEqual(realContracts.map(({ contractId }) => contractId))
@@ -452,5 +458,48 @@ describe('KAI market inference wire contract', () => {
     controller.abort(new Error('cancelled by query'))
 
     await expect(pending).rejects.toThrow('cancelled by query')
+  })
+
+  it('settles a transport that ignores cancellation at the hard deadline and aborts the network with a sanitized reason', async () => {
+    vi.useFakeTimers()
+    let networkSignal: AbortSignal | undefined
+    mocks.request.mockImplementation((_path: string, options?: { signal?: AbortSignal }) => {
+      networkSignal = options?.signal
+      return new Promise(() => undefined)
+    })
+
+    let outcome = 'pending'
+    void getKaiMarketInference(CONTRACT_ID, ACCOUNT_IDENTITY).then(
+      () => {
+        outcome = 'resolved'
+      },
+      (error: unknown) => {
+        outcome = error instanceof Error ? error.message : String(error)
+      }
+    )
+
+    await vi.advanceTimersByTimeAsync(15_000)
+
+    expect(outcome).toBe('预测服务暂不可用')
+    expect(networkSignal?.aborted).toBe(true)
+    expect(networkSignal?.reason).toEqual(expect.objectContaining({ message: '预测服务暂不可用' }))
+    vi.useRealTimers()
+  })
+
+  it('cleans the deadline and caller-abort listener after a completed request', async () => {
+    vi.useFakeTimers()
+    let networkSignal: AbortSignal | undefined
+    mocks.request.mockImplementation((_path: string, options?: { signal?: AbortSignal }) => {
+      networkSignal = options?.signal
+      return Promise.resolve(view())
+    })
+    const controller = new AbortController()
+
+    await getKaiMarketInference(CONTRACT_ID, ACCOUNT_IDENTITY, controller.signal)
+    controller.abort(new Error('late caller abort'))
+    await vi.advanceTimersByTimeAsync(15_000)
+
+    expect(networkSignal?.aborted).toBe(false)
+    vi.useRealTimers()
   })
 })

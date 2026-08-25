@@ -13,16 +13,30 @@ The client SHALL load `GET /api/compute/market/inference/contracts` through the 
 
 #### Scenario: Contract discovery is unavailable or has no matching contract
 - **WHEN** the directory request fails, returns an invalid strict payload, or contains no contract matching the selected GPU model
-- **THEN** inference SHALL fail closed without making a prediction GET or refresh POST, while realtime quotes and their retry lifecycle SHALL remain usable
+- **THEN** inference SHALL fail closed without making a prediction GET or refresh POST, while realtime quotes and their retry lifecycle SHALL remain usable; an initial directory failure SHALL offer a manual directory retry
 
 ### Requirement: Realtime market shows cached inference independently from quotes
 The client SHALL show prediction, risk state, model, generation time, data freshness, and next-trade verification without changing the authoritative quote panel.
 
 The inference query key SHALL include the stable wallet identity and selected real contract ID. Its query function SHALL consume the TanStack cancellation signal. Successful realtime quote refreshes SHALL request the backend refresh endpoint only for the selected real contract; the client SHALL NOT implement the 60-second or fingerprint decision locally.
 
+Contract-directory, inference-read, and inference-refresh requests SHALL compose caller cancellation with a client hard deadline of 15 seconds, SHALL abort the underlying request at that deadline, and SHALL expose only a sanitized unavailable error. Refresh POSTs SHALL be single-flight per wallet-and-contract owner: repeated quote ticks or manual refreshes while one POST is pending SHALL reuse or ignore that request rather than cancelling and restarting it. A newly mounted or changed wallet/contract owner SHALL treat the current quote timestamp as its baseline and SHALL refresh inference only after a strictly newer successful quote update.
+
 #### Scenario: Account, route, model, or contract changes during a request
 - **WHEN** the request owner changes before a contract-directory, inference-read, or inference-refresh response completes
 - **THEN** the client SHALL cancel or ignore that response and SHALL NOT display it under the new owner or selection
+
+#### Scenario: Inference transport stalls
+- **WHEN** an inference request does not resolve or honor cancellation before 15 seconds
+- **THEN** the client SHALL abort the network request, settle locally with a sanitized unavailable state, and keep realtime quotes usable
+
+#### Scenario: Quote updates while a refresh is pending
+- **WHEN** one wallet-and-contract refresh POST is pending and further quote updates or manual refresh actions occur
+- **THEN** the client SHALL keep exactly one POST in flight and SHALL apply its eventual result only to that same owner
+
+#### Scenario: Cached quote data is present for a new owner
+- **WHEN** the component mounts, wallet changes, or contract changes while an existing quote timestamp is cached
+- **THEN** the cached timestamp SHALL NOT trigger a refresh POST; only a strictly newer successful quote update SHALL arm one
 
 #### Scenario: Inference service is unavailable after a success
 - **WHEN** the server returns an unavailable state with a prior successful snapshot

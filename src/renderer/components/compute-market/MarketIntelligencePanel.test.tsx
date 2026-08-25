@@ -164,19 +164,23 @@ function createApi({
   }
 }
 
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  })
+}
+
 function renderPanel(
   api = createApi(),
   initialView: 'gpu-reference' | 'card-hours' = 'gpu-reference',
   enableAdvanced = false,
   simulationMode = false,
   identity: string | null = null,
-  inferenceApi = createInferenceApi()
+  inferenceApi = createInferenceApi(),
+  queryClient = createTestQueryClient()
 ) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-    },
-  })
   const panel = (nextIdentity: string | null) => (
     <QueryClientProvider client={queryClient}>
       <MantineProvider>
@@ -416,6 +420,9 @@ describe('MarketIntelligencePanel', () => {
     await waitFor(() =>
       expect(inferenceApi.getInference).toHaveBeenCalledWith(CONTRACT_A, ACCOUNT_A, expect.any(AbortSignal))
     )
+
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    await queryClient.refetchQueries({ queryKey: ['compute', 'market-intelligence', 'live', 'latest'], exact: true })
     await waitFor(() =>
       expect(inferenceApi.refreshInference).toHaveBeenCalledWith(CONTRACT_A, ACCOUNT_A, expect.any(AbortSignal))
     )
@@ -442,6 +449,8 @@ describe('MarketIntelligencePanel', () => {
     const { queryClient } = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
 
     expect(await screen.findByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    await queryClient.refetchQueries({ queryKey: ['compute', 'market-intelligence', 'live', 'latest'], exact: true })
     await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1))
     expect(screen.getAllByText('$2.2500').length).toBeGreaterThan(0)
     expect(screen.getByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
@@ -459,6 +468,103 @@ describe('MarketIntelligencePanel', () => {
     expect(queryClient.getQueryData(['compute', 'market-inference', ACCOUNT_A, 'contract', CONTRACT_A])).toBeTruthy()
   })
 
+  it('keeps one owner-scoped refresh in flight across repeated quote ticks and applies its eventual result', async () => {
+    const api = createApi()
+    let resolveLatest: ((snapshot: ComputeMarketPriceSnapshot) => void) | undefined
+    const pendingLatest = new Promise<ComputeMarketPriceSnapshot>((resolve) => {
+      resolveLatest = resolve
+    })
+    api.getLatest = vi.fn(() => pendingLatest)
+    const inferenceApi = createInferenceApi()
+    let resolveRefresh: ((value: KaiMarketInferenceView) => void) | undefined
+    const pendingRefresh = new Promise<KaiMarketInferenceView>((resolve) => {
+      resolveRefresh = resolve
+    })
+    inferenceApi.refreshInference = vi.fn(() => pendingRefresh)
+    const queryClient = createTestQueryClient()
+    queryClient.setQueryData(['compute', 'market-intelligence', 'live', 'latest'], baseSnapshot, {
+      updatedAt: Date.now() - 10_000,
+    })
+    renderPanel(api, 'gpu-reference', false, false, ACCOUNT_A, inferenceApi, queryClient)
+
+    expect(await screen.findByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+    expect(inferenceApi.refreshInference).not.toHaveBeenCalled()
+
+    resolveLatest?.({ ...baseSnapshot, generatedAt: new Date().toISOString() })
+    await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1))
+
+    for (let index = 0; index < 4; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2))
+      await queryClient.refetchQueries({ queryKey: ['compute', 'market-intelligence', 'live', 'latest'], exact: true })
+    }
+
+    await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1))
+    resolveRefresh?.(inferenceView(CONTRACT_A, 'single flight result'))
+    expect(await screen.findByText('single flight result')).toBeTruthy()
+    expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not POST from a remounted cached quote and arms only after a newer successful quote', async () => {
+    const queryClient = createTestQueryClient()
+    queryClient.setQueryData(['compute', 'market-intelligence', 'live', 'latest'], baseSnapshot, {
+      updatedAt: Date.now() - 10_000,
+    })
+    let resolveLatest: ((snapshot: ComputeMarketPriceSnapshot) => void) | undefined
+    const api = createApi()
+    api.getLatest = vi.fn(
+      () =>
+        new Promise<ComputeMarketPriceSnapshot>((resolve) => {
+          resolveLatest = resolve
+        })
+    )
+    const inferenceApi = createInferenceApi()
+    renderPanel(api, 'gpu-reference', false, false, ACCOUNT_A, inferenceApi, queryClient)
+
+    expect(await screen.findByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+    await waitFor(() => expect(api.getLatest).toHaveBeenCalledTimes(1))
+    expect(inferenceApi.refreshInference).not.toHaveBeenCalled()
+
+    resolveLatest?.({ ...baseSnapshot, generatedAt: new Date().toISOString() })
+    await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1))
+  })
+
+  it('does not reuse a cached quote timestamp as a trigger after account or contract ownership changes', async () => {
+    const api = createApi()
+    const inferenceApi = createInferenceApi()
+    inferenceApi.getInference = vi.fn(async (contractId, identity) =>
+      inferenceView(contractId, `read ${identity} ${contractId}`)
+    )
+    inferenceApi.refreshInference = vi.fn(async (contractId, identity) =>
+      inferenceView(contractId, `refresh ${identity} ${contractId}`)
+    )
+    const { queryClient, rerenderPanel } = renderPanel(api, 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    expect(await screen.findByText(`read ${ACCOUNT_A} ${CONTRACT_A}`)).toBeTruthy()
+    const initialRefreshCount = vi.mocked(inferenceApi.refreshInference).mock.calls.length
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    await queryClient.refetchQueries({ queryKey: ['compute', 'market-intelligence', 'live', 'latest'], exact: true })
+    await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(initialRefreshCount + 1))
+
+    rerenderPanel(ACCOUNT_B)
+    expect(await screen.findByText(`read ${ACCOUNT_B} ${CONTRACT_A}`)).toBeTruthy()
+    expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(initialRefreshCount + 1)
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    await queryClient.refetchQueries({ queryKey: ['compute', 'market-intelligence', 'live', 'latest'], exact: true })
+    await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(initialRefreshCount + 2))
+
+    const selector = screen.getByRole('textbox', { name: '预测合约' })
+    fireEvent.click(selector)
+    fireEvent.click(await screen.findByRole('option', { name: /llama-3\.3-70b/ }))
+    expect(await screen.findByText(`read ${ACCOUNT_B} ${CONTRACT_B}`)).toBeTruthy()
+    expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(initialRefreshCount + 2)
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    await queryClient.refetchQueries({ queryKey: ['compute', 'market-intelligence', 'live', 'latest'], exact: true })
+    await waitFor(() =>
+      expect(inferenceApi.refreshInference).toHaveBeenLastCalledWith(CONTRACT_B, ACCOUNT_B, expect.any(AbortSignal))
+    )
+    expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(initialRefreshCount + 3)
+  })
+
   it('retains the selected contract and last prediction when a later directory refresh fails', async () => {
     const inferenceApi = createInferenceApi()
     const { queryClient } = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
@@ -466,7 +572,7 @@ describe('MarketIntelligencePanel', () => {
     expect(await screen.findByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
     inferenceApi.getContracts = vi.fn(() => Promise.reject(new Error('directory refresh detail')))
     await queryClient.refetchQueries({
-      queryKey: ['compute', 'market-inference', ACCOUNT_A, 'contracts'],
+      queryKey: ['compute', 'market-inference', ACCOUNT_A, 'contracts', 'gpu-reference', 'H100'],
       exact: true,
     })
 
@@ -483,7 +589,6 @@ describe('MarketIntelligencePanel', () => {
     renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
 
     expect(await screen.findByText('预测服务暂不可用')).toBeTruthy()
-    await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1))
     inferenceApi.refreshInference = vi.fn(async (contractId) => inferenceView(contractId, 'recovered by refresh'))
     const readCount = vi.mocked(inferenceApi.getInference).mock.calls.length
     fireEvent.click(screen.getByRole('button', { name: '重试预测' }))
@@ -524,6 +629,83 @@ describe('MarketIntelligencePanel', () => {
     expect(await screen.findByText('当前 GPU 型号暂无可用预测合约')).toBeTruthy()
     expect(noMatch.getInference).not.toHaveBeenCalled()
     expect(noMatch.refreshInference).not.toHaveBeenCalled()
+  })
+
+  it('retries an initial contract-directory failure and recovers without touching realtime quotes', async () => {
+    const inferenceApi = createInferenceApi()
+    inferenceApi.getContracts = vi
+      .fn<MarketInferenceApi['getContracts']>()
+      .mockRejectedValueOnce(new Error('private directory failure'))
+      .mockResolvedValueOnce(realContracts)
+    renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    expect(await screen.findByText('预测服务暂不可用')).toBeTruthy()
+    expect(screen.getAllByText('$2.2500').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: '重试预测合约' }))
+
+    expect(await screen.findByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+    expect(inferenceApi.getContracts).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).not.toContain('private directory failure')
+  })
+
+  it('cancels a pending directory owner when the GPU model changes and ignores the late old result', async () => {
+    const snapshot: ComputeMarketPriceSnapshot = {
+      ...baseSnapshot,
+      trackedModels: ['H100', 'A100'],
+      quotes: [...baseSnapshot.quotes, { ...baseSnapshot.quotes[0], gpuModel: 'A100', priceUsdPerGpuHour: 1.75 }],
+    }
+    const inferenceApi = createInferenceApi()
+    const directoryResolvers: Array<(contracts: KaiMarketInferenceContract[]) => void> = []
+    const directorySignals: AbortSignal[] = []
+    inferenceApi.getContracts = vi.fn(
+      (_identity, signal) =>
+        new Promise<KaiMarketInferenceContract[]>((resolve) => {
+          directoryResolvers.push(resolve)
+          if (signal) directorySignals.push(signal)
+        })
+    )
+    renderPanel(createApi({ snapshot }), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    await waitFor(() => expect(inferenceApi.getContracts).toHaveBeenCalledTimes(1))
+    const gpuSelector = screen.getByRole('textbox', { name: 'GPU 型号' })
+    fireEvent.click(gpuSelector)
+    fireEvent.click(await screen.findByRole('option', { name: 'A100' }))
+
+    await waitFor(() => expect(inferenceApi.getContracts).toHaveBeenCalledTimes(2))
+    expect(directorySignals[0]?.aborted).toBe(true)
+    directoryResolvers[1]?.(realContracts)
+    await waitFor(() =>
+      expect(inferenceApi.getInference).toHaveBeenCalledWith(
+        'hk-a100-qwen-vllm-2026082517',
+        ACCOUNT_A,
+        expect.any(AbortSignal)
+      )
+    )
+    directoryResolvers[0]?.(realContracts.filter(({ gpuModel }) => gpuModel === 'H100'))
+    await Promise.resolve()
+    expect((screen.getByRole('textbox', { name: '预测合约' }) as HTMLInputElement).value).toContain('qwen')
+  })
+
+  it('cancels a pending contract directory when leaving the realtime view or unmounting', async () => {
+    const inferenceApi = createInferenceApi()
+    const signals: AbortSignal[] = []
+    inferenceApi.getContracts = vi.fn(
+      (_identity, signal) =>
+        new Promise<KaiMarketInferenceContract[]>(() => {
+          if (signal) signals.push(signal)
+        })
+    )
+    const first = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    await waitFor(() => expect(inferenceApi.getContracts).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('tab', { name: 'KOD 卡时行情' }))
+    await waitFor(() => expect(signals[0]?.aborted).toBe(true))
+    first.unmount()
+
+    const second = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+    await waitFor(() => expect(inferenceApi.getContracts).toHaveBeenCalledTimes(2))
+    second.unmount()
+    expect(signals[1]?.aborted).toBe(true)
   })
 
   it('cancels and ignores an old contract response after the user selects another real contract', async () => {
@@ -569,19 +751,32 @@ describe('MarketIntelligencePanel', () => {
       }
       return Promise.resolve(inferenceView(contractId, `refreshed prediction for ${identity}`))
     })
-    const { rerenderPanel } = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+    const { queryClient, rerenderPanel } = renderPanel(
+      createApi(),
+      'gpu-reference',
+      false,
+      false,
+      ACCOUNT_A,
+      inferenceApi
+    )
 
     expect(await screen.findByText(`prediction for ${ACCOUNT_A}`)).toBeTruthy()
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    await queryClient.refetchQueries({ queryKey: ['compute', 'market-intelligence', 'live', 'latest'], exact: true })
     await waitFor(() =>
       expect(inferenceApi.refreshInference).toHaveBeenCalledWith(CONTRACT_A, ACCOUNT_A, oldRefreshSignal)
     )
     rerenderPanel(ACCOUNT_B)
 
-    expect(await screen.findByText(`refreshed prediction for ${ACCOUNT_B}`)).toBeTruthy()
+    expect(await screen.findByText(`prediction for ${ACCOUNT_B}`)).toBeTruthy()
     expect(oldRefreshSignal?.aborted).toBe(true)
     resolveOldRefresh?.(inferenceView(CONTRACT_A, 'late old account prediction'))
     await Promise.resolve()
     expect(screen.queryByText('late old account prediction')).toBeNull()
+
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    await queryClient.refetchQueries({ queryKey: ['compute', 'market-intelligence', 'live', 'latest'], exact: true })
+    expect(await screen.findByText(`refreshed prediction for ${ACCOUNT_B}`)).toBeTruthy()
   })
 
   it('does not load inference without a wallet identity or in simulation mode', async () => {

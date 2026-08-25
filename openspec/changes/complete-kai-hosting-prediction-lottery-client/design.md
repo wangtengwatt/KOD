@@ -20,6 +20,8 @@ The client displays decimal strings and source IDs returned by the server. It do
 
 The client discovers prediction targets only through authenticated `GET /api/compute/market/inference/contracts`. It decodes the strict string-only directory, filters by the currently selected GPU model, preserves server order, defaults to the first `trading` contract, and lets the user select another matching contract. A model name is never substituted for an opaque contract identifier. Missing, failed, or mismatched directory data disables inference only; authoritative realtime quotes remain usable.
 
+Directory ownership includes wallet identity, realtime view, and normalized GPU model, so route/model changes cancel or isolate late directory responses without overwriting another owner's cache. All inference transports compose caller cancellation with a 15-second hard deadline. Refresh POSTs are single-flight per wallet-and-contract owner, and cached quote timestamps establish a baseline rather than causing a refresh; only a newer successful quote update asks the backend to apply its own cadence and fingerprint policy.
+
 ### Demo behavior requires two independent guards
 
 Demo controls require both a loopback API origin and a server capability response. A build-time flag alone cannot expose demo login or data controls.

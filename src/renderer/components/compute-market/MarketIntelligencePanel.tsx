@@ -158,12 +158,23 @@ export function MarketIntelligencePanel({
   })
 
   const inferenceEnabled = Boolean(identity) && view === 'gpu-reference' && !simulationMode
+  const directoryGpuModel = normalizedGpuModel(gpuModel)
+  const contractDirectoryQueryKey = useMemo(
+    () => ['compute', 'market-inference', identity ?? 'signed-out', 'contracts', view, directoryGpuModel] as const,
+    [directoryGpuModel, identity, view]
+  )
   const contractDirectoryQuery = useQuery({
-    queryKey: ['compute', 'market-inference', identity ?? 'signed-out', 'contracts'],
+    queryKey: contractDirectoryQueryKey,
     queryFn: ({ signal }) => inferenceApi.getContracts(identity as WalletIdentity, signal),
     enabled: inferenceEnabled,
     retry: false,
   })
+  useEffect(() => {
+    if (!inferenceEnabled) return
+    return () => {
+      void queryClient.cancelQueries({ queryKey: contractDirectoryQueryKey, exact: true })
+    }
+  }, [contractDirectoryQueryKey, inferenceEnabled, queryClient])
 
   const snapshot = latestQuery.data
   useEffect(() => {
@@ -218,10 +229,11 @@ export function MarketIntelligencePanel({
     inferenceEnabled && identity && selectedContract ? `${identity}\u0000${selectedContract.contractId}` : null
   const inferenceOwnerRef = useRef(inferenceOwner)
   inferenceOwnerRef.current = inferenceOwner
-  const refreshRequestRef = useRef<{ sequence: number; controller: AbortController | null }>({
-    sequence: 0,
-    controller: null,
-  })
+  const refreshRequestRef = useRef<{
+    owner: string
+    controller: AbortController
+    promise: Promise<void>
+  } | null>(null)
   const [refreshState, setRefreshState] = useState<{
     owner: string | null
     pending: boolean
@@ -231,60 +243,82 @@ export function MarketIntelligencePanel({
   useEffect(() => {
     if (!inferenceOwner) return
     return () => {
-      refreshRequestRef.current.sequence += 1
-      refreshRequestRef.current.controller?.abort()
-      refreshRequestRef.current.controller = null
+      const activeRequest = refreshRequestRef.current
+      if (activeRequest?.owner !== inferenceOwner) return
+      refreshRequestRef.current = null
+      activeRequest.controller.abort()
     }
   }, [inferenceOwner])
 
-  const runInferenceRefresh = useCallback(async () => {
+  const runInferenceRefresh = useCallback(() => {
     if (!identity || !selectedContract || !inferenceOwner) return
 
     const owner = inferenceOwner
     const contractId = selectedContract.contractId
     const queryKey = ['compute', 'market-inference', identity, 'contract', contractId] as const
-    const sequence = refreshRequestRef.current.sequence + 1
-    refreshRequestRef.current.sequence = sequence
-    refreshRequestRef.current.controller?.abort()
+    const activeRequest = refreshRequestRef.current
+    if (activeRequest?.owner === owner) return activeRequest.promise
+    if (activeRequest) {
+      refreshRequestRef.current = null
+      activeRequest.controller.abort()
+    }
+
     const controller = new AbortController()
-    refreshRequestRef.current.controller = controller
     setRefreshState({ owner, pending: true, failed: false })
 
-    try {
-      const nextView = await inferenceApi.refreshInference(contractId, identity, controller.signal)
-      if (
-        controller.signal.aborted ||
-        refreshRequestRef.current.sequence !== sequence ||
-        inferenceOwnerRef.current !== owner
-      ) {
-        return
-      }
-      queryClient.setQueryData(queryKey, nextView)
-      setRefreshState({ owner, pending: false, failed: false })
-    } catch {
-      if (
-        controller.signal.aborted ||
-        refreshRequestRef.current.sequence !== sequence ||
-        inferenceOwnerRef.current !== owner
-      ) {
-        return
-      }
-      setRefreshState({ owner, pending: false, failed: true })
-    } finally {
-      if (refreshRequestRef.current.sequence === sequence) refreshRequestRef.current.controller = null
-    }
+    const promise = Promise.resolve()
+      .then(() => inferenceApi.refreshInference(contractId, identity, controller.signal))
+      .then((nextView) => {
+        if (
+          controller.signal.aborted ||
+          refreshRequestRef.current?.controller !== controller ||
+          inferenceOwnerRef.current !== owner
+        ) {
+          return
+        }
+        queryClient.setQueryData(queryKey, nextView)
+        setRefreshState({ owner, pending: false, failed: false })
+      })
+      .catch(() => {
+        if (
+          controller.signal.aborted ||
+          refreshRequestRef.current?.controller !== controller ||
+          inferenceOwnerRef.current !== owner
+        ) {
+          return
+        }
+        setRefreshState({ owner, pending: false, failed: true })
+      })
+      .finally(() => {
+        if (refreshRequestRef.current?.controller === controller) refreshRequestRef.current = null
+      })
+    refreshRequestRef.current = { owner, controller, promise }
+    return promise
   }, [identity, inferenceApi, inferenceOwner, queryClient, selectedContract])
 
-  const automaticRefreshCycle =
-    inferenceOwner && latestQuery.isSuccess && latestQuery.dataUpdatedAt > 0 && inferenceQuery.isFetched
-      ? `${inferenceOwner}\u0000${latestQuery.dataUpdatedAt}`
-      : null
-  const automaticRefreshCycleRef = useRef<string | null>(null)
+  const automaticRefreshStateRef = useRef({ owner: null as string | null, baseline: 0, triggered: 0 })
+  if (automaticRefreshStateRef.current.owner !== inferenceOwner) {
+    automaticRefreshStateRef.current = {
+      owner: inferenceOwner,
+      baseline: latestQuery.dataUpdatedAt,
+      triggered: latestQuery.dataUpdatedAt,
+    }
+  }
   useEffect(() => {
-    if (!automaticRefreshCycle || automaticRefreshCycleRef.current === automaticRefreshCycle) return
-    automaticRefreshCycleRef.current = automaticRefreshCycle
+    const refreshState = automaticRefreshStateRef.current
+    if (
+      !inferenceOwner ||
+      refreshState.owner !== inferenceOwner ||
+      !latestQuery.isSuccess ||
+      !inferenceQuery.isFetched ||
+      latestQuery.dataUpdatedAt <= refreshState.baseline ||
+      latestQuery.dataUpdatedAt <= refreshState.triggered
+    ) {
+      return
+    }
+    refreshState.triggered = latestQuery.dataUpdatedAt
     void runInferenceRefresh()
-  }, [automaticRefreshCycle, runInferenceRefresh])
+  }, [inferenceOwner, inferenceQuery.isFetched, latestQuery.dataUpdatedAt, latestQuery.isSuccess, runInferenceRefresh])
 
   const currentRefreshState = refreshState.owner === inferenceOwner ? refreshState : null
   const inferenceContent = inferenceEnabled ? (
@@ -295,6 +329,7 @@ export function MarketIntelligencePanel({
       onContractChange={setSelectedContractId}
       directoryLoading={contractDirectoryQuery.isLoading}
       directoryError={contractDirectoryQuery.error}
+      onRetryDirectory={() => void contractDirectoryQuery.refetch()}
       inference={inferenceQuery.data}
       inferenceLoading={inferenceQuery.isLoading}
       inferenceError={inferenceQuery.error}
@@ -501,6 +536,7 @@ function MarketInferenceSection({
   onContractChange,
   directoryLoading,
   directoryError,
+  onRetryDirectory,
   inference,
   inferenceLoading,
   inferenceError,
@@ -514,6 +550,7 @@ function MarketInferenceSection({
   onContractChange: (contractId: string | null) => void
   directoryLoading: boolean
   directoryError: Error | null
+  onRetryDirectory: () => void
   inference?: KaiMarketInferenceView
   inferenceLoading: boolean
   inferenceError: Error | null
@@ -526,7 +563,24 @@ function MarketInferenceSection({
   }
 
   if (directoryError && contracts.length === 0) {
-    return <InferenceStatusPanel title="预测服务暂不可用" description="真实行情不受影响，请稍后重试。" tone="red" />
+    return (
+      <InferenceStatusPanel
+        title="预测服务暂不可用"
+        description="真实行情不受影响，请稍后重试。"
+        tone="red"
+        action={
+          <Button
+            variant="light"
+            color="red"
+            size="xs"
+            leftSection={<IconRefresh size={15} />}
+            onClick={onRetryDirectory}
+          >
+            重试预测合约
+          </Button>
+        }
+      />
+    )
   }
 
   if (contracts.length === 0) {
@@ -641,7 +695,11 @@ function contractLabel(contract: KaiMarketInferenceContract) {
 }
 
 function sameGpuModel(left: string, right: string) {
-  return left.trim().toLocaleUpperCase('en-US') === right.trim().toLocaleUpperCase('en-US')
+  return normalizedGpuModel(left) === normalizedGpuModel(right)
+}
+
+function normalizedGpuModel(value: string) {
+  return value.trim().toLocaleUpperCase('en-US')
 }
 
 function GpuReferenceView({

@@ -6,6 +6,8 @@ import { computeMarketplaceRequest } from '../computeCenter'
 const MAX_SIGNED_LONG = 9_223_372_036_854_775_807n
 const DECIMAL_PRECISION = 18
 const PRICE_ERROR_DECIMAL_PRECISION = 26
+const INFERENCE_DEADLINE_MS = 15_000
+const INFERENCE_UNAVAILABLE_MESSAGE = '预测服务暂不可用'
 
 const accountIdSchema = z
   .string()
@@ -248,6 +250,40 @@ function requireCurrentIdentity(identity: WalletIdentity) {
   if (currentWalletIdentity() !== identity) throw new Error('账户已切换，已取消旧账户操作')
 }
 
+async function withInferenceDeadline<T>(
+  callerSignal: AbortSignal | undefined,
+  request: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  if (callerSignal?.aborted) throw callerSignal.reason ?? new Error('请求已取消')
+
+  const controller = new AbortController()
+  let deadlineExpired = false
+  const forwardCallerAbort = () => controller.abort(callerSignal?.reason ?? new Error('请求已取消'))
+  callerSignal?.addEventListener('abort', forwardCallerAbort, { once: true })
+
+  const deadline = setTimeout(() => {
+    deadlineExpired = true
+    controller.abort(new Error(INFERENCE_UNAVAILABLE_MESSAGE))
+  }, INFERENCE_DEADLINE_MS)
+
+  let rejectAbort: (() => void) | undefined
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectAbort = () => reject(controller.signal.reason ?? new Error('请求已取消'))
+    controller.signal.addEventListener('abort', rejectAbort, { once: true })
+  })
+
+  try {
+    return await Promise.race([Promise.resolve().then(() => request(controller.signal)), aborted])
+  } catch (error) {
+    if (deadlineExpired) throw new Error(INFERENCE_UNAVAILABLE_MESSAGE)
+    throw error
+  } finally {
+    clearTimeout(deadline)
+    callerSignal?.removeEventListener('abort', forwardCallerAbort)
+    if (rejectAbort) controller.signal.removeEventListener('abort', rejectAbort)
+  }
+}
+
 async function requestKaiMarketInference(
   contractId: string,
   identity: WalletIdentity,
@@ -260,9 +296,15 @@ async function requestKaiMarketInference(
   const path = refresh
     ? `/api/compute/market/inference/refresh?contractId=${encodedContractId}`
     : `/api/compute/market/inference?contractId=${encodedContractId}`
-  const response = refresh
-    ? await computeMarketplaceRequest<unknown>(path, { method: 'POST', signal, timeout: 15_000 })
-    : await computeMarketplaceRequest<unknown>(path, { signal, timeout: 15_000 })
+  const response = await withInferenceDeadline(signal, (requestSignal) =>
+    refresh
+      ? computeMarketplaceRequest<unknown>(path, {
+          method: 'POST',
+          signal: requestSignal,
+          timeout: INFERENCE_DEADLINE_MS,
+        })
+      : computeMarketplaceRequest<unknown>(path, { signal: requestSignal, timeout: INFERENCE_DEADLINE_MS })
+  )
 
   requireCurrentIdentity(ownerIdentity)
   const view = kaiMarketInferenceViewSchema.parse(response)
@@ -283,10 +325,12 @@ export async function getKaiMarketInferenceContracts(
   signal?: AbortSignal
 ): Promise<KaiMarketInferenceContract[]> {
   const ownerIdentity = captureCurrentIdentity(identity)
-  const response = await computeMarketplaceRequest<unknown>('/api/compute/market/inference/contracts', {
-    signal,
-    timeout: 15_000,
-  })
+  const response = await withInferenceDeadline(signal, (requestSignal) =>
+    computeMarketplaceRequest<unknown>('/api/compute/market/inference/contracts', {
+      signal: requestSignal,
+      timeout: INFERENCE_DEADLINE_MS,
+    })
+  )
 
   requireCurrentIdentity(ownerIdentity)
   return kaiMarketInferenceContractsSchema.parse(response)
