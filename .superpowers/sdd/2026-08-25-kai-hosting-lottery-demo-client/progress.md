@@ -38,3 +38,11 @@ Task 3 TDD: RED 3/3 new financial/log/account-switch cases; GREEN focused 22/22 
 Task 3 verification: TypeScript, changed Biome, strict OpenSpec, production build, diff/protected/secret scans clean; full 1,707 pass / 54 skip with the same 6 unrelated baseline failures.
 
 Task 3: implementation complete (feature range ff3f1c0..4c16444); independent re-review pending.
+
+Task 4 Ruling: the missing standalone `task-4-brief.md` was a coordination-record omission, not an implementation gate; the approved client plan Task 4, `settlement-lottery-client` OpenSpec, approved design, and parent acceptance message were the authoritative boundary.
+
+Task 4 TDD: RED confirmed missing modal/panel/route behavior; GREEN focused 10/10 and related lottery/hosting/inventory/routes 65/65.
+
+Task 4 verification: TypeScript, changed Biome, strict OpenSpec, production build, diff/protected/secret scans clean; full 1,717 pass / 54 skip with the same 6 unrelated baseline failures.
+
+Task 4: implementation complete (feature range 4922497..5fb5026); independent re-review pending.
