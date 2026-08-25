@@ -5,6 +5,7 @@ import { computeMarketplaceRequest } from '../computeCenter'
 
 const MAX_SIGNED_LONG = 9_223_372_036_854_775_807n
 const DECIMAL_PRECISION = 18
+const PRICE_ERROR_DECIMAL_PRECISION = 26
 
 const accountIdSchema = z
   .string()
@@ -32,8 +33,8 @@ const dtNsSchema = z.string().regex(/^[0-9]{1,32}$/, { message: 'Expected an ASC
 const fingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/, { message: 'Expected a SHA-256 fingerprint' })
 const timestampSchema = z.iso.datetime({ offset: true })
 
-function hasValidPrecision(value: string) {
-  return value.replace('-', '').replace('.', '').length <= DECIMAL_PRECISION
+function hasValidPrecision(value: string, maximumPrecision: number) {
+  return value.replace('-', '').replace('.', '').length <= maximumPrecision
 }
 
 function isNegativeZero(value: string) {
@@ -43,16 +44,18 @@ function isNegativeZero(value: string) {
 const unsignedDecimalSchema = z
   .string()
   .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,8})?$/, { message: 'Expected a non-negative fixed-point string' })
-  .refine(hasValidPrecision, { message: 'Decimal exceeds precision 18' })
+  .refine((value) => hasValidPrecision(value, DECIMAL_PRECISION), { message: 'Decimal exceeds precision 18' })
 
 const positiveDecimalSchema = unsignedDecimalSchema.refine((value) => !/^0(?:\.0+)?$/.test(value), {
   message: 'Expected a positive fixed-point string',
 })
 
-const signedDecimalSchema = z
+const priceErrorDecimalSchema = z
   .string()
   .regex(/^-?(?:0|[1-9]\d*)(?:\.\d{1,8})?$/, { message: 'Expected a fixed-point string' })
-  .refine(hasValidPrecision, { message: 'Decimal exceeds precision 18' })
+  .refine((value) => hasValidPrecision(value, PRICE_ERROR_DECIMAL_PRECISION), {
+    message: 'Decimal exceeds precision 26',
+  })
   .refine((value) => !isNegativeZero(value), { message: 'Negative zero is not canonical' })
 
 const modelSchema = z
@@ -147,7 +150,7 @@ const completedVerificationSchema = z
     actualQuantity: positiveDecimalSchema,
     actualAt: timestampSchema,
     directionMatched: z.boolean(),
-    priceError: signedDecimalSchema,
+    priceError: priceErrorDecimalSchema,
   })
   .strict()
 

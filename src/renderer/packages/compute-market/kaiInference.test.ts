@@ -115,6 +115,34 @@ describe('KAI market inference wire contract', () => {
     expect(parsed.verification.priceError).toBe('0.10000000')
   })
 
+  it('accepts a precision-26 signed price error without widening prices or accepting numbers', () => {
+    const maximumPriceError = '999999999999999998.99999999'
+    const parsed = kaiMarketInferenceViewSchema.parse({
+      ...view(),
+      verification: { ...view().verification, priceError: maximumPriceError },
+    })
+
+    expect(parsed.verification?.status).toBe('MATCHED')
+    if (parsed.verification?.status !== 'MATCHED') throw new Error('expected completed verification')
+    expect(parsed.verification.priceError).toBe(maximumPriceError)
+    expect(typeof parsed.verification.priceError).toBe('string')
+
+    for (const priceError of [1, '9999999999999999999.99999999']) {
+      expect(
+        kaiMarketInferenceViewSchema.safeParse({
+          ...view(),
+          verification: { ...view().verification, priceError },
+        }).success
+      ).toBe(false)
+    }
+    expect(
+      kaiMarketInferenceViewSchema.safeParse({
+        ...view(),
+        verification: { ...view().verification, actualPrice: maximumPriceError },
+      }).success
+    ).toBe(false)
+  })
+
   it('accepts an explicit cached success and an insufficient-real-order-book pipeline state', () => {
     const parsed = kaiMarketInferenceViewSchema.parse(
       view({
