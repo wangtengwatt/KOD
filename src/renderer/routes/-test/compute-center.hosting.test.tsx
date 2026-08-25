@@ -355,7 +355,7 @@ it('switches a mounted compute center to identity-scoped account data', async ()
 
   expect(await screen.findByText('second@example.com')).toBeTruthy()
   await waitFor(() => expect(screen.queryByText('member@example.com')).toBeNull())
-  expect(queryClient.getQueryData(['compute', 'second@example.com', 'account'])).toEqual(
+  expect(queryClient.getQueryData(['compute', 'email:second@example.com', 'account'])).toEqual(
     expect.objectContaining({ email: 'second@example.com', availableCardHours: 25 })
   )
 })
