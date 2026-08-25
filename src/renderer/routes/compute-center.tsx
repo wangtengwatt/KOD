@@ -86,7 +86,6 @@ import {
   type ComputePackagePurchase,
   type ComputeProduct,
   type ComputeReferralPreview,
-  type ComputeReferralReward,
   type ComputeReservation,
   type ComputeSupplier,
   type ComputeSuspendedProxyKey,
@@ -132,7 +131,6 @@ import {
   listComputeOrders,
   listComputePackagePurchases,
   listComputeProducts,
-  listComputeReferralRewards,
   listComputeReservations,
   listComputeTransfers,
   listComputeWithdrawals,
@@ -2951,10 +2949,6 @@ function AccountPanel({
   })
   const usageQuery = useQuery({ queryKey: computeQueryKey('api-usage'), queryFn: listComputeApiUsage })
   const withdrawalsQuery = useQuery({ queryKey: computeQueryKey('withdrawals'), queryFn: listComputeWithdrawals })
-  const referralRewardsQuery = useQuery({
-    queryKey: computeQueryKey('referrals', 'rewards'),
-    queryFn: listComputeReferralRewards,
-  })
   const [amount, setAmount] = useState(10)
   const [withdrawalAmount, setWithdrawalAmount] = useState(0.1)
   const estimated = amount * (account?.cardHourCnyRate || 1.002)
@@ -2986,7 +2980,6 @@ function AccountPanel({
         <Tabs.List>
           <Tabs.Tab value="exchange">资产兑换</Tabs.Tab>
           <Tabs.Tab value="buybacks">回购记录</Tabs.Tab>
-          <Tabs.Tab value="rewards">历史邀请佣金</Tabs.Tab>
           <Tabs.Tab value="packages">Token 套餐</Tabs.Tab>
           <Tabs.Tab value="ledger">资产流水</Tabs.Tab>
         </Tabs.List>
@@ -3052,10 +3045,6 @@ function AccountPanel({
 
         <Tabs.Panel value="buybacks" pt="md">
           <WithdrawalTable entries={withdrawalsQuery.data || []} />
-        </Tabs.Panel>
-
-        <Tabs.Panel value="rewards" pt="md">
-          <ReferralRewardsTable entries={referralRewardsQuery.data || []} />
         </Tabs.Panel>
 
         <Tabs.Panel value="packages" pt="md">
@@ -3244,28 +3233,6 @@ function TokenPackageAssets({
         </Stack>
       )}
     </Section>
-  )
-}
-
-function ReferralRewardsTable({ entries }: { entries: ComputeReferralReward[] }) {
-  const rewardStatus: Record<ComputeReferralReward['status'], string> = {
-    WAITING: '7 天确认期',
-    PAID: '已到账',
-    CANCELLED: '已取消',
-  }
-  return (
-    <SimpleTable
-      columns={['被邀请人', '首次充值', '返佣比例', '返佣金额', '状态', '预计/实际到账时间']}
-      rows={entries.map((item) => [
-        item.inviteeEmail,
-        `¥${formatNumber(item.rechargeAmount, 4)}`,
-        `${formatNumber(item.rewardRate * 100, 2)}%`,
-        `¥${formatNumber(item.rewardAmount, 4)}`,
-        item.cancelReason ? `${rewardStatus[item.status]}：${item.cancelReason}` : rewardStatus[item.status],
-        formatDate(item.paidAt || item.releaseAt),
-      ])}
-      empty="暂无邀请佣金记录"
-    />
   )
 }
 

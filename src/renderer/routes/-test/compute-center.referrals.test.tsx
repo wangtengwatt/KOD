@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { MantineProvider } from '@mantine/core'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ComputeAccount } from '@/packages/computeCenter'
@@ -65,6 +67,14 @@ beforeAll(() => {
 afterEach(cleanup)
 
 describe('active account dashboard referrals', () => {
+  it('keeps invitations in the sidebar drawer without a duplicate legacy commission tab', () => {
+    const routeSource = readFileSync(resolve(process.cwd(), 'src/renderer/routes/compute-center.tsx'), 'utf8')
+
+    expect(routeSource).not.toContain('历史邀请佣金')
+    expect(routeSource).not.toContain('ReferralRewardsTable')
+    expect(routeSource).not.toContain('listComputeReferralRewards')
+  })
+
   it('does not market legacy first-top-up RMB commissions', () => {
     render(
       <MantineProvider>
