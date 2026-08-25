@@ -3,24 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect } from 'react'
 import { walletApi } from '@/api/wallet'
 import { getKodApiOrigin } from '@/packages/kodApiOrigin'
+import { getWalletIdentity, type WalletIdentity } from '@/packages/walletIdentity'
 import platform from '@/platform'
 import { authInfoStore, useAuthInfoStore } from '@/stores/authInfoStore'
 import { queryClient as accountQueryClient } from '@/stores/queryClient'
 
-export type WalletIdentity = string
-
-export function getWalletIdentity(
-  accountId: string | null,
-  loginEmail: string | null,
-  accessToken: string | null,
-  refreshToken: string | null
-) {
-  if (!accessToken || !refreshToken) return null
-  const normalizedAccountId = accountId?.trim()
-  if (normalizedAccountId) return `account:${normalizedAccountId}`
-  const normalizedEmail = loginEmail?.trim().toLowerCase()
-  return normalizedEmail ? `email:${normalizedEmail}` : null
-}
+export { getWalletIdentity }
+export type { WalletIdentity }
 
 export function useWalletIdentity() {
   const accessToken = useAuthInfoStore((state) => state.accessToken)

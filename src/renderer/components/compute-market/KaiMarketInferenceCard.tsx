@@ -124,7 +124,7 @@ function PredictionPanel({ success }: { success: NonNullable<KaiMarketInferenceV
           </Text>
           {event ? (
             <Text size="sm" mt={4}>
-              序号 {event.sequence} · {event.side} · 价格 {event.price} · 数量 {event.quantity}
+              dt_ns {event.dtNs} · {event.side} · 价格 {event.price} · 数量 {event.quantity}
             </Text>
           ) : (
             <Text size="sm" c="dimmed" mt={4}>

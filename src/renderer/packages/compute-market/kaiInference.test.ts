@@ -1,18 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  accountId: '9223372036854775807',
+  auth: {
+    accountId: '9223372036854775807' as string | null,
+    loginEmail: 'user@example.com' as string | null,
+    accessToken: 'access-a' as string | null,
+    refreshToken: 'refresh-a' as string | null,
+  },
   request: vi.fn(),
 }))
 
 vi.mock('../computeCenter', () => ({ computeMarketplaceRequest: mocks.request }))
 vi.mock('@/stores/authInfoStore', () => ({
-  authInfoStore: { getState: () => ({ accountId: mocks.accountId }) },
+  authInfoStore: { getState: () => mocks.auth },
 }))
 
 import { getKaiMarketInference, kaiMarketInferenceViewSchema, refreshKaiMarketInference } from './kaiInference'
 
 const ACCOUNT_ID = '9223372036854775807'
+const ACCOUNT_IDENTITY = `account:${ACCOUNT_ID}`
+const EMAIL_IDENTITY = 'email:user@example.com'
 const CONTRACT_ID = 'contract/H100?region=cn&delivery=spot'
 const FINGERPRINT = 'a'.repeat(64)
 const REAL_TRADE_ID = 'trade-550e8400-e29b-41d4-a716-446655440000'
@@ -26,7 +33,7 @@ function lastSuccess(overrides: Record<string, unknown> = {}) {
       model: 'Kai_distill_LM',
       text: 'dt_ns=6 event=TRADE side=BUY price=98002.50000000 quantity=0.10000000',
       nextEvent: {
-        sequence: '9007199254740993124',
+        dtNs: '6',
         event: 'TRADE',
         side: 'BUY',
         price: '98002.50000000',
@@ -66,20 +73,32 @@ function view(overrides: Record<string, unknown> = {}) {
 
 describe('KAI market inference wire contract', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    mocks.accountId = ACCOUNT_ID
+    mocks.request.mockReset()
+    Object.assign(mocks.auth, {
+      accountId: ACCOUNT_ID,
+      loginEmail: 'user@example.com',
+      accessToken: 'access-a',
+      refreshToken: 'refresh-a',
+    })
   })
 
-  it('uses only the exact same-origin GET and POST routes with an encoded opaque contract ID', async () => {
+  it('uses only bounded same-origin GET and POST routes with an encoded opaque contract ID and cancellation', async () => {
     mocks.request.mockResolvedValue(view())
+    const getController = new AbortController()
+    const refreshController = new AbortController()
 
-    await getKaiMarketInference(CONTRACT_ID, ACCOUNT_ID)
-    await refreshKaiMarketInference(CONTRACT_ID, ACCOUNT_ID)
+    await getKaiMarketInference(CONTRACT_ID, ACCOUNT_IDENTITY, getController.signal)
+    await refreshKaiMarketInference(CONTRACT_ID, ACCOUNT_IDENTITY, refreshController.signal)
 
     const encoded = encodeURIComponent(CONTRACT_ID)
-    expect(mocks.request).toHaveBeenNthCalledWith(1, `/api/compute/market/inference?contractId=${encoded}`)
+    expect(mocks.request).toHaveBeenNthCalledWith(1, `/api/compute/market/inference?contractId=${encoded}`, {
+      signal: getController.signal,
+      timeout: 15_000,
+    })
     expect(mocks.request).toHaveBeenNthCalledWith(2, `/api/compute/market/inference/refresh?contractId=${encoded}`, {
       method: 'POST',
+      signal: refreshController.signal,
+      timeout: 15_000,
     })
   })
 
@@ -88,6 +107,7 @@ describe('KAI market inference wire contract', () => {
 
     expect(parsed.lastSuccess?.inferenceId).toBe('9007199254740993123')
     expect(typeof parsed.lastSuccess?.inferenceId).toBe('string')
+    expect(parsed.lastSuccess?.prediction.nextEvent?.dtNs).toBe('6')
     expect(parsed.lastSuccess?.prediction.nextEvent?.price).toBe('98002.50000000')
     expect(parsed.verification?.status).toBe('MATCHED')
     if (parsed.verification?.status !== 'MATCHED') throw new Error('expected completed verification')
@@ -144,7 +164,7 @@ describe('KAI market inference wire contract', () => {
             prediction: {
               model: 'Kai_distill_LM',
               text: 'answer',
-              nextEvent: { sequence: '6', event: 'TRADE', side: 'BUY', price: 98002.5, quantity: '0.1' },
+              nextEvent: { dtNs: '6', event: 'TRADE', side: 'BUY', price: 98002.5, quantity: '0.1' },
             },
           }),
         })
@@ -178,6 +198,109 @@ describe('KAI market inference wire contract', () => {
     }
   })
 
+  it('maps the real dt_ns field without accepting a persistence attempt id or malformed integer', () => {
+    const parsed = kaiMarketInferenceViewSchema.parse(view())
+
+    expect(parsed.lastSuccess?.prediction.text).toContain('dt_ns=6 event=TRADE')
+    expect(parsed.lastSuccess?.prediction.nextEvent).toEqual({
+      dtNs: '6',
+      event: 'TRADE',
+      side: 'BUY',
+      price: '98002.50000000',
+      quantity: '0.10000000',
+    })
+    expect(
+      kaiMarketInferenceViewSchema.safeParse(
+        view({
+          lastSuccess: lastSuccess({
+            prediction: {
+              model: 'Kai_distill_LM',
+              text: 'dt_ns=6 event=TRADE side=BUY price=98002.5 quantity=0.1',
+              nextEvent: {
+                sequence: '9007199254740993124',
+                event: 'TRADE',
+                side: 'BUY',
+                price: '98002.50000000',
+                quantity: '0.10000000',
+              },
+            },
+          }),
+        })
+      ).success
+    ).toBe(false)
+    expect(
+      kaiMarketInferenceViewSchema.parse(
+        view({
+          lastSuccess: lastSuccess({
+            prediction: {
+              model: 'Kai_distill_LM',
+              text: 'answer',
+              nextEvent: { dtNs: '01', event: 'TRADE', side: 'BUY', price: '1.0', quantity: '1.0' },
+            },
+          }),
+        })
+      ).lastSuccess?.prediction.nextEvent?.dtNs
+    ).toBe('01')
+    for (const dtNs of [-1, '-1', '1.0', '', '1'.repeat(33), '１']) {
+      expect(
+        kaiMarketInferenceViewSchema.safeParse(
+          view({
+            lastSuccess: lastSuccess({
+              prediction: {
+                model: 'Kai_distill_LM',
+                text: 'answer',
+                nextEvent: { dtNs, event: 'TRADE', side: 'BUY', price: '1.0', quantity: '1.0' },
+              },
+            }),
+          })
+        ).success
+      ).toBe(false)
+    }
+  })
+
+  it('requires extraction failure to be explicit null and accepts an unverifiable real trade', () => {
+    const parsed = kaiMarketInferenceViewSchema.parse(
+      view({
+        lastSuccess: lastSuccess({
+          prediction: { model: 'Kai_distill_LM', text: 'unstructured answer', nextEvent: null },
+        }),
+        verification: {
+          status: 'UNVERIFIABLE',
+          inferenceId: '9007199254740993123',
+          actualTradeId: REAL_TRADE_ID,
+          actualSide: 'SELL',
+          actualPrice: '98003.00000000',
+          actualQuantity: '0.30000000',
+          actualAt: '2026-08-25T08:00:30Z',
+        },
+      })
+    )
+
+    expect(parsed.lastSuccess?.prediction.nextEvent).toBeNull()
+    expect(parsed.verification?.status).toBe('UNVERIFIABLE')
+    expect(
+      kaiMarketInferenceViewSchema.safeParse(
+        view({
+          lastSuccess: lastSuccess({
+            prediction: { model: 'Kai_distill_LM', text: 'unstructured answer' },
+          }),
+        })
+      ).success
+    ).toBe(false)
+  })
+
+  it('rejects NUL in model names before displaying server content', () => {
+    expect(
+      kaiMarketInferenceViewSchema.safeParse(
+        view({
+          lastSuccess: lastSuccess({
+            prediction: { model: 'Kai\u0000distill', text: 'answer', nextEvent: null },
+          }),
+        })
+      ).success
+    ).toBe(false)
+  })
+
   it('returns an ordinary validation failure instead of throwing for a malformed identifier', () => {
     const malformed = view({ lastSuccess: lastSuccess({ inferenceId: 'not-an-id' }) })
 
@@ -185,20 +308,63 @@ describe('KAI market inference wire contract', () => {
     expect(kaiMarketInferenceViewSchema.safeParse(malformed).success).toBe(false)
   })
 
-  it('refuses a mismatched account before I/O and rejects a late response after the account changes', async () => {
-    await expect(getKaiMarketInference(CONTRACT_ID, '9007199254740993123')).rejects.toThrow('账户已切换')
+  it('accepts the project account and normalized email wallet identities', async () => {
+    mocks.request.mockResolvedValue(view())
+
+    await getKaiMarketInference(CONTRACT_ID, ACCOUNT_IDENTITY)
+    Object.assign(mocks.auth, { accountId: null, loginEmail: '  User@Example.COM  ' })
+    await getKaiMarketInference(CONTRACT_ID, EMAIL_IDENTITY)
+
+    expect(mocks.request).toHaveBeenCalledTimes(2)
+  })
+
+  it('refuses a mismatched wallet identity before I/O and rejects a late account response after switching', async () => {
+    await expect(getKaiMarketInference(CONTRACT_ID, 'account:9007199254740993123')).rejects.toThrow('账户已切换')
     expect(mocks.request).not.toHaveBeenCalled()
 
-    let resolveResponse!: (value: unknown) => void
+    let resolveResponse: ((value: unknown) => void) | undefined
     mocks.request.mockReturnValue(
       new Promise((resolve) => {
         resolveResponse = resolve
       })
     )
-    const pending = getKaiMarketInference(CONTRACT_ID, ACCOUNT_ID)
-    mocks.accountId = '9007199254740993123'
+    const pending = getKaiMarketInference(CONTRACT_ID, ACCOUNT_IDENTITY)
+    mocks.auth.accountId = '9007199254740993123'
+    if (!resolveResponse) throw new Error('request resolver was not captured')
     resolveResponse(view())
 
     await expect(pending).rejects.toThrow('账户已切换')
+  })
+
+  it('rejects a late normalized-email response after the wallet identity changes', async () => {
+    Object.assign(mocks.auth, { accountId: null, loginEmail: '  User@Example.COM  ' })
+    let resolveResponse: ((value: unknown) => void) | undefined
+    mocks.request.mockReturnValue(
+      new Promise((resolve) => {
+        resolveResponse = resolve
+      })
+    )
+
+    const pending = getKaiMarketInference(CONTRACT_ID, EMAIL_IDENTITY)
+    mocks.auth.loginEmail = 'other@example.com'
+    if (!resolveResponse) throw new Error('request resolver was not captured')
+    resolveResponse(view())
+
+    await expect(pending).rejects.toThrow('账户已切换')
+  })
+
+  it('forwards AbortSignal so a hanging request can be cancelled', async () => {
+    mocks.request.mockImplementation(
+      (_path: string, options?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), { once: true })
+        })
+    )
+    const controller = new AbortController()
+
+    const pending = getKaiMarketInference(CONTRACT_ID, ACCOUNT_IDENTITY, controller.signal)
+    controller.abort(new Error('cancelled by query'))
+
+    await expect(pending).rejects.toThrow('cancelled by query')
   })
 })

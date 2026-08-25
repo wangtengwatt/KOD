@@ -16,7 +16,7 @@ const successfulInference: NonNullable<KaiMarketInferenceView['lastSuccess']> = 
     model: 'Kai_distill_LM',
     text: MODEL_ANSWER,
     nextEvent: {
-      sequence: '9007199254740993124',
+      dtNs: '6',
       event: 'TRADE',
       side: 'BUY',
       price: '98002.50000000',
@@ -96,9 +96,7 @@ describe('KaiMarketInferenceCard', () => {
     expect(within(prediction).getByText('Kai_distill_LM')).toBeTruthy()
     expect(within(prediction).getByText(MODEL_ANSWER)).toBeTruthy()
     expect(within(prediction).getByText('模型预测下一事件')).toBeTruthy()
-    expect(
-      within(prediction).getByText(/序号 9007199254740993124 · BUY · 价格 98002\.50000000 · 数量 0\.10000000/)
-    ).toBeTruthy()
+    expect(within(prediction).getByText(/dt_ns 6 · BUY · 价格 98002\.50000000 · 数量 0\.10000000/)).toBeTruthy()
 
     const pipeline = screen.getByRole('region', { name: '真实订单簿风险分析' })
     expect(within(pipeline).getByText('真实订单簿已确认')).toBeTruthy()
@@ -216,9 +214,7 @@ describe('KaiMarketInferenceCard', () => {
     })
 
     expect(
-      within(screen.getByRole('region', { name: '模型预测结果' })).getByText(
-        /序号 9007199254740993124 · BUY · 价格 98002\.50000000/
-      )
+      within(screen.getByRole('region', { name: '模型预测结果' })).getByText(/dt_ns 6 · BUY · 价格 98002\.50000000/)
     ).toBeTruthy()
     const verification = screen.getByRole('region', { name: '真实成交核验' })
     expect(within(verification).getByText('真实成交核验：未命中')).toBeTruthy()

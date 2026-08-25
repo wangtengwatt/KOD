@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { getWalletIdentity, type WalletIdentity } from '@/packages/walletIdentity'
 import { authInfoStore } from '@/stores/authInfoStore'
 import { computeMarketplaceRequest } from '../computeCenter'
 
@@ -27,6 +28,7 @@ const opaqueIdSchema = z
   )
 
 const recordIdSchema = accountIdSchema
+const dtNsSchema = z.string().regex(/^[0-9]{1,32}$/, { message: 'Expected an ASCII dt_ns integer string' })
 const fingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/, { message: 'Expected a SHA-256 fingerprint' })
 const timestampSchema = z.iso.datetime({ offset: true })
 
@@ -57,7 +59,9 @@ const modelSchema = z
   .string()
   .min(1)
   .max(128)
-  .refine((value) => value.trim() === value, { message: 'Model must not contain surrounding whitespace' })
+  .refine((value) => value.trim() === value && !value.includes('\u0000'), {
+    message: 'Model must be bounded text without surrounding whitespace or NUL',
+  })
 
 const boundedAnswerSchema = z
   .string()
@@ -69,7 +73,7 @@ const boundedAnswerSchema = z
 
 export const kaiPredictedNextEventSchema = z
   .object({
-    sequence: recordIdSchema,
+    dtNs: dtNsSchema,
     event: z.literal('TRADE'),
     side: z.enum(['BUY', 'SELL']),
     price: unsignedDecimalSchema,
@@ -186,37 +190,54 @@ export type KaiMarketPipeline = z.infer<typeof kaiMarketPipelineSchema>
 export type KaiMarketVerification = z.infer<typeof kaiMarketVerificationSchema>
 export type KaiMarketInferenceView = z.infer<typeof kaiMarketInferenceViewSchema>
 
-function captureCurrentAccount(identity: string) {
-  const ownerId = accountIdSchema.parse(identity)
-  if (authInfoStore.getState().accountId !== ownerId) throw new Error('账户已切换，已取消旧账户操作')
-  return ownerId
+function currentWalletIdentity() {
+  const { accountId, loginEmail, accessToken, refreshToken } = authInfoStore.getState()
+  return getWalletIdentity(accountId, loginEmail, accessToken, refreshToken)
 }
 
-function requireCurrentAccount(ownerId: string) {
-  if (authInfoStore.getState().accountId !== ownerId) throw new Error('账户已切换，已取消旧账户操作')
+function captureCurrentIdentity(identity: WalletIdentity) {
+  if (currentWalletIdentity() !== identity) throw new Error('账户已切换，已取消旧账户操作')
+  return identity
 }
 
-async function requestKaiMarketInference(contractId: string, identity: string, refresh: boolean) {
+function requireCurrentIdentity(identity: WalletIdentity) {
+  if (currentWalletIdentity() !== identity) throw new Error('账户已切换，已取消旧账户操作')
+}
+
+async function requestKaiMarketInference(
+  contractId: string,
+  identity: WalletIdentity,
+  refresh: boolean,
+  signal?: AbortSignal
+) {
   const parsedContractId = opaqueIdSchema.parse(contractId)
-  const ownerId = captureCurrentAccount(identity)
+  const ownerIdentity = captureCurrentIdentity(identity)
   const encodedContractId = encodeURIComponent(parsedContractId)
   const path = refresh
     ? `/api/compute/market/inference/refresh?contractId=${encodedContractId}`
     : `/api/compute/market/inference?contractId=${encodedContractId}`
   const response = refresh
-    ? await computeMarketplaceRequest<unknown>(path, { method: 'POST' })
-    : await computeMarketplaceRequest<unknown>(path)
+    ? await computeMarketplaceRequest<unknown>(path, { method: 'POST', signal, timeout: 15_000 })
+    : await computeMarketplaceRequest<unknown>(path, { signal, timeout: 15_000 })
 
-  requireCurrentAccount(ownerId)
+  requireCurrentIdentity(ownerIdentity)
   const view = kaiMarketInferenceViewSchema.parse(response)
   if (view.contractId !== parsedContractId) throw new Error('推理响应合约不匹配')
   return view
 }
 
-export function getKaiMarketInference(contractId: string, identity: string): Promise<KaiMarketInferenceView> {
-  return requestKaiMarketInference(contractId, identity, false)
+export function getKaiMarketInference(
+  contractId: string,
+  identity: WalletIdentity,
+  signal?: AbortSignal
+): Promise<KaiMarketInferenceView> {
+  return requestKaiMarketInference(contractId, identity, false, signal)
 }
 
-export function refreshKaiMarketInference(contractId: string, identity: string): Promise<KaiMarketInferenceView> {
-  return requestKaiMarketInference(contractId, identity, true)
+export function refreshKaiMarketInference(
+  contractId: string,
+  identity: WalletIdentity,
+  signal?: AbortSignal
+): Promise<KaiMarketInferenceView> {
+  return requestKaiMarketInference(contractId, identity, true, signal)
 }
