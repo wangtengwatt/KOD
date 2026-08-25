@@ -81,8 +81,8 @@ const lease = {
   requestId: 'rent-request-existing',
   hostedNodeId: '1088',
   productId: '2088',
-  monthlyRent: 30,
-  salePrice: 12,
+  monthlyRent: '30.000',
+  salePrice: '12.000',
   status: 'ACTIVE',
   autoRenew: true,
   startedAt: '2026-08-01T12:00:00',
@@ -259,6 +259,40 @@ describe('PlatformHostingPanel', () => {
     expect(within(pendingOrder).getByText('待结算')).toBeTruthy()
     expect(within(pendingOrder).getByText('9007199254740993304')).toBeTruthy()
     expect(within(pendingOrder).getByText('9007199254740993303')).toBeTruthy()
+  })
+
+  it('renders lease list identifiers and long decimal strings without precision loss', async () => {
+    mocks.listPlatformServerLeases.mockResolvedValue([
+      {
+        ...lease,
+        id: '9007199254740993088',
+        userId: '9007199254740993007',
+        skuId: '9007199254740993042',
+        hostedNodeId: '9007199254740993089',
+        productId: '9007199254740993090',
+        monthlyRent: '12345678901234567.890',
+        salePrice: '0.010',
+      },
+    ])
+    renderPanel()
+
+    expect(await screen.findByText('月租：12345678901234567.890 卡时')).toBeTruthy()
+    expect(screen.getByText('平台统一销售价：0.010 卡时')).toBeTruthy()
+  })
+
+  it('loads lease details after a failed request is retried successfully', async () => {
+    mocks.getPlatformLeaseDetails
+      .mockRejectedValueOnce(new Error('Temporary details outage'))
+      .mockResolvedValueOnce(leaseDetails)
+    renderPanel()
+
+    fireEvent.click(await screen.findByRole('button', { name: '展开订单收益日志' }))
+    expect(await screen.findByText('Temporary details outage')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '重试' }))
+
+    expect(await screen.findByText('ORDER-SETTLED-001')).toBeTruthy()
+    expect(mocks.getPlatformLeaseDetails).toHaveBeenCalledTimes(2)
   })
 
   it('shows a clear empty state when an expanded lease has no order-income events', async () => {

@@ -361,8 +361,8 @@ function LeaseCard({
           <Text size="sm">接单状态：{projection.intake}</Text>
           <Text size="sm">市场状态：{projection.market}</Text>
           <Text size="sm">续租次数：{lease.renewalCount}</Text>
-          <Text size="sm">月租：{formatCardHours(lease.monthlyRent)} 卡时</Text>
-          <Text size="sm">平台统一销售价：{formatCardHours(lease.salePrice)} 卡时</Text>
+          <Text size="sm">月租：{lease.monthlyRent} 卡时</Text>
+          <Text size="sm">平台统一销售价：{lease.salePrice} 卡时</Text>
         </SimpleGrid>
         <Text size="sm">{termLabel(lease)}</Text>
         <Button

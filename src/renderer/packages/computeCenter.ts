@@ -594,15 +594,15 @@ export const PlatformServerSkuSchema = z
 export type PlatformServerSku = z.infer<typeof PlatformServerSkuSchema>
 
 export const PlatformServerLeaseSchema = z.object({
-  id: contractLongId,
+  id: strictContractId,
   leaseNo: z.string().min(1),
-  userId: contractLongId,
-  skuId: contractLongId,
+  userId: strictContractId,
+  skuId: strictContractId,
   requestId: z.string().min(1),
-  hostedNodeId: contractLongId,
-  productId: contractLongId,
-  monthlyRent: contractNonnegativeDecimal,
-  salePrice: contractNonnegativeDecimal,
+  hostedNodeId: strictContractId,
+  productId: strictContractId,
+  monthlyRent: strictContractDecimal,
+  salePrice: strictContractDecimal,
   status: z.enum(['ACTIVE', 'STOPPING', 'RELEASED']),
   autoRenew: z.boolean(),
   startedAt: contractDateTime,

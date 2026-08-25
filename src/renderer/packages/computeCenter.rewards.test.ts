@@ -32,6 +32,7 @@ import {
   listEmailInvitations,
   listPlatformServerLeases,
   listPlatformServerSkus,
+  PlatformServerLeaseListSchema,
   PlatformServerLeaseSchema,
   PlatformServerSkuSchema,
   rentPlatformServer,
@@ -76,13 +77,13 @@ const platformSku = {
 } as const
 
 const platformLease = {
-  id: 88,
+  id: '88',
   leaseNo: 'PL-20260821-0001',
-  userId: 7,
-  skuId: 42,
+  userId: '7',
+  skuId: '42',
   requestId: 'rent-request-1',
-  hostedNodeId: 501,
-  productId: 601,
+  hostedNodeId: '501',
+  productId: '601',
   monthlyRent: '720.000',
   salePrice: '1.250',
   status: 'ACTIVE',
@@ -250,7 +251,7 @@ describe('reward referral and platform hosting contracts', () => {
     ).toThrow()
   })
 
-  it('validates and transforms every platform-controlled decimal', () => {
+  it('validates SKU decimals and preserves platform lease strings', () => {
     expect(PlatformServerSkuSchema.parse(platformSku)).toMatchObject({
       id: '42',
       monthlyRent: 720,
@@ -259,18 +260,34 @@ describe('reward referral and platform hosting contracts', () => {
     expect(PlatformServerLeaseSchema.parse(platformLease)).toMatchObject({
       id: '88',
       skuId: '42',
-      monthlyRent: 720,
-      salePrice: 1.25,
+      monthlyRent: '720.000',
+      salePrice: '1.250',
       autoRenew: true,
     })
     expect(() => PlatformServerSkuSchema.parse({ ...platformSku, monthlyRent: '720,000' })).toThrow()
     expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: '-1.000' })).toThrow()
     expect(() => PlatformServerSkuSchema.parse({ ...platformSku, monthlyRent: '720.0000' })).toThrow()
-    expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: '8796093022208.001' })).toThrow()
-    expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: '9007199254740.992' })).toThrow()
-    expect(() =>
-      PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: Number('8796093022208.001') })
-    ).toThrow()
+    expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: '1.2500' })).toThrow()
+  })
+
+  it('preserves 19-digit lease identifiers and DECIMAL(20,3) scale without numeric coercion', () => {
+    const exactLease = {
+      ...platformLease,
+      id: '9007199254740993001',
+      userId: '9007199254740993002',
+      skuId: '9007199254740993003',
+      hostedNodeId: '9007199254740993004',
+      productId: '9007199254740993005',
+      monthlyRent: '12345678901234567.890',
+      salePrice: '0.010',
+    }
+
+    expect(PlatformServerLeaseListSchema.parse([exactLease])).toEqual([exactLease])
+    for (const field of ['id', 'userId', 'skuId', 'hostedNodeId', 'productId'] as const) {
+      expect(() => PlatformServerLeaseSchema.parse({ ...exactLease, [field]: 42 })).toThrow()
+    }
+    expect(() => PlatformServerLeaseSchema.parse({ ...exactLease, monthlyRent: 720 })).toThrow()
+    expect(() => PlatformServerLeaseSchema.parse({ ...exactLease, salePrice: 1.25 })).toThrow()
   })
 
   it('rejects SKU inventory above the server-controlled total', () => {
