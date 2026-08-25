@@ -1,2 +1,2 @@
-export type { MarketIntelligenceApi, MarketPriceRange, MarketView } from './MarketIntelligencePanel'
+export type { MarketInferenceApi, MarketIntelligenceApi, MarketPriceRange, MarketView } from './MarketIntelligencePanel'
 export { default, MarketIntelligencePanel } from './MarketIntelligencePanel'

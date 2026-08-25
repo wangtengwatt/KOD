@@ -29,8 +29,15 @@ import {
   IconShieldCheck,
   IconStack2,
 } from '@tabler/icons-react'
-import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  getKaiMarketInference,
+  getKaiMarketInferenceContracts,
+  type KaiMarketInferenceContract,
+  type KaiMarketInferenceView,
+  refreshKaiMarketInference,
+} from '@/packages/compute-market/kaiInference'
 import {
   calculateMarketFreshness,
   evaluateMarketCapabilities,
@@ -56,7 +63,9 @@ import {
   getComputeMarketPriceHistory,
   getComputeMarketPrices,
 } from '@/packages/computeCenter'
+import type { WalletIdentity } from '@/packages/walletIdentity'
 import platform from '@/platform'
+import { KaiMarketInferenceCard } from './KaiMarketInferenceCard'
 
 export type MarketPriceRange = '1h' | '6h' | '24h' | '7d'
 export type MarketView = 'gpu-reference' | 'card-hours'
@@ -67,10 +76,26 @@ export interface MarketIntelligenceApi {
   getCardStats: () => Promise<CardHourMarketStats>
 }
 
+export interface MarketInferenceApi {
+  getContracts: (identity: WalletIdentity, signal?: AbortSignal) => Promise<KaiMarketInferenceContract[]>
+  getInference: (contractId: string, identity: WalletIdentity, signal?: AbortSignal) => Promise<KaiMarketInferenceView>
+  refreshInference: (
+    contractId: string,
+    identity: WalletIdentity,
+    signal?: AbortSignal
+  ) => Promise<KaiMarketInferenceView>
+}
+
 const defaultApi: MarketIntelligenceApi = {
   getLatest: getComputeMarketPrices,
   getHistory: getComputeMarketPriceHistory,
   getCardStats: getCardHourMarketStats,
+}
+
+const defaultInferenceApi: MarketInferenceApi = {
+  getContracts: getKaiMarketInferenceContracts,
+  getInference: getKaiMarketInference,
+  refreshInference: refreshKaiMarketInference,
 }
 
 const rangeOptions = [
@@ -82,19 +107,25 @@ const rangeOptions = [
 
 export function MarketIntelligencePanel({
   api = defaultApi,
+  inferenceApi = defaultInferenceApi,
+  identity = null,
   initialView = 'gpu-reference',
   enableFullscreen = true,
   enableAdvanced = false,
   simulationMode = false,
 }: {
   api?: MarketIntelligenceApi
+  inferenceApi?: MarketInferenceApi
+  identity?: WalletIdentity | null
   initialView?: MarketView
   enableFullscreen?: boolean
   enableAdvanced?: boolean
   simulationMode?: boolean
 }) {
+  const queryClient = useQueryClient()
   const [view, setView] = useState<MarketView>(initialView)
   const [gpuModel, setGpuModel] = useState('H100')
+  const [selectedContractId, setSelectedContractId] = useState<string | null>(null)
   const [range, setRange] = useState<MarketPriceRange>('24h')
   const [fullScreen, setFullScreen] = useState(false)
   const queryScope = simulationMode ? 'simulated' : 'live'
@@ -126,6 +157,14 @@ export function MarketIntelligencePanel({
     refetchIntervalInBackground: false,
   })
 
+  const inferenceEnabled = Boolean(identity) && view === 'gpu-reference' && !simulationMode
+  const contractDirectoryQuery = useQuery({
+    queryKey: ['compute', 'market-inference', identity ?? 'signed-out', 'contracts'],
+    queryFn: ({ signal }) => inferenceApi.getContracts(identity as WalletIdentity, signal),
+    enabled: inferenceEnabled,
+    retry: false,
+  })
+
   const snapshot = latestQuery.data
   useEffect(() => {
     if (!snapshot?.trackedModels.length || snapshot.trackedModels.includes(gpuModel)) return
@@ -137,6 +176,133 @@ export function MarketIntelligencePanel({
     [gpuModel, snapshot?.quotes]
   )
   const chartPoints = useMemo(() => mergeHistoryAndLive(historyQuery.data, quotes), [historyQuery.data, quotes])
+
+  const matchingContracts = useMemo(
+    () => (contractDirectoryQuery.data ?? []).filter((contract) => sameGpuModel(contract.gpuModel, gpuModel)),
+    [contractDirectoryQuery.data, gpuModel]
+  )
+  const selectedContract = useMemo(
+    () => matchingContracts.find(({ contractId }) => contractId === selectedContractId) ?? null,
+    [matchingContracts, selectedContractId]
+  )
+
+  useEffect(() => {
+    if (!inferenceEnabled) {
+      setSelectedContractId(null)
+      return
+    }
+    if (selectedContract) return
+    setSelectedContractId(matchingContracts.find(({ status }) => status === 'trading')?.contractId ?? null)
+  }, [inferenceEnabled, matchingContracts, selectedContract])
+
+  const inferenceQueryKey = useMemo(
+    () =>
+      [
+        'compute',
+        'market-inference',
+        identity ?? 'signed-out',
+        'contract',
+        selectedContract?.contractId ?? 'none',
+      ] as const,
+    [identity, selectedContract?.contractId]
+  )
+  const inferenceQuery = useQuery({
+    queryKey: inferenceQueryKey,
+    queryFn: ({ signal }) =>
+      inferenceApi.getInference(selectedContract?.contractId as string, identity as WalletIdentity, signal),
+    enabled: inferenceEnabled && Boolean(selectedContract),
+    retry: false,
+  })
+
+  const inferenceOwner =
+    inferenceEnabled && identity && selectedContract ? `${identity}\u0000${selectedContract.contractId}` : null
+  const inferenceOwnerRef = useRef(inferenceOwner)
+  inferenceOwnerRef.current = inferenceOwner
+  const refreshRequestRef = useRef<{ sequence: number; controller: AbortController | null }>({
+    sequence: 0,
+    controller: null,
+  })
+  const [refreshState, setRefreshState] = useState<{
+    owner: string | null
+    pending: boolean
+    failed: boolean
+  }>({ owner: null, pending: false, failed: false })
+
+  useEffect(() => {
+    if (!inferenceOwner) return
+    return () => {
+      refreshRequestRef.current.sequence += 1
+      refreshRequestRef.current.controller?.abort()
+      refreshRequestRef.current.controller = null
+    }
+  }, [inferenceOwner])
+
+  const runInferenceRefresh = useCallback(async () => {
+    if (!identity || !selectedContract || !inferenceOwner) return
+
+    const owner = inferenceOwner
+    const contractId = selectedContract.contractId
+    const queryKey = ['compute', 'market-inference', identity, 'contract', contractId] as const
+    const sequence = refreshRequestRef.current.sequence + 1
+    refreshRequestRef.current.sequence = sequence
+    refreshRequestRef.current.controller?.abort()
+    const controller = new AbortController()
+    refreshRequestRef.current.controller = controller
+    setRefreshState({ owner, pending: true, failed: false })
+
+    try {
+      const nextView = await inferenceApi.refreshInference(contractId, identity, controller.signal)
+      if (
+        controller.signal.aborted ||
+        refreshRequestRef.current.sequence !== sequence ||
+        inferenceOwnerRef.current !== owner
+      ) {
+        return
+      }
+      queryClient.setQueryData(queryKey, nextView)
+      setRefreshState({ owner, pending: false, failed: false })
+    } catch {
+      if (
+        controller.signal.aborted ||
+        refreshRequestRef.current.sequence !== sequence ||
+        inferenceOwnerRef.current !== owner
+      ) {
+        return
+      }
+      setRefreshState({ owner, pending: false, failed: true })
+    } finally {
+      if (refreshRequestRef.current.sequence === sequence) refreshRequestRef.current.controller = null
+    }
+  }, [identity, inferenceApi, inferenceOwner, queryClient, selectedContract])
+
+  const automaticRefreshCycle =
+    inferenceOwner && latestQuery.isSuccess && latestQuery.dataUpdatedAt > 0 && inferenceQuery.isFetched
+      ? `${inferenceOwner}\u0000${latestQuery.dataUpdatedAt}`
+      : null
+  const automaticRefreshCycleRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!automaticRefreshCycle || automaticRefreshCycleRef.current === automaticRefreshCycle) return
+    automaticRefreshCycleRef.current = automaticRefreshCycle
+    void runInferenceRefresh()
+  }, [automaticRefreshCycle, runInferenceRefresh])
+
+  const currentRefreshState = refreshState.owner === inferenceOwner ? refreshState : null
+  const inferenceContent = inferenceEnabled ? (
+    <MarketInferenceSection
+      gpuModel={gpuModel}
+      contracts={matchingContracts}
+      selectedContractId={selectedContract?.contractId ?? null}
+      onContractChange={setSelectedContractId}
+      directoryLoading={contractDirectoryQuery.isLoading}
+      directoryError={contractDirectoryQuery.error}
+      inference={inferenceQuery.data}
+      inferenceLoading={inferenceQuery.isLoading}
+      inferenceError={inferenceQuery.error}
+      refreshFailed={Boolean(currentRefreshState?.failed)}
+      refreshing={Boolean(currentRefreshState?.pending)}
+      onRefresh={runInferenceRefresh}
+    />
+  ) : null
 
   const content = (
     <>
@@ -165,6 +331,7 @@ export function MarketIntelligencePanel({
         simulationMode={simulationMode}
         liveRefreshMs={liveRefreshMs}
         historyRefreshMs={historyRefreshMs}
+        inferenceContent={inferenceContent}
       />
       {simulationMode && (
         <Text size="10px" c="dimmed" ta="center" px="md" pt="xs">
@@ -249,6 +416,7 @@ function MarketDashboardContent({
   simulationMode,
   liveRefreshMs,
   historyRefreshMs,
+  inferenceContent,
 }: {
   view: MarketView
   onViewChange: (value: MarketView) => void
@@ -274,6 +442,7 @@ function MarketDashboardContent({
   simulationMode: boolean
   liveRefreshMs: number
   historyRefreshMs: number
+  inferenceContent?: ReactNode
 }) {
   return (
     <Tabs value={view} onChange={(value) => value && onViewChange(value as MarketView)} keepMounted>
@@ -307,6 +476,7 @@ function MarketDashboardContent({
           liveRefreshMs={liveRefreshMs}
           historyRefreshMs={historyRefreshMs}
         />
+        {inferenceContent}
       </Tabs.Panel>
 
       <Tabs.Panel value="card-hours" pt="md">
@@ -322,6 +492,156 @@ function MarketDashboardContent({
       </Tabs.Panel>
     </Tabs>
   )
+}
+
+function MarketInferenceSection({
+  gpuModel,
+  contracts,
+  selectedContractId,
+  onContractChange,
+  directoryLoading,
+  directoryError,
+  inference,
+  inferenceLoading,
+  inferenceError,
+  refreshFailed,
+  refreshing,
+  onRefresh,
+}: {
+  gpuModel: string
+  contracts: KaiMarketInferenceContract[]
+  selectedContractId: string | null
+  onContractChange: (contractId: string | null) => void
+  directoryLoading: boolean
+  directoryError: Error | null
+  inference?: KaiMarketInferenceView
+  inferenceLoading: boolean
+  inferenceError: Error | null
+  refreshFailed: boolean
+  refreshing: boolean
+  onRefresh: () => void | Promise<void>
+}) {
+  if (directoryLoading && contracts.length === 0) {
+    return <InferenceStatusPanel title="正在加载预测合约" description="正在读取可用于 Kai AI 行情研判的真实合约。" />
+  }
+
+  if (directoryError && contracts.length === 0) {
+    return <InferenceStatusPanel title="预测服务暂不可用" description="真实行情不受影响，请稍后重试。" tone="red" />
+  }
+
+  if (contracts.length === 0) {
+    return (
+      <InferenceStatusPanel
+        title="当前 GPU 型号暂无可用预测合约"
+        description={`${gpuModel} 的真实行情仍可正常查看。`}
+      />
+    )
+  }
+
+  const options = contracts.map((contract) => ({
+    value: contract.contractId,
+    label: contractLabel(contract),
+  }))
+
+  return (
+    <Stack gap="md" mt="md">
+      <Paper withBorder radius="lg" p="md">
+        <Flex justify="space-between" align="end" gap="md" wrap="wrap">
+          <Select
+            label="预测合约"
+            description="仅使用同源后端返回的真实合约；切换后不会改变行情报价。"
+            data={options}
+            value={selectedContractId}
+            onChange={onContractChange}
+            searchable
+            clearable={false}
+            w={{ base: '100%', sm: 480 }}
+          />
+          {selectedContractId && (
+            <Text size="xs" c="dimmed" maw={520} style={{ overflowWrap: 'anywhere' }}>
+              合约 ID {selectedContractId}
+            </Text>
+          )}
+        </Flex>
+      </Paper>
+
+      {(directoryError || inferenceError || refreshFailed) && (
+        <InferenceStatusPanel
+          title="预测服务暂不可用"
+          description={inference ? '已保留最近一次成功研判，真实行情不受影响。' : '真实行情不受影响，请稍后重试。'}
+          tone="red"
+          action={
+            !inference && (inferenceError || refreshFailed) ? (
+              <Button
+                variant="light"
+                color="red"
+                size="xs"
+                leftSection={<IconRefresh size={15} />}
+                loading={refreshing}
+                onClick={() => void onRefresh()}
+              >
+                重试预测
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
+
+      {inference ? (
+        <KaiMarketInferenceCard view={inference} onRefresh={onRefresh} refreshing={refreshing} />
+      ) : inferenceLoading ? (
+        <InferenceStatusPanel title="正在加载 Kai AI 行情研判" description="正在读取该合约最近一次服务端研判。" />
+      ) : !inferenceError ? (
+        <InferenceStatusPanel title="尚无预测结果" description="等待真实行情刷新后由后端判断是否生成研判。" />
+      ) : null}
+    </Stack>
+  )
+}
+
+function InferenceStatusPanel({
+  title,
+  description,
+  tone = 'teal',
+  action,
+}: {
+  title: string
+  description: string
+  tone?: 'teal' | 'red'
+  action?: ReactNode
+}) {
+  return (
+    <Paper
+      component="section"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      withBorder
+      radius="lg"
+      p="md"
+      mt="md"
+      bg={tone === 'red' ? 'var(--mantine-color-red-light)' : 'var(--mantine-color-teal-light)'}
+    >
+      <Group justify="space-between" align="center" gap="md" wrap="wrap">
+        <Box>
+          <Text fw={700} c={tone === 'red' ? 'red' : 'teal'}>
+            {title}
+          </Text>
+          <Text size="sm" c="dimmed" mt={4}>
+            {description}
+          </Text>
+        </Box>
+        {action}
+      </Group>
+    </Paper>
+  )
+}
+
+function contractLabel(contract: KaiMarketInferenceContract) {
+  return `${contract.model} · ${contract.runtime} · ${contract.deliveryAt} · ${contract.status}`
+}
+
+function sameGpuModel(left: string, right: string) {
+  return left.trim().toLocaleUpperCase('en-US') === right.trim().toLocaleUpperCase('en-US')
 }
 
 function GpuReferenceView({

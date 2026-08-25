@@ -15,7 +15,13 @@ vi.mock('@/stores/authInfoStore', () => ({
   authInfoStore: { getState: () => mocks.auth },
 }))
 
-import { getKaiMarketInference, kaiMarketInferenceViewSchema, refreshKaiMarketInference } from './kaiInference'
+import {
+  getKaiMarketInference,
+  getKaiMarketInferenceContracts,
+  kaiMarketInferenceContractsSchema,
+  kaiMarketInferenceViewSchema,
+  refreshKaiMarketInference,
+} from './kaiInference'
 
 const ACCOUNT_ID = '9223372036854775807'
 const ACCOUNT_IDENTITY = `account:${ACCOUNT_ID}`
@@ -23,6 +29,27 @@ const EMAIL_IDENTITY = 'email:user@example.com'
 const CONTRACT_ID = 'contract/H100?region=cn&delivery=spot'
 const FINGERPRINT = 'a'.repeat(64)
 const REAL_TRADE_ID = 'trade-550e8400-e29b-41d4-a716-446655440000'
+
+const realContracts = [
+  {
+    contractId: 'hk-h100-deepseek-v3-sglang-2026082517',
+    name: 'HK-H100-DEEPSEEK-V3-SGLANG-2026082517',
+    model: 'deepseek-v3',
+    gpuModel: 'H100',
+    runtime: 'sglang',
+    deliveryAt: '2026-08-25T17:00:00Z',
+    status: 'trading',
+  },
+  {
+    contractId: 'hk-h100-llama-3.3-70b-vllm-2026082517',
+    name: 'HK-H100-LLAMA-3.3-70B-VLLM-2026082517',
+    model: 'llama-3.3-70b',
+    gpuModel: 'H100',
+    runtime: 'vllm',
+    deliveryAt: '2026-08-25T17:00:00Z',
+    status: 'trading',
+  },
+] as const
 
 function lastSuccess(overrides: Record<string, unknown> = {}) {
   return {
@@ -100,6 +127,30 @@ describe('KAI market inference wire contract', () => {
       signal: refreshController.signal,
       timeout: 15_000,
     })
+  })
+
+  it('loads the authenticated same-origin real-contract directory as an ordered strict string-only payload', async () => {
+    mocks.request.mockResolvedValue(realContracts)
+    const controller = new AbortController()
+
+    const result = await getKaiMarketInferenceContracts(ACCOUNT_IDENTITY, controller.signal)
+
+    expect(mocks.request).toHaveBeenCalledWith('/api/compute/market/inference/contracts', {
+      signal: controller.signal,
+      timeout: 15_000,
+    })
+    expect(result.map(({ contractId }) => contractId)).toEqual(realContracts.map(({ contractId }) => contractId))
+    expect(result[0]).toEqual(realContracts[0])
+
+    for (const invalid of [
+      [{ ...realContracts[0], unexpected: true }],
+      [{ ...realContracts[0], contractId: 1 }],
+      [{ ...realContracts[0], deliveryAt: 1 }],
+      [{ ...realContracts[0], deliveryAt: '2026-08-25 17:00:00' }],
+      [realContracts[0], { ...realContracts[1], contractId: realContracts[0].contractId }],
+    ]) {
+      expect(kaiMarketInferenceContractsSchema.safeParse(invalid).success).toBe(false)
+    }
   })
 
   it('preserves 19-digit identifiers and fixed-point decimals as strings', () => {

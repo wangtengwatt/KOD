@@ -16,6 +16,10 @@ Every authenticated request captures the current account identity. Checkouts, ro
 
 The client displays decimal strings and source IDs returned by the server. It does not calculate available inventory, income, draw segments, eligibility, reward credit, trade fingerprints, or upstream inference requests.
 
+### Inference contract discovery is same-origin and server-authoritative
+
+The client discovers prediction targets only through authenticated `GET /api/compute/market/inference/contracts`. It decodes the strict string-only directory, filters by the currently selected GPU model, preserves server order, defaults to the first `trading` contract, and lets the user select another matching contract. A model name is never substituted for an opaque contract identifier. Missing, failed, or mismatched directory data disables inference only; authoritative realtime quotes remain usable.
+
 ### Demo behavior requires two independent guards
 
 Demo controls require both a loopback API origin and a server capability response. A build-time flag alone cannot expose demo login or data controls.

@@ -62,7 +62,7 @@ import { SettlementLotteryPanel } from '@/components/compute/SettlementLotteryPa
 import { MarketIntelligencePanel } from '@/components/compute-market'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
-import { useComputeQueryKey, useWalletIdentity } from '@/hooks/useWallet'
+import { useComputeQueryKey, useWalletIdentity, type WalletIdentity } from '@/hooks/useWallet'
 import { isTrustedMarketSourceUrl } from '@/packages/compute-market/marketIntelligence'
 import { createSimulatedMarketApi } from '@/packages/compute-market/simulatedMarket'
 import {
@@ -611,7 +611,7 @@ export function ComputeCenterPage() {
                   />
                 </Tabs.Panel>
                 <Tabs.Panel value="live-prices" pt="md">
-                  <MarketPricePanel />
+                  <MarketPricePanel identity={identity} />
                 </Tabs.Panel>
                 <Tabs.Panel value="card-hour-market" pt="md">
                   <CardHourMarketplace
@@ -1365,11 +1365,12 @@ const MARKET_DEFAULT_MODELS: MarketModelOption[] = [
 
 const MARKET_COMPARISON_SOURCES: ComputeMarketPriceSource[] = ['GETDEPLOYING', 'VAST_AI']
 
-function MarketPricePanel() {
+export function MarketPricePanel({ identity }: { identity: WalletIdentity | null }) {
   if (featureFlags.computeMarketV2) {
     return (
       <MarketIntelligencePanel
         api={featureFlags.computeMarketSimulation ? simulatedMarketApi : undefined}
+        identity={identity}
         enableFullscreen={featureFlags.computeMarketFullscreen}
         enableAdvanced={featureFlags.computeMarketAdvanced}
         simulationMode={featureFlags.computeMarketSimulation}

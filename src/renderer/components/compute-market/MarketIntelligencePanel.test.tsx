@@ -4,13 +4,14 @@ import { MantineProvider } from '@mantine/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { KaiMarketInferenceContract, KaiMarketInferenceView } from '@/packages/compute-market/kaiInference'
 import { SIMULATED_MARKET_DISCLOSURE } from '@/packages/compute-market/simulatedMarket'
 import type {
   CardHourMarketStats,
   ComputeMarketPriceHistory,
   ComputeMarketPriceSnapshot,
 } from '@/packages/computeCenter'
-import { type MarketIntelligenceApi, MarketIntelligencePanel } from './MarketIntelligencePanel'
+import { type MarketInferenceApi, type MarketIntelligenceApi, MarketIntelligencePanel } from './MarketIntelligencePanel'
 
 const platformMocks = vi.hoisted(() => ({ openLink: vi.fn() }))
 
@@ -73,6 +74,80 @@ const emptyCardStats: CardHourMarketStats = {
   recentTrades: [],
 }
 
+const ACCOUNT_A = 'account:9223372036854775807'
+const ACCOUNT_B = 'email:other@example.com'
+const CONTRACT_A = 'hk-h100-deepseek-v3-sglang-2026082517'
+const CONTRACT_B = 'hk-h100-llama-3.3-70b-vllm-2026082517'
+
+const realContracts: KaiMarketInferenceContract[] = [
+  {
+    contractId: 'hk-a100-qwen-vllm-2026082517',
+    name: 'HK-A100-QWEN-VLLM-2026082517',
+    model: 'qwen',
+    gpuModel: 'A100',
+    runtime: 'vllm',
+    deliveryAt: '2026-08-25T17:00:00Z',
+    status: 'trading',
+  },
+  {
+    contractId: 'hk-h100-closed-vllm-2026082517',
+    name: 'HK-H100-CLOSED-VLLM-2026082517',
+    model: 'closed-model',
+    gpuModel: 'H100',
+    runtime: 'vllm',
+    deliveryAt: '2026-08-25T17:00:00Z',
+    status: 'closed',
+  },
+  {
+    contractId: CONTRACT_A,
+    name: 'HK-H100-DEEPSEEK-V3-SGLANG-2026082517',
+    model: 'deepseek-v3',
+    gpuModel: 'H100',
+    runtime: 'sglang',
+    deliveryAt: '2026-08-25T17:00:00Z',
+    status: 'trading',
+  },
+  {
+    contractId: CONTRACT_B,
+    name: 'HK-H100-LLAMA-3.3-70B-VLLM-2026082517',
+    model: 'llama-3.3-70b',
+    gpuModel: 'H100',
+    runtime: 'vllm',
+    deliveryAt: '2026-08-25T17:00:00Z',
+    status: 'trading',
+  },
+]
+
+function inferenceView(contractId = CONTRACT_A, text = `prediction for ${contractId}`): KaiMarketInferenceView {
+  const fingerprint = contractId === CONTRACT_B ? 'b'.repeat(64) : 'a'.repeat(64)
+  return {
+    contractId,
+    status: 'FRESH',
+    fingerprint,
+    checkedAt: '2026-08-25T08:00:01Z',
+    lastSuccess: {
+      inferenceId: contractId === CONTRACT_B ? '9007199254740993124' : '9007199254740993123',
+      fingerprint,
+      generatedAt: '2026-08-25T08:00:00Z',
+      prediction: {
+        model: 'Kai_distill_LM',
+        text,
+        nextEvent: null,
+      },
+      pipeline: { status: 'INSUFFICIENT_ORDER_BOOK' },
+    },
+    verification: null,
+  }
+}
+
+function createInferenceApi(): MarketInferenceApi {
+  return {
+    getContracts: vi.fn(async () => realContracts),
+    getInference: vi.fn(async (contractId) => inferenceView(contractId)),
+    refreshInference: vi.fn(async (contractId) => inferenceView(contractId)),
+  }
+}
+
 function createApi({
   snapshot = baseSnapshot,
   history = baseHistory,
@@ -93,14 +168,16 @@ function renderPanel(
   api = createApi(),
   initialView: 'gpu-reference' | 'card-hours' = 'gpu-reference',
   enableAdvanced = false,
-  simulationMode = false
+  simulationMode = false,
+  identity: string | null = null,
+  inferenceApi = createInferenceApi()
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
     },
   })
-  const result = render(
+  const panel = (nextIdentity: string | null) => (
     <QueryClientProvider client={queryClient}>
       <MantineProvider>
         <MarketIntelligencePanel
@@ -108,16 +185,27 @@ function renderPanel(
           initialView={initialView}
           enableAdvanced={enableAdvanced}
           simulationMode={simulationMode}
+          identity={nextIdentity}
+          inferenceApi={inferenceApi}
         />
       </MantineProvider>
     </QueryClientProvider>
   )
-  return { ...result, queryClient }
+  const result = render(panel(identity))
+  return {
+    ...result,
+    queryClient,
+    rerenderPanel: (nextIdentity: string | null) => result.rerender(panel(nextIdentity)),
+  }
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
   Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn(),
+  })
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -317,5 +405,195 @@ describe('MarketIntelligencePanel', () => {
     expect(screen.queryByText('第三方参考行情')).toBeNull()
     expect(screen.queryByText('Vast.ai')).toBeNull()
     expect(screen.queryByText('Akamai')).toBeNull()
+  })
+
+  it('selects the first trading real contract for the GPU model and scopes the inference query by identity and contract', async () => {
+    const inferenceApi = createInferenceApi()
+    const { queryClient } = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    expect(await screen.findByText('Kai AI 行情研判')).toBeTruthy()
+    await waitFor(() => expect(inferenceApi.getContracts).toHaveBeenCalledWith(ACCOUNT_A, expect.any(AbortSignal)))
+    await waitFor(() =>
+      expect(inferenceApi.getInference).toHaveBeenCalledWith(CONTRACT_A, ACCOUNT_A, expect.any(AbortSignal))
+    )
+    await waitFor(() =>
+      expect(inferenceApi.refreshInference).toHaveBeenCalledWith(CONTRACT_A, ACCOUNT_A, expect.any(AbortSignal))
+    )
+
+    const selector = screen.getByRole('textbox', { name: '预测合约' }) as HTMLInputElement
+    expect(selector.value).toContain('deepseek-v3')
+    expect(
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .some(({ queryKey }) => JSON.stringify(queryKey).includes(`${ACCOUNT_A}","contract","${CONTRACT_A}`))
+    ).toBe(true)
+  })
+
+  it('keeps cached inference visible while backend refresh is pending or unavailable and retries only with POST refresh', async () => {
+    const inferenceApi = createInferenceApi()
+    let rejectRefresh: ((reason?: unknown) => void) | undefined
+    inferenceApi.refreshInference = vi.fn(
+      () =>
+        new Promise<KaiMarketInferenceView>((_resolve, reject) => {
+          rejectRefresh = reject
+        })
+    )
+    const { queryClient } = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    expect(await screen.findByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+    await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1))
+    expect(screen.getAllByText('$2.2500').length).toBeGreaterThan(0)
+    expect(screen.getByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+
+    rejectRefresh?.(new Error('private inference transport detail'))
+    expect(await screen.findByText('预测服务暂不可用')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('private inference transport detail')
+    expect(screen.getByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+
+    inferenceApi.refreshInference = vi.fn(async (contractId) => inferenceView(contractId))
+    const inferenceReadsBeforeRetry = vi.mocked(inferenceApi.getInference).mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: '重新研判' }))
+    await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1))
+    expect(inferenceApi.getInference).toHaveBeenCalledTimes(inferenceReadsBeforeRetry)
+    expect(queryClient.getQueryData(['compute', 'market-inference', ACCOUNT_A, 'contract', CONTRACT_A])).toBeTruthy()
+  })
+
+  it('retains the selected contract and last prediction when a later directory refresh fails', async () => {
+    const inferenceApi = createInferenceApi()
+    const { queryClient } = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    expect(await screen.findByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+    inferenceApi.getContracts = vi.fn(() => Promise.reject(new Error('directory refresh detail')))
+    await queryClient.refetchQueries({
+      queryKey: ['compute', 'market-inference', ACCOUNT_A, 'contracts'],
+      exact: true,
+    })
+
+    expect(await screen.findByText('预测服务暂不可用')).toBeTruthy()
+    expect(screen.getByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+    expect((screen.getByRole('textbox', { name: '预测合约' }) as HTMLInputElement).value).toContain('deepseek-v3')
+    expect(document.body.textContent).not.toContain('directory refresh detail')
+  })
+
+  it('recovers a first inference read failure only through the backend refresh action', async () => {
+    const inferenceApi = createInferenceApi()
+    inferenceApi.getInference = vi.fn(() => Promise.reject(new Error('initial read detail')))
+    inferenceApi.refreshInference = vi.fn(() => Promise.reject(new Error('automatic refresh detail')))
+    renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    expect(await screen.findByText('预测服务暂不可用')).toBeTruthy()
+    await waitFor(() => expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1))
+    inferenceApi.refreshInference = vi.fn(async (contractId) => inferenceView(contractId, 'recovered by refresh'))
+    const readCount = vi.mocked(inferenceApi.getInference).mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: '重试预测' }))
+
+    expect(await screen.findByText('recovered by refresh')).toBeTruthy()
+    expect(inferenceApi.refreshInference).toHaveBeenCalledTimes(1)
+    expect(inferenceApi.getInference).toHaveBeenCalledTimes(readCount)
+  })
+
+  it('keeps actual quote failures independent and does not POST until a realtime quote refresh succeeds', async () => {
+    const api = createApi()
+    api.getLatest = vi.fn(() => Promise.reject(new Error('quote unavailable')))
+    const inferenceApi = createInferenceApi()
+    renderPanel(api, 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    expect(await screen.findByText('GPU 行情服务暂不可用')).toBeTruthy()
+    expect(await screen.findByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+    expect(screen.queryByText('预测服务暂不可用')).toBeNull()
+    expect(inferenceApi.refreshInference).not.toHaveBeenCalled()
+  })
+
+  it('fails inference closed when contract discovery fails or has no contract for the selected GPU model', async () => {
+    const failedDirectory = createInferenceApi()
+    failedDirectory.getContracts = vi.fn(() => Promise.reject(new Error('upstream URL and token must stay private')))
+    const first = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, failedDirectory)
+
+    expect(await screen.findByText('预测服务暂不可用')).toBeTruthy()
+    expect(screen.getAllByText('$2.2500').length).toBeGreaterThan(0)
+    expect(document.body.textContent).not.toContain('upstream URL and token must stay private')
+    expect(failedDirectory.getInference).not.toHaveBeenCalled()
+    expect(failedDirectory.refreshInference).not.toHaveBeenCalled()
+    first.unmount()
+
+    const noMatch = createInferenceApi()
+    noMatch.getContracts = vi.fn(async () => realContracts.filter(({ gpuModel }) => gpuModel === 'A100'))
+    renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, noMatch)
+
+    expect(await screen.findByText('当前 GPU 型号暂无可用预测合约')).toBeTruthy()
+    expect(noMatch.getInference).not.toHaveBeenCalled()
+    expect(noMatch.refreshInference).not.toHaveBeenCalled()
+  })
+
+  it('cancels and ignores an old contract response after the user selects another real contract', async () => {
+    const inferenceApi = createInferenceApi()
+    let resolveOld: ((view: KaiMarketInferenceView) => void) | undefined
+    let oldSignal: AbortSignal | undefined
+    inferenceApi.getInference = vi.fn((contractId, _identity, signal) => {
+      if (contractId === CONTRACT_A) {
+        oldSignal = signal
+        return new Promise<KaiMarketInferenceView>((resolve) => {
+          resolveOld = resolve
+        })
+      }
+      return Promise.resolve(inferenceView(contractId, 'new contract prediction'))
+    })
+    renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    const selector = (await screen.findByRole('textbox', { name: '预测合约' })) as HTMLInputElement
+    await waitFor(() => expect(selector.value).toContain('deepseek-v3'))
+    fireEvent.click(selector)
+    fireEvent.click(await screen.findByRole('option', { name: /llama-3\.3-70b/ }))
+
+    expect(await screen.findByText('new contract prediction')).toBeTruthy()
+    expect(oldSignal?.aborted).toBe(true)
+    resolveOld?.(inferenceView(CONTRACT_A, 'late old contract prediction'))
+    await Promise.resolve()
+    expect(screen.queryByText('late old contract prediction')).toBeNull()
+  })
+
+  it('cancels and ignores an old account refresh after wallet identity changes', async () => {
+    const inferenceApi = createInferenceApi()
+    let resolveOldRefresh: ((view: KaiMarketInferenceView) => void) | undefined
+    let oldRefreshSignal: AbortSignal | undefined
+    inferenceApi.getInference = vi.fn(async (contractId, identity) =>
+      inferenceView(contractId, `prediction for ${identity}`)
+    )
+    inferenceApi.refreshInference = vi.fn((contractId, identity, signal) => {
+      if (identity === ACCOUNT_A) {
+        oldRefreshSignal = signal
+        return new Promise<KaiMarketInferenceView>((resolve) => {
+          resolveOldRefresh = resolve
+        })
+      }
+      return Promise.resolve(inferenceView(contractId, `refreshed prediction for ${identity}`))
+    })
+    const { rerenderPanel } = renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    expect(await screen.findByText(`prediction for ${ACCOUNT_A}`)).toBeTruthy()
+    await waitFor(() =>
+      expect(inferenceApi.refreshInference).toHaveBeenCalledWith(CONTRACT_A, ACCOUNT_A, oldRefreshSignal)
+    )
+    rerenderPanel(ACCOUNT_B)
+
+    expect(await screen.findByText(`refreshed prediction for ${ACCOUNT_B}`)).toBeTruthy()
+    expect(oldRefreshSignal?.aborted).toBe(true)
+    resolveOldRefresh?.(inferenceView(CONTRACT_A, 'late old account prediction'))
+    await Promise.resolve()
+    expect(screen.queryByText('late old account prediction')).toBeNull()
+  })
+
+  it('does not load inference without a wallet identity or in simulation mode', async () => {
+    const signedOutApi = createInferenceApi()
+    renderPanel(createApi(), 'gpu-reference', false, false, null, signedOutApi)
+    await screen.findAllByText('$2.2500')
+    expect(signedOutApi.getContracts).not.toHaveBeenCalled()
+    cleanup()
+
+    const simulatedApi = createInferenceApi()
+    renderPanel(createApi(), 'gpu-reference', false, true, ACCOUNT_A, simulatedApi)
+    await screen.findByText(SIMULATED_MARKET_DISCLOSURE)
+    expect(simulatedApi.getContracts).not.toHaveBeenCalled()
   })
 })

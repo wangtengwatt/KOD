@@ -74,6 +74,51 @@ const boundedAnswerSchema = z
     message: 'Answer must be bounded non-empty text',
   })
 
+function boundedDirectoryText(maximumLength: number) {
+  return z
+    .string()
+    .min(1)
+    .max(maximumLength)
+    .refine(
+      (value) =>
+        value.trim() === value &&
+        Array.from(value).every((character) => {
+          const codePoint = character.codePointAt(0)
+          return codePoint !== undefined && codePoint >= 0x20 && codePoint !== 0x7f
+        }),
+      { message: 'Directory text must be bounded and contain no control characters' }
+    )
+}
+
+export const kaiMarketInferenceContractSchema = z
+  .object({
+    contractId: opaqueIdSchema,
+    name: boundedDirectoryText(256),
+    model: boundedDirectoryText(128),
+    gpuModel: boundedDirectoryText(128),
+    runtime: boundedDirectoryText(128),
+    deliveryAt: timestampSchema,
+    status: boundedDirectoryText(32),
+  })
+  .strict()
+
+export const kaiMarketInferenceContractsSchema = z
+  .array(kaiMarketInferenceContractSchema)
+  .max(1_000)
+  .superRefine((contracts, context) => {
+    const seen = new Set<string>()
+    contracts.forEach((contract, index) => {
+      if (seen.has(contract.contractId)) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Contract identifiers must be unique',
+          path: [index, 'contractId'],
+        })
+      }
+      seen.add(contract.contractId)
+    })
+  })
+
 export const kaiPredictedNextEventSchema = z
   .object({
     dtNs: dtNsSchema,
@@ -187,6 +232,7 @@ export type KaiPredictedNextEvent = z.infer<typeof kaiPredictedNextEventSchema>
 export type KaiMarketPipeline = z.infer<typeof kaiMarketPipelineSchema>
 export type KaiMarketVerification = z.infer<typeof kaiMarketVerificationSchema>
 export type KaiMarketInferenceView = z.infer<typeof kaiMarketInferenceViewSchema>
+export type KaiMarketInferenceContract = z.infer<typeof kaiMarketInferenceContractSchema>
 
 function currentWalletIdentity() {
   const { accountId, loginEmail, accessToken, refreshToken } = authInfoStore.getState()
@@ -230,6 +276,20 @@ export function getKaiMarketInference(
   signal?: AbortSignal
 ): Promise<KaiMarketInferenceView> {
   return requestKaiMarketInference(contractId, identity, false, signal)
+}
+
+export async function getKaiMarketInferenceContracts(
+  identity: WalletIdentity,
+  signal?: AbortSignal
+): Promise<KaiMarketInferenceContract[]> {
+  const ownerIdentity = captureCurrentIdentity(identity)
+  const response = await computeMarketplaceRequest<unknown>('/api/compute/market/inference/contracts', {
+    signal,
+    timeout: 15_000,
+  })
+
+  requireCurrentIdentity(ownerIdentity)
+  return kaiMarketInferenceContractsSchema.parse(response)
 }
 
 export function refreshKaiMarketInference(
