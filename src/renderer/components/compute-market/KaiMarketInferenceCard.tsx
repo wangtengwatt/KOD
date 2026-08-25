@@ -210,22 +210,32 @@ function VerificationPanel({
       </Paper>
     )
   }
+  if (verification.status === 'UNVERIFIABLE') {
+    return (
+      <Paper component="section" aria-label="真实成交核验" withBorder radius="md" p="md">
+        <Stack role="status" aria-label="真实成交核验状态" aria-live="polite" aria-atomic="true" gap="xs">
+          <Group justify="space-between" gap="sm" wrap="wrap">
+            <Text fw={700}>模型输出无法核验</Text>
+            <Badge color="yellow" variant="light">
+              UNVERIFIABLE
+            </Badge>
+          </Group>
+          <VerificationContext verificationId={verification.inferenceId} currentInferenceId={currentInferenceId} />
+          <Text size="sm" c="dimmed">
+            当前没有可用于核验的真实成交信息。
+          </Text>
+        </Stack>
+      </Paper>
+    )
+  }
 
-  const heading =
-    verification.status === 'MATCHED'
-      ? '真实成交核验：已命中'
-      : verification.status === 'MISSED'
-        ? '真实成交核验：未命中'
-        : '真实成交已到达，模型输出无法核验'
+  const heading = verification.status === 'MATCHED' ? '真实成交核验：已命中' : '真实成交核验：未命中'
   return (
     <Paper component="section" aria-label="真实成交核验" withBorder radius="md" p="md">
       <Stack role="status" aria-label="真实成交核验状态" aria-live="polite" aria-atomic="true" gap="xs">
         <Group justify="space-between" gap="sm" wrap="wrap">
           <Text fw={700}>{heading}</Text>
-          <Badge
-            color={verification.status === 'MATCHED' ? 'green' : verification.status === 'MISSED' ? 'red' : 'yellow'}
-            variant="light"
-          >
+          <Badge color={verification.status === 'MATCHED' ? 'green' : 'red'} variant="light">
             {verification.status}
           </Badge>
         </Group>
@@ -235,11 +245,9 @@ function VerificationPanel({
           {verification.actualQuantity}
         </Text>
         <Timestamp label="真实成交时间" value={verification.actualAt} />
-        {verification.status !== 'UNVERIFIABLE' && (
-          <Text size="sm" c="dimmed">
-            方向{verification.directionMatched ? '一致' : '不一致'} · 价格误差 {verification.priceError}
-          </Text>
-        )}
+        <Text size="sm" c="dimmed">
+          方向{verification.directionMatched ? '一致' : '不一致'} · 价格误差 {verification.priceError}
+        </Text>
       </Stack>
     </Paper>
   )

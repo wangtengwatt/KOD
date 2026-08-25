@@ -286,7 +286,7 @@ describe('KAI market inference wire contract', () => {
     }
   })
 
-  it('requires extraction failure to be explicit null and accepts an unverifiable real trade', () => {
+  it('requires extraction failure to be explicit null and accepts only a status-only unverifiable result', () => {
     const parsed = kaiMarketInferenceViewSchema.parse(
       view({
         lastSuccess: lastSuccess({
@@ -295,17 +295,24 @@ describe('KAI market inference wire contract', () => {
         verification: {
           status: 'UNVERIFIABLE',
           inferenceId: '9007199254740993123',
-          actualTradeId: REAL_TRADE_ID,
-          actualSide: 'SELL',
-          actualPrice: '98003.00000000',
-          actualQuantity: '0.30000000',
-          actualAt: '2026-08-25T08:00:30Z',
         },
       })
     )
 
     expect(parsed.lastSuccess?.prediction.nextEvent).toBeNull()
     expect(parsed.verification?.status).toBe('UNVERIFIABLE')
+    expect(parsed.verification).toEqual({ status: 'UNVERIFIABLE', inferenceId: '9007199254740993123' })
+    expect(
+      kaiMarketInferenceViewSchema.safeParse(
+        view({
+          verification: {
+            status: 'UNVERIFIABLE',
+            inferenceId: '9007199254740993123',
+            actualTradeId: REAL_TRADE_ID,
+          },
+        })
+      ).success
+    ).toBe(false)
     expect(
       kaiMarketInferenceViewSchema.safeParse(
         view({

@@ -132,11 +132,6 @@ const unverifiableVerificationSchema = z
   .object({
     status: z.literal('UNVERIFIABLE'),
     inferenceId: recordIdSchema,
-    actualTradeId: opaqueIdSchema,
-    actualSide: z.enum(['BUY', 'SELL']),
-    actualPrice: unsignedDecimalSchema,
-    actualQuantity: positiveDecimalSchema,
-    actualAt: timestampSchema,
   })
   .strict()
 

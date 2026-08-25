@@ -17,3 +17,10 @@ The client SHALL label inference as informational and MUST NOT create orders, al
 #### Scenario: Model predicts a buy event
 - **WHEN** the inference answer predicts BUY
 - **THEN** the client SHALL display the text and verification status only and SHALL perform no trade action
+
+### Requirement: Unverifiable predictions do not invent actual trades
+The client SHALL accept `UNVERIFIABLE` only as the strict status payload containing `status` and `inferenceId`, and SHALL NOT display actual-trade fields for that state.
+
+#### Scenario: A prediction cannot be verified against a real trade
+- **WHEN** the server returns `UNVERIFIABLE` because the prediction is unstructured or its source trade is outside the verification window
+- **THEN** the client SHALL show the unverifiable state and target inference ID without claiming that a real trade arrived

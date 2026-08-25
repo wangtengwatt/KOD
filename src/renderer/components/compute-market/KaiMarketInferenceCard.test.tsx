@@ -244,6 +244,21 @@ describe('KaiMarketInferenceCard', () => {
     expect(within(verification).getByText(/-3\.50000000/)).toBeTruthy()
   })
 
+  it('shows a status-only unverifiable result without inventing an actual trade', () => {
+    renderCard({
+      ...freshView,
+      verification: {
+        status: 'UNVERIFIABLE',
+        inferenceId: successfulInference.inferenceId,
+      },
+    })
+
+    const verification = screen.getByRole('region', { name: '真实成交核验' })
+    expect(within(verification).getByText('模型输出无法核验')).toBeTruthy()
+    expect(within(verification).getByText(`核验目标 ID ${successfulInference.inferenceId}`)).toBeTruthy()
+    expect(within(verification).queryByText(/真实成交已到达|真实成交 trade-/)).toBeNull()
+  })
+
   it('wraps a long opaque real trade id without changing it', () => {
     const actualTradeId = `trade-${'opaque'.repeat(30)}`
     renderCard({
