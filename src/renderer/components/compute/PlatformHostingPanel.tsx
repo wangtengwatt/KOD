@@ -1,12 +1,29 @@
-import { Alert, Badge, Button, Card, Group, Modal, Paper, SimpleGrid, Stack, Switch, Text, Title } from '@mantine/core'
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Group,
+  Modal,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Switch,
+  Table,
+  Text,
+  Title,
+} from '@mantine/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { computeKeys, getWalletIdentity } from '@/hooks/useWallet'
 import {
   getComputeAccount,
+  getPlatformLeaseDetails,
   listPlatformServerLeases,
   listPlatformServerSkus,
+  type PlatformLeaseDetails,
+  type PlatformLeaseIncomeEvent,
   type PlatformServerLease,
   type PlatformServerSku,
   rentPlatformServer,
@@ -237,9 +254,10 @@ export function PlatformHostingPanel() {
         ) : (
           leases.map((lease) => (
             <LeaseCard
-              key={lease.id}
+              key={`${queryIdentity}:${lease.id}`}
               lease={lease}
               sku={skus.find((candidate) => candidate.id === lease.skuId)}
+              queryIdentity={queryIdentity}
               changing={renewMutation.isPending && renewMutation.variables?.leaseId === lease.id}
               onAutoRenew={(enabled) => {
                 setFeedback(null)
@@ -308,15 +326,24 @@ export function PlatformHostingPanel() {
 function LeaseCard({
   lease,
   sku,
+  queryIdentity,
   changing,
   onAutoRenew,
 }: {
   lease: PlatformServerLease
   sku?: PlatformServerSku
+  queryIdentity: string
   changing: boolean
   onAutoRenew: (enabled: boolean) => void
 }) {
   const projection = leaseProjection(lease)
+  const [detailsExpanded, setDetailsExpanded] = useState(false)
+  const detailsQuery = useQuery({
+    queryKey: ['compute', queryIdentity, 'platform-hosting', 'leases', lease.id, 'details'],
+    queryFn: () => getPlatformLeaseDetails(lease.id),
+    enabled: detailsExpanded,
+    retry: false,
+  })
   return (
     <Card withBorder padding="md" radius="md">
       <Stack gap="xs">
@@ -338,6 +365,23 @@ function LeaseCard({
           <Text size="sm">平台统一销售价：{formatCardHours(lease.salePrice)} 卡时</Text>
         </SimpleGrid>
         <Text size="sm">{termLabel(lease)}</Text>
+        <Button
+          variant="light"
+          color="teal"
+          aria-expanded={detailsExpanded}
+          onClick={() => setDetailsExpanded((current) => !current)}
+        >
+          {detailsExpanded ? '收起订单收益日志' : '展开订单收益日志'}
+        </Button>
+        {detailsExpanded && (
+          <LeaseFinancialDetails
+            leaseNo={lease.leaseNo}
+            details={detailsQuery.data}
+            loading={detailsQuery.isLoading}
+            error={detailsQuery.error}
+            onRetry={() => void detailsQuery.refetch()}
+          />
+        )}
         {lease.status === 'ACTIVE' && (
           <Group justify="space-between" align="flex-start" wrap="nowrap">
             <div>
@@ -361,6 +405,147 @@ function LeaseCard({
       </Stack>
     </Card>
   )
+}
+
+function LeaseFinancialDetails({
+  leaseNo,
+  details,
+  loading,
+  error,
+  onRetry,
+}: {
+  leaseNo: string
+  details?: PlatformLeaseDetails
+  loading: boolean
+  error: unknown
+  onRetry: () => void
+}) {
+  if (loading) return <Text c="dimmed">正在加载成本与收益…</Text>
+  if (error) {
+    return (
+      <Alert color="red" title="订单收益日志加载失败">
+        <Stack gap="xs">
+          <Text size="sm">{errorMessage(error)}</Text>
+          <Button variant="light" color="red" size="xs" onClick={onRetry}>
+            重试
+          </Button>
+        </Stack>
+      </Alert>
+    )
+  }
+  if (!details) return null
+
+  const currentPeriod = details.periods.find((period) => period.status === 'ACTIVE') ?? details.periods.at(-1)
+  return (
+    <Paper component="section" aria-label={`租约 ${leaseNo} 成本与收益`} withBorder p="sm" radius="md">
+      <Stack gap="sm">
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }}>
+          <SummaryMetric label="累计租赁成本" value={details.totalCost} />
+          <SummaryMetric label="待结算收入" value={details.totalPendingIncome} />
+          <SummaryMetric label="已结算总额" value={details.totalSettledIncome} />
+          <SummaryMetric label="平台服务费" value={details.totalFee} />
+          <SummaryMetric label="净收益" value={details.totalNetIncome} />
+        </SimpleGrid>
+
+        <Paper withBorder p="sm" radius="sm">
+          <Text fw={600} size="sm">
+            当前租赁周期
+          </Text>
+          {currentPeriod ? (
+            <SimpleGrid cols={{ base: 1, sm: 2 }} mt={4}>
+              <Text size="sm">第 {currentPeriod.periodNo} 期</Text>
+              <Text size="sm">本期租赁成本 {currentPeriod.rentCardHours} 卡时</Text>
+              <Text size="sm">周期状态：{periodStatusLabel(currentPeriod.status)}</Text>
+              <Text size="sm">
+                {formatContractDateTime(currentPeriod.startedAt)} 至 {formatContractDateTime(currentPeriod.endsAt)}
+              </Text>
+            </SimpleGrid>
+          ) : (
+            <Text size="sm" c="dimmed" mt={4}>
+              暂无租赁周期记录。
+            </Text>
+          )}
+        </Paper>
+
+        <div>
+          <Text fw={600} size="sm" mb="xs">
+            订单收益日志
+          </Text>
+          {details.incomeEvents.length === 0 ? (
+            <Text size="sm" c="dimmed">
+              暂无订单收益记录。
+            </Text>
+          ) : (
+            <IncomeEventTable events={details.incomeEvents} />
+          )}
+        </div>
+      </Stack>
+    </Paper>
+  )
+}
+
+function SummaryMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <Paper component="section" aria-label={`${label} ${value} 卡时`} withBorder p="xs" radius="sm">
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      <Text size="sm" fw={700}>
+        {value} 卡时
+      </Text>
+    </Paper>
+  )
+}
+
+function IncomeEventTable({ events }: { events: PlatformLeaseIncomeEvent[] }) {
+  return (
+    <Table.ScrollContainer minWidth={1_100}>
+      <Table striped highlightOnHover withTableBorder withColumnBorders>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>状态</Table.Th>
+            <Table.Th>订单号</Table.Th>
+            <Table.Th>订单 ID</Table.Th>
+            <Table.Th>商品 ID</Table.Th>
+            <Table.Th>服务时间</Table.Th>
+            <Table.Th>结算时间</Table.Th>
+            <Table.Th>订单总额</Table.Th>
+            <Table.Th>平台服务费</Table.Th>
+            <Table.Th>净收益</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {events.map((event) => (
+            <Table.Tr key={event.id}>
+              <Table.Td>
+                <Badge color={event.settlementStatus === 'SETTLED' ? 'green' : 'orange'} variant="light">
+                  {event.settlementStatus === 'SETTLED' ? '已结算' : '待结算'}
+                </Badge>
+              </Table.Td>
+              <Table.Td>{event.orderNo}</Table.Td>
+              <Table.Td>{event.orderId}</Table.Td>
+              <Table.Td>{event.productId}</Table.Td>
+              <Table.Td>
+                {formatContractDateTime(event.serviceStartedAt)} 至 {formatContractDateTime(event.serviceEndedAt)}
+              </Table.Td>
+              <Table.Td>{formatContractDateTime(event.settledAt)}</Table.Td>
+              <Table.Td>{event.grossCardHours}</Table.Td>
+              <Table.Td>{event.platformFeeCardHours}</Table.Td>
+              <Table.Td>{event.netIncomeCardHours}</Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
+  )
+}
+
+function periodStatusLabel(status: PlatformLeaseDetails['periods'][number]['status']) {
+  return status === 'ACTIVE' ? '进行中（ACTIVE）' : '已完成（COMPLETED）'
+}
+
+function formatContractDateTime(value?: string | null) {
+  return value ? value.replace('T', ' ') : '-'
 }
 
 function leaseProjection(lease: PlatformServerLease) {

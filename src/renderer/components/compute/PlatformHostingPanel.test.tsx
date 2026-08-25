@@ -4,11 +4,17 @@ import { MantineProvider } from '@mantine/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ComputeAccount, PlatformServerLease, PlatformServerSku } from '@/packages/computeCenter'
+import type {
+  ComputeAccount,
+  PlatformLeaseDetails,
+  PlatformServerLease,
+  PlatformServerSku,
+} from '@/packages/computeCenter'
 import { authInfoStore } from '@/stores/authInfoStore'
 
 const mocks = vi.hoisted(() => ({
   getComputeAccount: vi.fn(),
+  getPlatformLeaseDetails: vi.fn(),
   listCardHourRates: vi.fn(),
   listComputeProducts: vi.fn(),
   listHostedNodes: vi.fn(),
@@ -26,6 +32,7 @@ vi.mock('@/packages/computeCenter', async (importOriginal) => {
   return {
     ...original,
     getComputeAccount: mocks.getComputeAccount,
+    getPlatformLeaseDetails: mocks.getPlatformLeaseDetails,
     listCardHourRates: mocks.listCardHourRates,
     listComputeProducts: mocks.listComputeProducts,
     listPlatformServerLeases: mocks.listPlatformServerLeases,
@@ -92,6 +99,70 @@ const account = {
   rewardCardHours: 50,
 } as unknown as ComputeAccount
 
+const leaseDetails = {
+  lease: {
+    ...lease,
+    monthlyRent: '30.000',
+    salePrice: '12.000',
+  },
+  periods: [
+    {
+      id: '9007199254740993101',
+      leaseId: lease.id,
+      periodNo: 2,
+      rentCardHours: '30.000',
+      startedAt: '2026-08-25T12:00:00',
+      endsAt: '2026-09-25T12:00:00',
+      paymentLedgerId: '9007199254740993102',
+      status: 'ACTIVE',
+      completedAt: null,
+    },
+  ],
+  incomeEvents: [
+    {
+      id: '9007199254740993201',
+      leaseId: lease.id,
+      reservationId: '9007199254740993202',
+      productId: '9007199254740993203',
+      orderId: '9007199254740993204',
+      orderNo: 'ORDER-SETTLED-001',
+      buyerUserId: '9007199254740993205',
+      beneficiaryUserId: lease.userId,
+      grossCardHours: '12.000',
+      platformFeeCardHours: '1.200',
+      netIncomeCardHours: '10.800',
+      supplierIncomeLedgerId: '9007199254740993206',
+      settlementStatus: 'SETTLED',
+      serviceStartedAt: '2026-08-25T12:00:00',
+      serviceEndedAt: '2026-08-25T13:00:00',
+      settledAt: '2026-08-25T13:00:00',
+    },
+    {
+      id: '9007199254740993301',
+      leaseId: lease.id,
+      reservationId: '9007199254740993302',
+      productId: '9007199254740993303',
+      orderId: '9007199254740993304',
+      orderNo: 'ORDER-PENDING-002',
+      buyerUserId: '9007199254740993305',
+      beneficiaryUserId: lease.userId,
+      grossCardHours: '6.000',
+      platformFeeCardHours: '0.600',
+      netIncomeCardHours: '5.400',
+      supplierIncomeLedgerId: null,
+      settlementStatus: 'PENDING',
+      serviceStartedAt: '2026-08-26T12:00:00',
+      serviceEndedAt: null,
+      settledAt: null,
+    },
+  ],
+  totalCost: '60.000',
+  totalPendingIncome: '6.000',
+  totalSettledIncome: '12.000',
+  totalFee: '1.200',
+  totalNetIncome: '10.800',
+} satisfies PlatformLeaseDetails
+
 function renderPanel(ui = <PlatformHostingPanel />) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -112,6 +183,7 @@ beforeEach(() => {
   sessionStorage.clear()
   localStorage.clear()
   mocks.getComputeAccount.mockResolvedValue(account)
+  mocks.getPlatformLeaseDetails.mockResolvedValue(leaseDetails)
   mocks.listCardHourRates.mockResolvedValue([])
   mocks.listComputeProducts.mockResolvedValue([])
   mocks.listPlatformServerSkus.mockResolvedValue([sku])
@@ -154,6 +226,104 @@ afterEach(() => {
 })
 
 describe('PlatformHostingPanel', () => {
+  it('lazy-loads exact hosting cost, current period, income totals, and immutable order logs', async () => {
+    renderPanel()
+
+    expect(await screen.findByText('租约 PL000088')).toBeTruthy()
+    expect(mocks.getPlatformLeaseDetails).not.toHaveBeenCalled()
+    expect(screen.queryByText('累计租赁成本 60.000 卡时')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '展开订单收益日志' }))
+
+    await waitFor(() => expect(mocks.getPlatformLeaseDetails).toHaveBeenCalledWith('88'))
+    const details = await screen.findByRole('region', { name: '租约 PL000088 成本与收益' })
+    expect(within(details).getByRole('region', { name: '累计租赁成本 60.000 卡时' })).toBeTruthy()
+    expect(within(details).getByText('本期租赁成本 30.000 卡时')).toBeTruthy()
+    expect(within(details).getByText('第 2 期')).toBeTruthy()
+    expect(within(details).getByText('周期状态：进行中（ACTIVE）')).toBeTruthy()
+    expect(within(details).getByText('2026-08-25 12:00:00 至 2026-09-25 12:00:00')).toBeTruthy()
+    expect(within(details).getByRole('region', { name: '待结算收入 6.000 卡时' })).toBeTruthy()
+    expect(within(details).getByRole('region', { name: '已结算总额 12.000 卡时' })).toBeTruthy()
+    expect(within(details).getByRole('region', { name: '平台服务费 1.200 卡时' })).toBeTruthy()
+    expect(within(details).getByRole('region', { name: '净收益 10.800 卡时' })).toBeTruthy()
+
+    const settledOrder = within(details).getByRole('row', { name: /ORDER-SETTLED-001/ })
+    expect(within(settledOrder).getByText('9007199254740993204')).toBeTruthy()
+    expect(within(settledOrder).getByText('9007199254740993203')).toBeTruthy()
+    expect(within(settledOrder).getByText('2026-08-25 13:00:00')).toBeTruthy()
+    expect(within(settledOrder).getByText('12.000')).toBeTruthy()
+    expect(within(settledOrder).getByText('1.200')).toBeTruthy()
+    expect(within(settledOrder).getByText('10.800')).toBeTruthy()
+
+    const pendingOrder = within(details).getByRole('row', { name: /ORDER-PENDING-002/ })
+    expect(within(pendingOrder).getByText('待结算')).toBeTruthy()
+    expect(within(pendingOrder).getByText('9007199254740993304')).toBeTruthy()
+    expect(within(pendingOrder).getByText('9007199254740993303')).toBeTruthy()
+  })
+
+  it('shows a clear empty state when an expanded lease has no order-income events', async () => {
+    mocks.getPlatformLeaseDetails.mockResolvedValue({ ...leaseDetails, incomeEvents: [] })
+    renderPanel()
+
+    fireEvent.click(await screen.findByRole('button', { name: '展开订单收益日志' }))
+
+    expect(await screen.findByText('暂无订单收益记录。')).toBeTruthy()
+  })
+
+  it('removes account-a income rows and ignores its late detail response after switching to account b', async () => {
+    authInfoStore.setState({
+      accessToken: 'account-a-access',
+      refreshToken: 'account-a-refresh',
+      accountId: '7',
+      loginEmail: 'account-a@kod.test',
+    })
+    let resolveAccountA: ((details: PlatformLeaseDetails) => void) | undefined
+    const accountADetails = new Promise<PlatformLeaseDetails>((resolve) => {
+      resolveAccountA = resolve
+    })
+    const accountBDetails = {
+      ...leaseDetails,
+      incomeEvents: [
+        {
+          ...leaseDetails.incomeEvents[0],
+          id: '9007199254740993401',
+          orderId: '9007199254740993402',
+          orderNo: 'ORDER-ACCOUNT-B',
+        },
+      ],
+    }
+    mocks.getPlatformLeaseDetails.mockImplementationOnce(() => accountADetails).mockResolvedValueOnce(accountBDetails)
+    renderPanel()
+
+    fireEvent.click(await screen.findByRole('button', { name: '展开订单收益日志' }))
+    await waitFor(() => expect(mocks.getPlatformLeaseDetails).toHaveBeenCalledTimes(1))
+
+    act(() =>
+      authInfoStore.setState({
+        accessToken: 'account-b-access',
+        refreshToken: 'account-b-refresh',
+        accountId: '8',
+        loginEmail: 'account-b@kod.test',
+      })
+    )
+
+    expect(await screen.findByRole('button', { name: '展开订单收益日志' })).toBeTruthy()
+    expect(screen.queryByText('ORDER-ACCOUNT-A')).toBeNull()
+    resolveAccountA?.({
+      ...leaseDetails,
+      incomeEvents: [{ ...leaseDetails.incomeEvents[0], orderNo: 'ORDER-ACCOUNT-A' }],
+    })
+    await act(async () => {
+      await accountADetails
+      await Promise.resolve()
+    })
+    expect(screen.queryByText('ORDER-ACCOUNT-A')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '展开订单收益日志' }))
+    expect(await screen.findByText('ORDER-ACCOUNT-B')).toBeTruthy()
+    expect(mocks.getPlatformLeaseDetails).toHaveBeenCalledTimes(2)
+  })
+
   it('closes an account-owned checkout when the authenticated account changes in place', async () => {
     authInfoStore.setState({
       accessToken: 'account-a-access',
