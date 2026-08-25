@@ -147,6 +147,27 @@ describe('simulated market loopback boundary', () => {
 })
 
 describe('required shared remote feed', () => {
+  it('allows the default production proxy budget for a slow valid dashboard', async () => {
+    vi.useFakeTimers()
+    const fetchFn = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const payload = String(input).endsWith('/contracts') ? [remoteContract()] : remoteDashboard()
+      return new Promise<Response>((resolve, reject) => {
+        const timer = setTimeout(() => resolve(jsonResponse(payload)), 2_000)
+        init?.signal?.addEventListener('abort', () => {
+          clearTimeout(timer)
+          reject(new DOMException('Aborted', 'AbortError'))
+        })
+      })
+    })
+    const api = createSimulatedMarketApi({ fetchFn: fetchFn as typeof fetch, now: () => NOW })
+
+    const result = api.getLatest()
+    await vi.advanceTimersByTimeAsync(4_100)
+
+    await expect(result).resolves.toMatchObject({ trackedModels: ['H100'] })
+    vi.useRealTimers()
+  })
+
   it('uses the KOD HTTPS endpoint as the adapter default', async () => {
     const fetchFn = remoteFetch()
     const api = createSimulatedMarketApi({ fetchFn: fetchFn as typeof fetch, now: () => NOW })
