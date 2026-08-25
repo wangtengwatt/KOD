@@ -5,9 +5,11 @@ import {
   type LocalDemoCapability,
   type LocalDemoRole,
   type LocalDemoSession,
+  parseLocalDemoApiOrigin,
   switchLocalDemoRole,
 } from '@/packages/computeCenter'
 import { getKodApiOrigin } from '@/packages/remote'
+import { useAuthInfoStore } from '@/stores/authInfoStore'
 
 const ROLE_LABELS: Record<LocalDemoRole, string> = {
   ADMIN: '管理员',
@@ -19,13 +21,8 @@ const LOCAL_DEMO_SESSION_TIMEOUT_MS = 15_000
 
 export function isGuardedLocalDemoOrigin(apiOrigin: string) {
   try {
-    const origin = new URL(apiOrigin)
-    return (
-      origin.protocol === 'http:' &&
-      !origin.username &&
-      !origin.password &&
-      (origin.hostname === 'localhost' || origin.hostname === '127.0.0.1' || origin.hostname === '[::1]')
-    )
+    parseLocalDemoApiOrigin(apiOrigin)
+    return true
   } catch {
     return false
   }
@@ -45,10 +42,16 @@ export function LocalDemoRoleSwitcher({
   const capabilityAbort = useRef<AbortController | null>(null)
   const sessionAbort = useRef<AbortController | null>(null)
   const busyRoleRef = useRef<LocalDemoRole | null>(null)
+  const authOwnerKey = useAuthInfoStore((state) =>
+    JSON.stringify([state.accessToken, state.refreshToken, state.accountId, state.loginEmail])
+  )
+  const authOwnerKeyRef = useRef(authOwnerKey)
+  authOwnerKeyRef.current = authOwnerKey
 
   useEffect(() => {
     requestGeneration.current += 1
     const generation = requestGeneration.current
+    const capabilityOwnerKey = authOwnerKey
     capabilityAbort.current?.abort()
     sessionAbort.current?.abort()
     setCapability(null)
@@ -59,15 +62,21 @@ export function LocalDemoRoleSwitcher({
 
     const controller = new AbortController()
     capabilityAbort.current = controller
-    void getLocalDemoCapability(controller.signal)
+    void getLocalDemoCapability(controller.signal, apiOrigin)
       .then((nextCapability) => {
-        if (requestGeneration.current !== generation || controller.signal.aborted || !nextCapability.enabled) return
+        if (
+          requestGeneration.current !== generation ||
+          authOwnerKeyRef.current !== capabilityOwnerKey ||
+          controller.signal.aborted ||
+          !nextCapability.enabled
+        )
+          return
         setCapability(nextCapability)
       })
       .catch(() => undefined)
 
     return () => controller.abort()
-  }, [apiOrigin])
+  }, [apiOrigin, authOwnerKey])
 
   useEffect(
     () => () => {
@@ -82,6 +91,7 @@ export function LocalDemoRoleSwitcher({
     if (!capability?.roles.includes(role) || busyRoleRef.current === role) return
     requestGeneration.current += 1
     const generation = requestGeneration.current
+    const sessionOwnerKey = authOwnerKeyRef.current
     sessionAbort.current?.abort()
     const controller = new AbortController()
     sessionAbort.current = controller
@@ -94,9 +104,14 @@ export function LocalDemoRoleSwitcher({
       controller.abort()
     }, LOCAL_DEMO_SESSION_TIMEOUT_MS)
 
-    void switchLocalDemoRole(role, controller.signal)
+    void switchLocalDemoRole(role, controller.signal, apiOrigin)
       .then(async (session) => {
-        if (requestGeneration.current !== generation || controller.signal.aborted) return
+        if (
+          requestGeneration.current !== generation ||
+          authOwnerKeyRef.current !== sessionOwnerKey ||
+          controller.signal.aborted
+        )
+          return
         await onSession(session)
       })
       .catch((reason: unknown) => {

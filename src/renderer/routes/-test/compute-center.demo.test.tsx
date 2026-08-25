@@ -2,7 +2,7 @@
 
 import { MantineProvider } from '@mantine/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { authInfoStore } from '@/stores/authInfoStore'
 
@@ -59,6 +59,16 @@ function renderPage(queryClient: QueryClient) {
       </MantineProvider>
     </QueryClientProvider>
   )
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, reject, resolve }
 }
 
 beforeEach(() => {
@@ -143,4 +153,63 @@ it('atomically installs an access-only role session and clears prior compute, ma
   expect(queryClient.getQueryData(['compute', 'account:9007199254740993001', 'lottery'])).toBeUndefined()
   expect(queryClient.getQueryData(['compute', 'market-prices', 'latest'])).toBeUndefined()
   expect(queryClient.getQueryData(['wallet', 'account:9007199254740993001', 'balance'])).toBeUndefined()
+})
+
+it('preserves an externally installed session and caches when an earlier role response arrives late', async () => {
+  const lateRole = deferred<{ token: string; accountId: string; expiresAt: string }>()
+  mocks.switchLocalDemoRole.mockImplementationOnce(() => lateRole.promise)
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  queryClient.setQueryData(['compute', 'late-role-sentinel'], 'keep compute')
+  queryClient.setQueryData(['wallet', 'late-role-sentinel'], 'keep wallet')
+  renderPage(queryClient)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'GPU 买家' }))
+  await waitFor(() => expect(mocks.switchLocalDemoRole).toHaveBeenCalledTimes(1))
+  act(() => {
+    authInfoStore.setState({
+      accessToken: 'external-b-access',
+      refreshToken: 'external-b-refresh',
+      accountId: '9007199254740993999',
+      loginEmail: 'external-b@kod.test',
+    })
+  })
+  await waitFor(() => expect(mocks.getLocalDemoCapability).toHaveBeenCalledTimes(2))
+
+  await act(async () => {
+    lateRole.resolve({
+      token: 'late-a-access',
+      accountId: '9007199254740993002',
+      expiresAt: '2026-08-25T13:10:00Z',
+    })
+    await lateRole.promise
+  })
+
+  expect(authInfoStore.getState()).toMatchObject({
+    accessToken: 'external-b-access',
+    refreshToken: 'external-b-refresh',
+    accountId: '9007199254740993999',
+    loginEmail: 'external-b@kod.test',
+  })
+  expect(queryClient.getQueryData(['compute', 'late-role-sentinel'])).toBe('keep compute')
+  expect(queryClient.getQueryData(['wallet', 'late-role-sentinel'])).toBe('keep wallet')
+})
+
+it('leaves the prior auth session and caches intact when role switching fails', async () => {
+  mocks.switchLocalDemoRole.mockRejectedValueOnce(new Error('role unavailable'))
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  queryClient.setQueryData(['compute', 'failed-role-sentinel'], 'keep compute')
+  queryClient.setQueryData(['wallet', 'failed-role-sentinel'], 'keep wallet')
+  renderPage(queryClient)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'GPU 买家' }))
+  expect(await screen.findByText('role unavailable')).toBeTruthy()
+
+  expect(authInfoStore.getState()).toMatchObject({
+    accessToken: 'old-access',
+    refreshToken: 'old-refresh',
+    accountId: '9007199254740993001',
+    loginEmail: 'old@kod.test',
+  })
+  expect(queryClient.getQueryData(['compute', 'failed-role-sentinel'])).toBe('keep compute')
+  expect(queryClient.getQueryData(['wallet', 'failed-role-sentinel'])).toBe('keep wallet')
 })

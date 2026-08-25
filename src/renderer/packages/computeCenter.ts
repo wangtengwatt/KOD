@@ -7,6 +7,7 @@ import {
   prepareComputeImageUpload,
 } from '@/packages/computeImageUpload'
 import { getKodApiOrigin, refreshKodSession } from '@/packages/remote'
+import { getWalletIdentity } from '@/packages/walletIdentity'
 import { authInfoStore } from '@/stores/authInfoStore'
 import { KOD_MARKET_API_ORIGIN } from '@/variables'
 import type { ComputeEscrowProjection, ComputeFundsEvent } from './computeMarketplace/types'
@@ -791,6 +792,64 @@ export const LocalDemoSessionSchema = z
 export type LocalDemoRole = z.infer<typeof LocalDemoCapabilitySchema>['roles'][number]
 export type LocalDemoSession = z.infer<typeof LocalDemoSessionSchema>
 
+const LOCAL_DEMO_API_ORIGIN_PATTERN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::(?:0|[1-9]\d{0,4}))?\/?$/
+
+export function parseLocalDemoApiOrigin(origin: string) {
+  const error = new Error('本地演示 API 地址必须是规范的 HTTP 回环地址')
+  if (origin !== origin.trim() || !LOCAL_DEMO_API_ORIGIN_PATTERN.test(origin)) throw error
+
+  let parsed: URL
+  try {
+    parsed = new URL(origin)
+  } catch {
+    throw error
+  }
+  if (
+    parsed.protocol !== 'http:' ||
+    parsed.username ||
+    parsed.password ||
+    !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname) ||
+    parsed.pathname !== '/' ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw error
+  }
+  return parsed.origin
+}
+
+type LocalDemoAuthOwner = {
+  accessToken: string | null
+  refreshToken: string | null
+  accountId: string | null
+  loginEmail: string | null
+  walletIdentity: string
+}
+
+function captureLocalDemoAuthOwner(): LocalDemoAuthOwner {
+  const { accessToken, refreshToken, accountId, loginEmail } = authInfoStore.getState()
+  return {
+    accessToken,
+    refreshToken,
+    accountId,
+    loginEmail,
+    walletIdentity: getWalletIdentity(accountId, loginEmail, accessToken, refreshToken) ?? 'signed-out',
+  }
+}
+
+function requireCurrentLocalDemoAuthOwner(owner: LocalDemoAuthOwner) {
+  const current = captureLocalDemoAuthOwner()
+  if (
+    current.accessToken !== owner.accessToken ||
+    current.refreshToken !== owner.refreshToken ||
+    current.accountId !== owner.accountId ||
+    current.loginEmail !== owner.loginEmail ||
+    current.walletIdentity !== owner.walletIdentity
+  ) {
+    throw new Error('账户已切换，已取消旧账户操作')
+  }
+}
+
 export type CardHourAssetType = 'STANDARD' | 'SPECIFIC'
 export type CardHourMarketType = 'PRIMARY_SALE' | 'IDLE_TRANSFER' | 'RFQ'
 
@@ -1408,19 +1467,30 @@ export function listLotteryHistory() {
   return request<unknown>('/api/compute/lottery/history').then((data) => z.array(LotteryHistorySchema).parse(data))
 }
 
-export function getLocalDemoCapability(signal?: AbortSignal) {
-  return requestRaw<unknown>('/api/compute/local-demo/capability', { signal }).then((data) =>
-    LocalDemoCapabilitySchema.parse(data)
-  )
+export async function getLocalDemoCapability(signal?: AbortSignal, apiOrigin = getKodApiOrigin()) {
+  const origin = parseLocalDemoApiOrigin(apiOrigin)
+  const owner = captureLocalDemoAuthOwner()
+  const data = await requestRaw<unknown>('/api/compute/local-demo/capability', { signal }, false, origin)
+  requireCurrentLocalDemoAuthOwner(owner)
+  return LocalDemoCapabilitySchema.parse(data)
 }
 
-export function switchLocalDemoRole(role: LocalDemoRole, signal?: AbortSignal) {
+export async function switchLocalDemoRole(role: LocalDemoRole, signal?: AbortSignal, apiOrigin = getKodApiOrigin()) {
+  const origin = parseLocalDemoApiOrigin(apiOrigin)
   const parsedRole = z.enum(['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER']).parse(role)
-  return requestRaw<unknown>(`/api/compute/local-demo/session/${encodeURIComponent(parsedRole)}`, {
-    method: 'POST',
-    retry: 0,
-    signal,
-  }).then((data) => LocalDemoSessionSchema.parse(data))
+  const owner = captureLocalDemoAuthOwner()
+  const data = await requestRaw<unknown>(
+    `/api/compute/local-demo/session/${encodeURIComponent(parsedRole)}`,
+    {
+      method: 'POST',
+      retry: 0,
+      signal,
+    },
+    false,
+    origin
+  )
+  requireCurrentLocalDemoAuthOwner(owner)
+  return LocalDemoSessionSchema.parse(data)
 }
 
 export function listCardHourMarketListings() {

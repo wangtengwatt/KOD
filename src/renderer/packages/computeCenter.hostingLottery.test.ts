@@ -3,12 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   ofetch: vi.fn(),
   refreshKodSession: vi.fn(),
-  authState: { accessToken: 'tenant-access-token' as string | null, accountId: '9007199254740993001' as string | null },
+  apiOrigin: 'https://kod.test',
+  authState: {
+    accessToken: 'tenant-access-token' as string | null,
+    refreshToken: 'tenant-refresh-token' as string | null,
+    accountId: '9007199254740993001' as string | null,
+    loginEmail: 'tenant@kod.test' as string | null,
+  },
 }))
 
 vi.mock('ofetch', () => ({ ofetch: mocks.ofetch }))
 vi.mock('@/packages/remote', () => ({
-  getKodApiOrigin: () => 'https://kod.test',
+  getKodApiOrigin: () => mocks.apiOrigin,
   refreshKodSession: mocks.refreshKodSession,
 }))
 vi.mock('@/packages/computeImageUpload', () => ({
@@ -31,14 +37,19 @@ type HostingLotteryContracts = {
   LotteryDrawSchema: { parse: (value: unknown) => unknown }
   LotteryHistorySchema: { parse: (value: unknown) => unknown }
   LocalDemoCapabilitySchema: { parse: (value: unknown) => unknown }
+  parseLocalDemoApiOrigin: (origin: string) => string
   getPlatformLeaseDetails: (leaseId: string) => Promise<unknown>
   listAdminPlatformSkus: () => Promise<unknown>
   upsertAdminPlatformSku: (input: PlatformSkuAdminInput) => Promise<unknown>
   listLotteryEligibilities: (status?: 'PENDING' | 'DRAWN' | 'DISMISSED') => Promise<unknown>
   drawLotteryEligibility: (eligibilityId: string, requestId: string) => Promise<unknown>
   listLotteryHistory: () => Promise<unknown>
-  getLocalDemoCapability: (signal?: AbortSignal) => Promise<unknown>
-  switchLocalDemoRole: (role: 'ADMIN' | 'HOSTING_TENANT' | 'GPU_BUYER', signal?: AbortSignal) => Promise<unknown>
+  getLocalDemoCapability: (signal?: AbortSignal, origin?: string) => Promise<unknown>
+  switchLocalDemoRole: (
+    role: 'ADMIN' | 'HOSTING_TENANT' | 'GPU_BUYER',
+    signal?: AbortSignal,
+    origin?: string
+  ) => Promise<unknown>
 }
 
 const contracts: HostingLotteryContracts = computeCenter
@@ -178,8 +189,11 @@ describe('hosting, lottery, and local demo contracts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.ofetch.mockReset()
+    mocks.apiOrigin = 'https://kod.test'
     mocks.authState.accessToken = 'tenant-access-token'
+    mocks.authState.refreshToken = 'tenant-refresh-token'
     mocks.authState.accountId = ids.user
+    mocks.authState.loginEmail = 'tenant@kod.test'
   })
 
   it('exposes all planned authenticated contract APIs', () => {
@@ -383,12 +397,6 @@ describe('hosting, lottery, and local demo contracts', () => {
       .mockResolvedValueOnce({ code: 0, data: platformSku })
       .mockResolvedValueOnce({ code: 0, data: [lotteryEligibility] })
       .mockResolvedValueOnce({ code: 0, data: lotteryDraw })
-      .mockResolvedValueOnce({ enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] })
-      .mockResolvedValueOnce({
-        token: 'demo-access-token',
-        accountId: ids.user,
-        expiresAt: '2026-08-25T13:10:00Z',
-      })
 
     await expect(contracts.getPlatformLeaseDetails(ids.lease)).resolves.toMatchObject({ totalCost: '720.000' })
     await expect(contracts.listAdminPlatformSkus()).resolves.toMatchObject([
@@ -402,12 +410,6 @@ describe('hosting, lottery, and local demo contracts', () => {
     await expect(contracts.drawLotteryEligibility(ids.eligibility, 'draw-request-1')).resolves.toMatchObject({
       id: ids.draw,
     })
-    await expect(contracts.getLocalDemoCapability()).resolves.toEqual({
-      enabled: true,
-      roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'],
-    })
-    await expect(contracts.switchLocalDemoRole('HOSTING_TENANT')).resolves.toMatchObject({ accountId: ids.user })
-
     const authenticated = { Authorization: 'Bearer tenant-access-token' }
     expect(mocks.ofetch).toHaveBeenNthCalledWith(
       1,
@@ -440,19 +442,107 @@ describe('hosting, lottery, and local demo contracts', () => {
         headers: authenticated,
       })
     )
+  })
+
+  it('bootstraps raw capability and role sessions while signed out without sending stale authorization', async () => {
+    mocks.apiOrigin = 'http://localhost:8080/'
+    mocks.authState.accessToken = null
+    mocks.authState.refreshToken = null
+    mocks.authState.accountId = null
+    mocks.authState.loginEmail = null
+    mocks.ofetch
+      .mockResolvedValueOnce({ enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] })
+      .mockResolvedValueOnce({
+        token: 'demo-access-token',
+        accountId: ids.user,
+        expiresAt: '2026-08-25T13:10:00Z',
+      })
+
+    await expect(contracts.getLocalDemoCapability()).resolves.toEqual({
+      enabled: true,
+      roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'],
+    })
+    await expect(contracts.switchLocalDemoRole('HOSTING_TENANT')).resolves.toMatchObject({ accountId: ids.user })
+
     expect(mocks.ofetch).toHaveBeenNthCalledWith(
-      6,
-      'https://kod.test/api/compute/local-demo/capability',
-      expect.objectContaining({ headers: authenticated, ignoreResponseError: false })
+      1,
+      'http://localhost:8080/api/compute/local-demo/capability',
+      expect.objectContaining({ headers: {}, ignoreResponseError: false })
     )
     expect(mocks.ofetch).toHaveBeenNthCalledWith(
-      7,
-      'https://kod.test/api/compute/local-demo/session/HOSTING_TENANT',
-      expect.objectContaining({ method: 'POST', retry: 0, headers: authenticated, ignoreResponseError: false })
+      2,
+      'http://localhost:8080/api/compute/local-demo/session/HOSTING_TENANT',
+      expect.objectContaining({ method: 'POST', retry: 0, headers: {}, ignoreResponseError: false })
     )
   })
 
+  it('accepts only canonical HTTP loopback origins for local-demo transport', async () => {
+    const accepted = [
+      ['http://localhost', 'http://localhost'],
+      ['http://localhost/', 'http://localhost'],
+      ['http://localhost:8080', 'http://localhost:8080'],
+      ['http://127.0.0.1:8080/', 'http://127.0.0.1:8080'],
+      ['http://[::1]', 'http://[::1]'],
+      ['http://[::1]:8080/', 'http://[::1]:8080'],
+    ] as const
+    for (const [input, expected] of accepted) expect(contracts.parseLocalDemoApiOrigin(input)).toBe(expected)
+
+    const rejected = [
+      'https://localhost:8080',
+      'http://user@localhost:8080',
+      'http://user:pass@localhost:8080',
+      'http://localhost\\@remote.example',
+      'http://localhost/path',
+      'http://localhost?demo=1',
+      'http://localhost#demo',
+      'http:localhost',
+      'http://remote.example',
+      'HTTP://localhost',
+      'http://localhost//',
+      'http://localhost:08080',
+      ' http://localhost',
+    ]
+    for (const origin of rejected) {
+      expect(() => contracts.parseLocalDemoApiOrigin(origin)).toThrow()
+      await expect(contracts.getLocalDemoCapability(undefined, origin)).rejects.toThrow()
+      await expect(contracts.switchLocalDemoRole('ADMIN', undefined, origin)).rejects.toThrow()
+    }
+    expect(mocks.ofetch).not.toHaveBeenCalled()
+  })
+
+  it('rejects a late public response after any captured auth-session owner field changes', async () => {
+    const owner = {
+      accessToken: 'owner-access',
+      refreshToken: 'owner-refresh',
+      accountId: ids.user,
+      loginEmail: 'owner@kod.test',
+    }
+    const changes = [
+      { accessToken: 'external-access' },
+      { refreshToken: 'external-refresh' },
+      { accountId: '9007199254740993999' },
+      { loginEmail: 'external@kod.test' },
+    ]
+    mocks.apiOrigin = 'http://127.0.0.1:8080'
+
+    for (const change of changes) {
+      Object.assign(mocks.authState, owner)
+      let resolveResponse: ((value: unknown) => void) | undefined
+      mocks.ofetch.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveResponse = resolve
+          })
+      )
+      const pending = contracts.switchLocalDemoRole('GPU_BUYER')
+      Object.assign(mocks.authState, change)
+      resolveResponse?.({ token: 'late-token', accountId: ids.user, expiresAt: '2026-08-25T13:10:00Z' })
+      await expect(pending).rejects.toThrow('账户已切换')
+    }
+  })
+
   it('rejects wrapped, refresh-bearing, and expired local-demo sessions from the raw contract', async () => {
+    mocks.apiOrigin = 'http://localhost:8080'
     mocks.ofetch
       .mockResolvedValueOnce({ code: 0, data: { enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] } })
       .mockResolvedValueOnce({
@@ -467,6 +557,7 @@ describe('hosting, lottery, and local demo contracts', () => {
   })
 
   it('does not attempt a refresh when an access-only local-demo session expires', async () => {
+    mocks.authState.refreshToken = null
     mocks.ofetch.mockResolvedValueOnce({ code: 401, message: 'expired' })
 
     await expect(contracts.getPlatformLeaseDetails(ids.lease)).rejects.toThrow('expired')

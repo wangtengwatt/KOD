@@ -4,16 +4,21 @@ import { MantineProvider } from '@mantine/core'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { LocalDemoSession } from '@/packages/computeCenter'
+import { authInfoStore } from '@/stores/authInfoStore'
 
 const mocks = vi.hoisted(() => ({
   getLocalDemoCapability: vi.fn(),
   switchLocalDemoRole: vi.fn(),
 }))
 
-vi.mock('@/packages/computeCenter', () => ({
-  getLocalDemoCapability: mocks.getLocalDemoCapability,
-  switchLocalDemoRole: mocks.switchLocalDemoRole,
-}))
+vi.mock('@/packages/computeCenter', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/packages/computeCenter')>()
+  return {
+    ...original,
+    getLocalDemoCapability: mocks.getLocalDemoCapability,
+    switchLocalDemoRole: mocks.switchLocalDemoRole,
+  }
+})
 
 import { LocalDemoRoleSwitcher } from './LocalDemoRoleSwitcher'
 
@@ -34,8 +39,26 @@ function renderSwitcher(origin: string, onSession = vi.fn()) {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, reject, resolve }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.getLocalDemoCapability.mockReset()
+  mocks.switchLocalDemoRole.mockReset()
+  authInfoStore.setState({
+    accessToken: 'owner-a-access',
+    refreshToken: 'owner-a-refresh',
+    accountId: '9007199254740993001',
+    loginEmail: 'owner-a@kod.test',
+  })
   mocks.getLocalDemoCapability.mockResolvedValue({ enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] })
   mocks.switchLocalDemoRole.mockResolvedValue(session('9007199254740993001'))
   vi.stubGlobal(
@@ -55,6 +78,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  authInfoStore.getState().clearTokens()
   vi.unstubAllGlobals()
 })
 
@@ -78,6 +102,52 @@ it('renders local roles only after a strict affirmative capability on an exact H
   renderSwitcher('http://127.0.0.1:8080')
   await waitFor(() => expect(mocks.getLocalDemoCapability).toHaveBeenCalledTimes(2))
   expect(screen.queryByRole('group', { name: '本地演示角色' })).toBeNull()
+
+  cleanup()
+  mocks.getLocalDemoCapability.mockRejectedValue(new Error('unavailable'))
+  renderSwitcher('http://[::1]:8080')
+  await waitFor(() => expect(mocks.getLocalDemoCapability).toHaveBeenCalledTimes(3))
+  expect(screen.queryByRole('group', { name: '本地演示角色' })).toBeNull()
+})
+
+it('does not reveal controls from a capability response owned by an earlier auth session', async () => {
+  const firstCapability = deferred<{ enabled: boolean; roles: ['ADMIN'] }>()
+  mocks.getLocalDemoCapability
+    .mockImplementationOnce(() => firstCapability.promise)
+    .mockResolvedValueOnce({ enabled: false, roles: [] })
+  renderSwitcher('http://localhost:8080')
+  await waitFor(() => expect(mocks.getLocalDemoCapability).toHaveBeenCalledTimes(1))
+
+  act(() => {
+    authInfoStore.setState({
+      accessToken: 'owner-b-access',
+      refreshToken: 'owner-b-refresh',
+      accountId: '9007199254740993002',
+      loginEmail: 'owner-b@kod.test',
+    })
+  })
+  await waitFor(() => expect(mocks.getLocalDemoCapability).toHaveBeenCalledTimes(2))
+  await act(async () => firstCapability.resolve({ enabled: true, roles: ['ADMIN'] }))
+
+  expect(screen.queryByRole('group')).toBeNull()
+})
+
+it('does not reveal controls when the view leaves the local origin before capability resolves', async () => {
+  const firstCapability = deferred<{ enabled: boolean; roles: ['ADMIN'] }>()
+  mocks.getLocalDemoCapability.mockImplementationOnce(() => firstCapability.promise)
+  const onSession = vi.fn()
+  const view = renderSwitcher('http://localhost:8080', onSession)
+  await waitFor(() => expect(mocks.getLocalDemoCapability).toHaveBeenCalledTimes(1))
+
+  view.rerender(
+    <MantineProvider>
+      <LocalDemoRoleSwitcher apiOrigin="https://kod.example" onSession={onSession} />
+    </MantineProvider>
+  )
+  await act(async () => firstCapability.resolve({ enabled: true, roles: ['ADMIN'] }))
+
+  expect(mocks.getLocalDemoCapability).toHaveBeenCalledTimes(1)
+  expect(screen.queryByRole('group')).toBeNull()
 })
 
 it('keeps the latest role request authoritative when an earlier role response arrives late', async () => {
