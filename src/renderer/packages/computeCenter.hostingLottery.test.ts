@@ -29,12 +29,14 @@ type HostingLotteryContracts = {
   PlatformSkuAdminInputSchema: { parse: (value: unknown) => unknown }
   LotteryEligibilitySchema: { parse: (value: unknown) => unknown }
   LotteryDrawSchema: { parse: (value: unknown) => unknown }
+  LotteryHistorySchema: { parse: (value: unknown) => unknown }
   LocalDemoCapabilitySchema: { parse: (value: unknown) => unknown }
   getPlatformLeaseDetails: (leaseId: string) => Promise<unknown>
   listAdminPlatformSkus: () => Promise<unknown>
   upsertAdminPlatformSku: (input: PlatformSkuAdminInput) => Promise<unknown>
   listLotteryEligibilities: (status?: 'PENDING' | 'DRAWN' | 'DISMISSED') => Promise<unknown>
   drawLotteryEligibility: (eligibilityId: string, requestId: string) => Promise<unknown>
+  listLotteryHistory: () => Promise<unknown>
   getLocalDemoCapability: () => Promise<unknown>
   switchLocalDemoRole: (role: 'ADMIN' | 'HOSTING_TENANT' | 'GPU_BUYER') => Promise<unknown>
 }
@@ -159,9 +161,23 @@ const lotteryDraw = {
   drawnAt: '2026-08-25T13:01:00',
 } as const
 
+const lotteryHistory = {
+  eligibilityId: ids.eligibility,
+  drawId: ids.draw,
+  sourceType: 'GPU_RESERVATION',
+  sourceId: ids.reservation,
+  rewardBase: '12.000',
+  rewardAmount: '0.600',
+  rewardLedgerId: null,
+  ruleVersion: 1,
+  rateBasisPoints: 500,
+  drawnAt: '2026-08-25T13:01:00',
+} as const
+
 describe('hosting, lottery, and local demo contracts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.ofetch.mockReset()
     mocks.authState.accessToken = 'tenant-access-token'
     mocks.authState.accountId = ids.user
   })
@@ -172,8 +188,83 @@ describe('hosting, lottery, and local demo contracts', () => {
     expect(contracts.upsertAdminPlatformSku).toBeTypeOf('function')
     expect(contracts.listLotteryEligibilities).toBeTypeOf('function')
     expect(contracts.drawLotteryEligibility).toBeTypeOf('function')
+    expect(contracts.listLotteryHistory).toBeTypeOf('function')
     expect(contracts.getLocalDemoCapability).toBeTypeOf('function')
     expect(contracts.switchLocalDemoRole).toBeTypeOf('function')
+  })
+
+  it('decodes persistent lottery history without coercing IDs or decimals', () => {
+    expect(contracts.LotteryHistorySchema.parse(lotteryHistory)).toEqual(lotteryHistory)
+    expect(contracts.LotteryHistorySchema.parse({ ...lotteryHistory, rewardLedgerId: ids.ledger })).toMatchObject({
+      rewardLedgerId: ids.ledger,
+    })
+    for (const field of ['eligibilityId', 'drawId', 'sourceId', 'rewardLedgerId'] as const) {
+      expect(() =>
+        contracts.LotteryHistorySchema.parse({
+          ...lotteryHistory,
+          [field]: Number(lotteryHistory[field] ?? ids.ledger),
+        })
+      ).toThrow()
+    }
+    for (const field of ['rewardBase', 'rewardAmount'] as const) {
+      expect(() =>
+        contracts.LotteryHistorySchema.parse({ ...lotteryHistory, [field]: Number(lotteryHistory[field]) })
+      ).toThrow()
+    }
+    expect(() => contracts.LotteryHistorySchema.parse({ ...lotteryHistory, sourceType: 'GPU_ORDER' })).toThrow()
+    expect(() => contracts.LotteryHistorySchema.parse({ ...lotteryHistory, ruleVersion: 1.5 })).toThrow()
+    expect(() => contracts.LotteryHistorySchema.parse({ ...lotteryHistory, rateBasisPoints: 500.5 })).toThrow()
+    expect(() => contracts.LotteryHistorySchema.parse({ ...lotteryHistory, unexpected: true })).toThrow()
+  })
+
+  it('accepts blank optional SKU descriptions and rejects every zero-valued positive field before requesting', () => {
+    expect(
+      contracts.PlatformSkuAdminInputSchema.parse({
+        ...adminSku,
+        cpuDescription: '',
+        networkDescription: '',
+        packageDurationHours: 8_760,
+        deliveryDeadlineHours: 720,
+      })
+    ).toMatchObject({ cpuDescription: '', networkDescription: '' })
+
+    const invalidInputs = [
+      { ...adminSku, gpuMemoryGb: 0 },
+      { ...adminSku, gpuCount: 0 },
+      { ...adminSku, ramGb: 0 },
+      { ...adminSku, storageGb: 0 },
+      { ...adminSku, packageDurationHours: 0 },
+      { ...adminSku, deliveryDeadlineHours: 0 },
+      { ...adminSku, monthlyRent: '0.000' },
+      { ...adminSku, platformSalePrice: '0.000' },
+    ]
+
+    for (const input of invalidInputs) {
+      expect(() => contracts.upsertAdminPlatformSku(input as PlatformSkuAdminInput)).toThrow()
+    }
+    expect(() => contracts.PlatformSkuAdminInputSchema.parse({ ...adminSku, packageDurationHours: 8_761 })).toThrow()
+    expect(() => contracts.PlatformSkuAdminInputSchema.parse({ ...adminSku, deliveryDeadlineHours: 721 })).toThrow()
+    expect(() => contracts.PlatformSkuAdminInputSchema.parse({ ...adminSku, status: 'PAUSED' })).toThrow()
+    expect(mocks.ofetch).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid lottery status before sending a request', () => {
+    mocks.ofetch.mockResolvedValue({ code: 0, data: [] })
+
+    expect(() =>
+      contracts.listLotteryEligibilities('INVALID' as Parameters<typeof contracts.listLotteryEligibilities>[0])
+    ).toThrow()
+    expect(mocks.ofetch).not.toHaveBeenCalled()
+  })
+
+  it('reads persistent lottery history from its authoritative route', async () => {
+    mocks.ofetch.mockResolvedValueOnce({ code: 0, data: [lotteryHistory] })
+
+    await expect(contracts.listLotteryHistory()).resolves.toEqual([lotteryHistory])
+    expect(mocks.ofetch).toHaveBeenCalledWith(
+      'https://kod.test/api/compute/lottery/history',
+      expect.objectContaining({ headers: { Authorization: 'Bearer tenant-access-token' } })
+    )
   })
 
   it('keeps 19-digit identifiers and decimal values as strings while rejecting numeric coercion and invalid enums', () => {

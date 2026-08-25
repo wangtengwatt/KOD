@@ -25,3 +25,11 @@
 
 - Changed only `src/renderer/packages/computeCenter.ts`, its focused test, and this report; protected website frontend/assets and KAI branding were not touched.
 - The local-demo routes are pinned to the approved platform plan: `GET /api/compute/local-demo/capability` and `POST /api/compute/local-demo/session/{role}`. The backend local-demo implementation was not present during this task, so integration must confirm its `enabled`, `roles`, and `{ token, refreshToken, accountId }` response shapes.
+
+## Review round 1
+
+- Added strict `LotteryHistory` decoding and authenticated `GET /api/compute/lottery/history`, preserving every ID and decimal as a string and accepting a nullable string reward-ledger ID.
+- Aligned administrator SKU input boundaries with the reviewed backend contract: positive capacity/duration/price fields, duration/deadline maxima, blank CPU/network descriptions, and pre-request rejection.
+- Added runtime Zod parsing for lottery eligibility status so an invalid status cannot issue a request.
+- Route ruling: `/api/compute/local-demo/*` is authoritative. The platform design's API-placement section still says `/api/local-demo/*`; the reviewed implementation plan and this client intentionally retain the `/api/compute/local-demo/*` prefix.
+- Review TDD: the expanded focused suite produced five expected failures before implementation, then passed 8/8 after the contract fixes.

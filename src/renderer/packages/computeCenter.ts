@@ -484,6 +484,9 @@ const strictContractId = z.string().regex(/^[1-9]\d{0,18}$/, { message: 'ID must
 const strictContractDecimal = z.string().regex(/^\d{1,17}(?:\.\d{1,3})?$/, {
   message: 'value must be a nonnegative decimal string with at most three places',
 })
+const strictPositiveContractDecimal = strictContractDecimal.refine((value) => /[1-9]/.test(value), {
+  message: 'value must be a positive decimal string',
+})
 
 export const ComputeAccountSchema: z.ZodType<ComputeAccount> = z
   .object({
@@ -679,22 +682,22 @@ export const PlatformLeaseDetailsSchema = z.object({
 export type PlatformLeaseDetails = z.infer<typeof PlatformLeaseDetailsSchema>
 
 export const PlatformSkuAdminInputSchema = z.object({
-  skuCode: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string(),
-  region: z.string().min(1),
-  gpuModel: z.string().min(1),
-  gpuMemoryGb: z.number().int().nonnegative(),
-  gpuCount: z.number().int().positive(),
-  cpuDescription: z.string().min(1),
-  ramGb: z.number().int().nonnegative(),
-  storageGb: z.number().int().nonnegative(),
-  networkDescription: z.string().min(1),
-  monthlyRent: strictContractDecimal,
-  platformSalePrice: strictContractDecimal,
-  packageDurationHours: z.number().int().positive(),
-  deliveryDeadlineHours: z.number().int().nonnegative(),
-  totalInventory: z.number().int().nonnegative(),
+  skuCode: z.string().min(1).max(64),
+  name: z.string().min(1).max(128),
+  description: z.string().max(1_000),
+  region: z.string().min(1).max(128),
+  gpuModel: z.string().min(1).max(128),
+  gpuMemoryGb: z.number().int().positive().safe(),
+  gpuCount: z.number().int().positive().safe(),
+  cpuDescription: z.string().max(256),
+  ramGb: z.number().int().positive().safe(),
+  storageGb: z.number().int().positive().safe(),
+  networkDescription: z.string().max(256),
+  monthlyRent: strictPositiveContractDecimal,
+  platformSalePrice: strictPositiveContractDecimal,
+  packageDurationHours: z.number().int().positive().max(8_760).safe(),
+  deliveryDeadlineHours: z.number().int().positive().max(720).safe(),
+  totalInventory: z.number().int().nonnegative().safe(),
   status: z.enum(['ACTIVE', 'DISABLED']),
 })
 export type PlatformSkuAdminInput = z.infer<typeof PlatformSkuAdminInputSchema>
@@ -708,13 +711,16 @@ const PlatformSkuAdminSchema = PlatformSkuAdminInputSchema.extend({
 })
 export type PlatformSkuAdmin = z.infer<typeof PlatformSkuAdminSchema>
 
+const LotterySourceTypeSchema = z.enum(['GPU_RESERVATION', 'HOSTING_PERIOD'])
+const LotteryEligibilityStatusSchema = z.enum(['PENDING', 'DRAWN', 'DISMISSED'])
+
 export const LotteryEligibilitySchema = z.object({
   id: strictContractId,
   beneficiaryUserId: strictContractId,
-  sourceType: z.enum(['GPU_RESERVATION', 'HOSTING_PERIOD']),
+  sourceType: LotterySourceTypeSchema,
   sourceId: strictContractId,
   rewardBase: strictContractDecimal,
-  status: z.enum(['PENDING', 'DRAWN', 'DISMISSED']),
+  status: LotteryEligibilityStatusSchema,
   ruleVersion: z.number().int().positive(),
   createdAt: contractDateTime,
   drawnAt: contractDateTime.nullable(),
@@ -733,6 +739,22 @@ export const LotteryDrawSchema = z.object({
   drawnAt: contractDateTime,
 })
 export type LotteryDraw = z.infer<typeof LotteryDrawSchema>
+
+export const LotteryHistorySchema = z
+  .object({
+    eligibilityId: strictContractId,
+    drawId: strictContractId,
+    sourceType: LotterySourceTypeSchema,
+    sourceId: strictContractId,
+    rewardBase: strictContractDecimal,
+    rewardAmount: strictContractDecimal,
+    rewardLedgerId: strictContractId.nullable(),
+    ruleVersion: z.number().int().positive(),
+    rateBasisPoints: z.number().int().positive(),
+    drawnAt: contractDateTime,
+  })
+  .strict()
+export type LotteryHistory = z.infer<typeof LotteryHistorySchema>
 
 export const LocalDemoCapabilitySchema = z.object({
   enabled: z.boolean(),
@@ -1322,7 +1344,8 @@ export function upsertAdminPlatformSku(input: PlatformSkuAdminInput) {
 }
 
 export function listLotteryEligibilities(status?: LotteryEligibility['status']) {
-  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  const parsedStatus = status == null ? undefined : LotteryEligibilityStatusSchema.parse(status)
+  const query = parsedStatus ? `?status=${encodeURIComponent(parsedStatus)}` : ''
   return request<unknown>(`/api/compute/lottery/eligibilities${query}`).then((data) =>
     z.array(LotteryEligibilitySchema).parse(data)
   )
@@ -1336,6 +1359,10 @@ export function drawLotteryEligibility(eligibilityId: string, requestId: string)
     body,
     retry: 0,
   }).then((data) => LotteryDrawSchema.parse(data))
+}
+
+export function listLotteryHistory() {
+  return request<unknown>('/api/compute/lottery/history').then((data) => z.array(LotteryHistorySchema).parse(data))
 }
 
 export function getLocalDemoCapability() {
