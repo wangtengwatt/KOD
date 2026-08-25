@@ -28,7 +28,7 @@
 
 ## 6. Verify and deliver
 
-- [ ] 6.1 Run focused and relevant regression tests, TypeScript checking, changed-file Biome, production build, strict OpenSpec validation, whitespace, protected-scope, identity-precision, and added-secret scans.
+- [ ] 6.1 Run focused and relevant regression tests, TypeScript checking, changed-file Biome, production build, strict OpenSpec validation, whitespace, protected-scope, identity-precision, added-secret, KAI Logo hash, and deployed green-white website screenshot scans.
 - [ ] 6.2 Run isolated write-capable end-to-end tests for recharge sync, referral reward, ad reward, and monthly hosting; run only approved read-only health and account rendering checks against production.
 - [ ] 6.3 Deploy the verified website counterpart, package the Windows client, inspect and smoke-test the existing desktop shortcut target/log chain, and record rollback evidence.
 - [ ] 6.4 Integrate and push the approved commits to GitLab branch `suanlizhongxin_KOD`; stop and ask the user for every merge or cherry-pick conflict before resolving it.
