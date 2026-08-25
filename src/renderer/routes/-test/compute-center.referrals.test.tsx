@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { MantineProvider } from '@mantine/core'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { MantineProvider } from '@mantine/core'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ComputeAccount } from '@/packages/computeCenter'

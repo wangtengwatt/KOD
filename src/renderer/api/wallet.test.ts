@@ -25,7 +25,10 @@ afterEach(() => {
 describe('wallet contracts', () => {
   it('normalizes the website page_size recharge-history contract', async () => {
     authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret' })
-    vi.stubGlobal('fetch', vi.fn(async () => ok({ items: [], total: 0, page: 1, page_size: 10 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ok({ items: [], total: 0, page: 1, page_size: 10 }))
+    )
 
     await expect(walletApi.getTopupHistory(1, 10)).resolves.toEqual({
       items: [],
