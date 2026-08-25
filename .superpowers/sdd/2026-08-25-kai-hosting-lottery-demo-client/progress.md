@@ -46,3 +46,7 @@ Task 4 TDD: RED confirmed missing modal/panel/route behavior; GREEN focused 10/1
 Task 4 verification: TypeScript, changed Biome, strict OpenSpec, production build, diff/protected/secret scans clean; full 1,717 pass / 54 skip with the same 6 unrelated baseline failures.
 
 Task 4: implementation complete (feature range 4922497..5fb5026); independent re-review pending.
+
+Task 3 review fix round 1: platform lease IDs and financial values are strict strings, raw lease prices retain full service precision, and failed detail requests have a retry-success regression; focused 39/39 and related 79/79 pass.
+
+Task 3 review fix round 1 verification: TypeScript, changed Biome, strict OpenSpec, and production build pass; full 1,729 pass / 54 skip with the same 6 unrelated baseline failures; exact feature range 10cdd53..e0003a4.
