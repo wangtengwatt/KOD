@@ -26,3 +26,5 @@ Task 1: fix round 1/5 (3 addressed, 1 open; commits 3d6d7f0..38ad96a)
 Task 1: fix round 2/5 (1 addressed, 0 open; commits 38ad96a..9620225)
 
 Task 1: complete (commits 9f28c3b..9620225, independent re-review clean)
+
+Task 2 contract-alignment fix: explicit server allocation, backend SKU normalization, and Java-int limits implemented in edfdfb3; focused 24/24, related 49/49, type/Biome/OpenSpec/build clean; independent review pending
