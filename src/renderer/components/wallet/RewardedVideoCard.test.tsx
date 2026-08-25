@@ -591,6 +591,25 @@ describe('RewardedVideoCard', () => {
     expect(screen.getByText('有效观看 2/3 秒')).toBeTruthy()
   })
 
+  it('retries a recoverable media load without discarding already accepted progress', async () => {
+    const load = vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => undefined)
+    renderCard()
+    const video = await openAd()
+
+    act(() => advancePlayback(video, 1))
+    await waitFor(() => expect(mocks.progressRewardedAd).toHaveBeenCalledTimes(1))
+    fireEvent.error(video)
+
+    expect(await screen.findByRole('alert', { name: '视频加载失败' })).toBeTruthy()
+    expect(screen.getByText('有效观看 1/3 秒')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '重试加载' }))
+
+    expect(load).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert', { name: '视频加载失败' })).toBeNull()
+    expect(screen.getByText('有效观看 1/3 秒')).toBeTruthy()
+    expect(mocks.abandonRewardedAd).not.toHaveBeenCalled()
+  })
+
   it('deduplicates repeated ended events after becoming eligible', async () => {
     const onClaimed = vi.fn()
     renderCard(onClaimed)

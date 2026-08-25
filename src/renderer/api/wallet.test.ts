@@ -460,7 +460,7 @@ describe('wallet contracts', () => {
     expect(
       RewardedAdStatusWireSchema.parse({
         campaignId: 'kod-reward-2026-08',
-        assetPath: '/api/ads/kod-reward-2026-08.mp4',
+        assetPath: '/api/compute/ad-reward/media/kod-ad.mp4',
         posterPath: '/api/ads/kod-reward-2026-08-poster.jpg',
         durationSeconds: 25,
         minimumSeconds: 25,
@@ -477,7 +477,7 @@ describe('wallet contracts', () => {
       minimumSeconds: 25,
       nextEligibleDate: '2026-08-21',
       eligible: true,
-      videoUrl: new URL('/api/ads/kod-reward-2026-08.mp4', apiOrigin).toString(),
+      videoUrl: new URL('/api/compute/ad-reward/media/kod-ad.mp4', apiOrigin).toString(),
       posterUrl: new URL('/api/ads/kod-reward-2026-08-poster.jpg', apiOrigin).toString(),
     })
     expect(
