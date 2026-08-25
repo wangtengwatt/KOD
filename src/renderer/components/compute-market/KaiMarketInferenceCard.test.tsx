@@ -30,23 +30,25 @@ const successfulInference: NonNullable<KaiMarketInferenceView['lastSuccess']> = 
   },
 }
 
+const matchedVerification: NonNullable<KaiMarketInferenceView['verification']> = {
+  status: 'MATCHED',
+  inferenceId: '9007199254740993123',
+  actualTradeId: 'trade-550e8400-e29b-41d4-a716-446655440000',
+  actualSide: 'BUY',
+  actualPrice: '98002.60000000',
+  actualQuantity: '0.20000000',
+  actualAt: '2026-08-25T08:00:30Z',
+  directionMatched: true,
+  priceError: '0.10000000',
+}
+
 const freshView: KaiMarketInferenceView = {
   contractId: 'contract-H100-cn',
   status: 'FRESH',
   fingerprint: 'a'.repeat(64),
   checkedAt: '2026-08-25T08:00:01Z',
   lastSuccess: successfulInference,
-  verification: {
-    status: 'MATCHED',
-    inferenceId: '9007199254740993123',
-    actualTradeId: 'trade-550e8400-e29b-41d4-a716-446655440000',
-    actualSide: 'BUY',
-    actualPrice: '98002.60000000',
-    actualQuantity: '0.20000000',
-    actualAt: '2026-08-25T08:00:30Z',
-    directionMatched: true,
-    priceError: '0.10000000',
-  },
+  verification: matchedVerification,
 }
 
 function renderCard(
@@ -147,6 +149,23 @@ describe('KaiMarketInferenceCard', () => {
     ).toBeTruthy()
   })
 
+  it('labels the displayed prediction and an older verification with their exact inference ids', () => {
+    const previousInferenceId = '9007199254740993122'
+    renderCard({
+      ...freshView,
+      verification: {
+        ...matchedVerification,
+        inferenceId: previousInferenceId,
+      },
+    })
+
+    const prediction = screen.getByRole('region', { name: '模型预测结果' })
+    expect(within(prediction).getByText(`预测 ID ${successfulInference.inferenceId}`)).toBeTruthy()
+    const verification = screen.getByRole('region', { name: '真实成交核验' })
+    expect(within(verification).getByText(`核验目标 ID ${previousInferenceId}`)).toBeTruthy()
+    expect(within(verification).getByText('上一条预测核验')).toBeTruthy()
+  })
+
   it('keeps the last success visible and marks it stale when the current service is unavailable', () => {
     renderCard({
       ...freshView,
@@ -161,6 +180,7 @@ describe('KaiMarketInferenceCard', () => {
     expect(screen.getByText('上次成功时间')).toBeTruthy()
     expect(screen.getByText('2026-08-25T08:00:00Z')).toBeTruthy()
     expect(screen.getByText('2026-08-25T08:01:01Z')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('shows an honest first-load error and invokes only the supplied manual retry callback', () => {
@@ -178,6 +198,7 @@ describe('KaiMarketInferenceCard', () => {
 
     expect(screen.getByText('预测服务暂不可用')).toBeTruthy()
     expect(screen.getByText('尚无可显示的预测结果。')).toBeTruthy()
+    expect(screen.queryByText(/本次刷新失败/)).toBeNull()
     expect(screen.queryByText(MODEL_ANSWER)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '重试预测' }))
     expect(onRefresh).toHaveBeenCalledTimes(1)
@@ -195,6 +216,7 @@ describe('KaiMarketInferenceCard', () => {
 
     expect(screen.getByText('风险分析服务暂不可用')).toBeTruthy()
     expect(screen.queryByText('真实订单簿已确认')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('distinguishes a missed real event from the model prediction', () => {
@@ -220,5 +242,21 @@ describe('KaiMarketInferenceCard', () => {
     expect(within(verification).getByText('真实成交核验：未命中')).toBeTruthy()
     expect(within(verification).getByText(/SELL/)).toBeTruthy()
     expect(within(verification).getByText(/-3\.50000000/)).toBeTruthy()
+  })
+
+  it('wraps a long opaque real trade id without changing it', () => {
+    const actualTradeId = `trade-${'opaque'.repeat(30)}`
+    renderCard({
+      ...freshView,
+      verification: {
+        ...matchedVerification,
+        actualTradeId,
+      },
+    })
+
+    const verification = screen.getByRole('region', { name: '真实成交核验' })
+    const trade = within(verification).getByText((content) => content.includes(actualTradeId))
+    expect(trade.style.overflowWrap).toBe('anywhere')
+    expect(trade.textContent).toContain(actualTradeId)
   })
 })

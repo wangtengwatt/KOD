@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core'
+import { Badge, Button, Group, Paper, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core'
 import { IconBrain, IconRefresh, IconShieldCheck } from '@tabler/icons-react'
 import { useId } from 'react'
 import type {
@@ -16,7 +16,7 @@ export interface KaiMarketInferenceCardProps {
 export function KaiMarketInferenceCard({ view, onRefresh, refreshing = false }: KaiMarketInferenceCardProps) {
   const titleId = useId()
   const lastSuccess = view.lastSuccess
-  const status = statusDisplay(view.status)
+  const status = statusDisplay(view.status, Boolean(lastSuccess))
   const unavailable = view.status === 'UNAVAILABLE'
 
   return (
@@ -54,6 +54,11 @@ export function KaiMarketInferenceCard({ view, onRefresh, refreshing = false }: 
               <Text size="sm" c="dimmed">
                 {status.description}
               </Text>
+              {status.note && (
+                <Text size="sm" c="dimmed">
+                  {status.note}
+                </Text>
+              )}
             </Group>
           </div>
           <Button
@@ -84,17 +89,11 @@ export function KaiMarketInferenceCard({ view, onRefresh, refreshing = false }: 
           <Timestamp label="检查时间" value={view.checkedAt} />
         </SimpleGrid>
 
-        {unavailable && (
-          <Alert color="red" title="预测服务暂不可用" icon={<IconRefresh size={18} />}>
-            {lastSuccess ? '已保留上一次成功预测' : '尚无可显示的预测结果。'}
-          </Alert>
-        )}
-
         {lastSuccess ? (
           <>
             <PredictionPanel success={lastSuccess} />
             <PipelinePanel pipeline={lastSuccess.pipeline} />
-            <VerificationPanel verification={view.verification} />
+            <VerificationPanel verification={view.verification} currentInferenceId={lastSuccess.inferenceId} />
           </>
         ) : (
           !unavailable && <Text c="dimmed">尚无可显示的预测结果。</Text>
@@ -115,6 +114,9 @@ function PredictionPanel({ success }: { success: NonNullable<KaiMarketInferenceV
             {success.prediction.model}
           </Badge>
         </Group>
+        <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
+          预测 ID {success.inferenceId}
+        </Text>
         <Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
           {success.prediction.text}
         </Text>
@@ -142,9 +144,16 @@ function PipelinePanel({ pipeline }: { pipeline: KaiMarketPipeline | null }) {
   if (pipeline.status !== 'AVAILABLE') {
     const insufficientOrderBook = pipeline.status === 'INSUFFICIENT_ORDER_BOOK'
     return (
-      <Alert color={insufficientOrderBook ? 'yellow' : 'red'}>
-        {insufficientOrderBook ? '真实订单簿数据不足，未生成风险分析' : '风险分析服务暂不可用'}
-      </Alert>
+      <Paper
+        component="section"
+        aria-label="真实订单簿风险分析"
+        withBorder
+        radius="md"
+        p="sm"
+        bg={insufficientOrderBook ? 'var(--mantine-color-yellow-light)' : 'var(--mantine-color-red-light)'}
+      >
+        <Text size="sm">{insufficientOrderBook ? '真实订单簿数据不足，未生成风险分析' : '风险分析服务暂不可用'}</Text>
+      </Paper>
     )
   }
   return (
@@ -169,7 +178,13 @@ function PipelinePanel({ pipeline }: { pipeline: KaiMarketPipeline | null }) {
   )
 }
 
-function VerificationPanel({ verification }: { verification: KaiMarketVerification | null }) {
+function VerificationPanel({
+  verification,
+  currentInferenceId,
+}: {
+  verification: KaiMarketVerification | null
+  currentInferenceId: string
+}) {
   if (!verification) {
     return (
       <Paper component="section" aria-label="真实成交核验" withBorder radius="md" p="md">
@@ -190,6 +205,7 @@ function VerificationPanel({ verification }: { verification: KaiMarketVerificati
           <Text size="sm" c="dimmed" mt={4}>
             等待下一笔真实成交核验
           </Text>
+          <VerificationContext verificationId={verification.inferenceId} currentInferenceId={currentInferenceId} />
         </div>
       </Paper>
     )
@@ -213,7 +229,8 @@ function VerificationPanel({ verification }: { verification: KaiMarketVerificati
             {verification.status}
           </Badge>
         </Group>
-        <Text size="sm">
+        <VerificationContext verificationId={verification.inferenceId} currentInferenceId={currentInferenceId} />
+        <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
           真实成交 {verification.actualTradeId} · {verification.actualSide} · 价格 {verification.actualPrice} · 数量{' '}
           {verification.actualQuantity}
         </Text>
@@ -228,6 +245,28 @@ function VerificationPanel({ verification }: { verification: KaiMarketVerificati
   )
 }
 
+function VerificationContext({
+  verificationId,
+  currentInferenceId,
+}: {
+  verificationId: string
+  currentInferenceId: string
+}) {
+  const previousPrediction = verificationId !== currentInferenceId
+  return (
+    <Group gap="xs" wrap="wrap">
+      <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
+        核验目标 ID {verificationId}
+      </Text>
+      {previousPrediction && (
+        <Badge color="gray" variant="light">
+          上一条预测核验
+        </Badge>
+      )}
+    </Group>
+  )
+}
+
 function Timestamp({ label, value }: { label: string; value: string }) {
   return (
     <Text size="xs" c="dimmed">
@@ -239,12 +278,17 @@ function Timestamp({ label, value }: { label: string; value: string }) {
   )
 }
 
-function statusDisplay(status: KaiMarketInferenceView['status']) {
+function statusDisplay(status: KaiMarketInferenceView['status'], hasLastSuccess: boolean) {
   if (status === 'FRESH') {
     return { color: 'green', label: '最新预测', description: '实时成交序列已变化' }
   }
   if (status === 'CACHED') {
     return { color: 'teal', label: '缓存预测', description: '当前展示最近一次成功研判' }
   }
-  return { color: 'red', label: '服务异常', description: '本次刷新失败，行情报价不受影响' }
+  return {
+    color: 'red',
+    label: '预测服务暂不可用',
+    description: hasLastSuccess ? '已保留上一次成功预测' : '尚无可显示的预测结果。',
+    note: '行情报价不受影响',
+  }
 }
