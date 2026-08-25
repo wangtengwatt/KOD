@@ -20,9 +20,10 @@ describe('wallet cache identity', () => {
     expect(getWalletIdentity(null, '  User@Example.COM ', 'access', 'refresh')).toBe('email:user@example.com')
   })
 
-  it('requires the complete Portal login state', () => {
-    expect(getWalletIdentity('42', 'user@example.com', 'access', null)).toBeNull()
+  it('accepts an access-only session only when it has a stable account identity', () => {
+    expect(getWalletIdentity('42', 'user@example.com', 'access', null)).toBe('account:42')
     expect(getWalletIdentity(null, null, 'access', 'refresh')).toBeNull()
+    expect(getWalletIdentity(null, 'user@example.com', 'access', null)).toBeNull()
   })
 
   it('cancels and removes all account-scoped wallet and compute caches', async () => {

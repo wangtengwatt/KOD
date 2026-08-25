@@ -58,4 +58,26 @@ describe('authInfoStore', () => {
       loginEmail: 'user@example.com',
     })
   })
+
+  it('replaces a session atomically with an access-only local-demo session and leaves no refresh credential', () => {
+    authInfoStore.getState().setTokens({
+      accessToken: 'old',
+      refreshToken: 'old-refresh',
+      accountId: '2084099947250954241',
+      email: 'user@example.com',
+    })
+
+    authInfoStore.getState().setAccessOnlySession({
+      accessToken: 'demo-access',
+      accountId: '2084099947250954242',
+    })
+
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: 'demo-access',
+      refreshToken: null,
+      accountId: '2084099947250954242',
+      loginEmail: null,
+    })
+    expect(authInfoStore.getState().getTokens()).toBeNull()
+  })
 })

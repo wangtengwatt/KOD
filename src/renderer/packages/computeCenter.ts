@@ -773,17 +773,21 @@ export type LotteryHistory = z.infer<typeof LotteryHistorySchema>
 
 export const LOTTERY_DRAW_DEADLINE_MS = 15_000
 
-export const LocalDemoCapabilitySchema = z.object({
-  enabled: z.boolean(),
-  roles: z.array(z.enum(['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'])),
-})
+export const LocalDemoCapabilitySchema = z
+  .object({
+    enabled: z.boolean(),
+    roles: z.array(z.enum(['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'])),
+  })
+  .strict()
 export type LocalDemoCapability = z.infer<typeof LocalDemoCapabilitySchema>
 
-const LocalDemoSessionSchema = z.object({
-  token: z.string().min(1),
-  refreshToken: z.string().min(1),
-  accountId: strictContractId,
-})
+export const LocalDemoSessionSchema = z
+  .object({
+    token: z.string().min(1),
+    accountId: strictContractId,
+    expiresAt: z.iso.datetime({ offset: true }),
+  })
+  .strict()
 export type LocalDemoRole = z.infer<typeof LocalDemoCapabilitySchema>['roles'][number]
 export type LocalDemoSession = z.infer<typeof LocalDemoSessionSchema>
 
@@ -1153,6 +1157,7 @@ async function request<T>(
 ): Promise<T> {
   const session = authInfoStore.getState()
   const token = session.accessToken
+  const refreshToken = session.refreshToken
   const accountId = optionalAccountIdentity(session.accountId)
   if (authenticated && !token) {
     throw new Error('请先登录 KOD 账号')
@@ -1167,7 +1172,7 @@ async function request<T>(
   })
   if (authenticated) requireCurrentAccountIdentity(token, accountId)
   const isSafeToReplay = !options?.method || options.method === 'GET'
-  if (json.code === 401 && authenticated && token && isSafeToReplay && !authRefreshAttempted) {
+  if (json.code === 401 && authenticated && token && refreshToken && isSafeToReplay && !authRefreshAttempted) {
     await refreshKodSession(token, accountId)
     return request(path, options, authenticated, origin, true)
   }
@@ -1178,6 +1183,25 @@ async function request<T>(
     throw new Error(json.message || '算力中心响应缺少数据')
   }
   return json.data
+}
+
+async function requestRaw<T>(
+  path: string,
+  options?: FetchOptions<'json'>,
+  authenticated = true,
+  origin = getKodApiOrigin()
+) {
+  const session = authInfoStore.getState()
+  const token = session.accessToken
+  if (authenticated && !token) throw new Error('请先登录 KOD 账号')
+  return await ofetch<T>(`${origin.replace(/\/+$/, '')}${path}`, {
+    ...options,
+    headers: {
+      ...(options?.headers || {}),
+      ...(authenticated && token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    ignoreResponseError: false,
+  })
 }
 
 export const computeMarketplaceRequest = request
@@ -1384,15 +1408,18 @@ export function listLotteryHistory() {
   return request<unknown>('/api/compute/lottery/history').then((data) => z.array(LotteryHistorySchema).parse(data))
 }
 
-export function getLocalDemoCapability() {
-  return request<unknown>('/api/compute/local-demo/capability').then((data) => LocalDemoCapabilitySchema.parse(data))
+export function getLocalDemoCapability(signal?: AbortSignal) {
+  return requestRaw<unknown>('/api/compute/local-demo/capability', { signal }).then((data) =>
+    LocalDemoCapabilitySchema.parse(data)
+  )
 }
 
-export function switchLocalDemoRole(role: LocalDemoRole) {
+export function switchLocalDemoRole(role: LocalDemoRole, signal?: AbortSignal) {
   const parsedRole = z.enum(['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER']).parse(role)
-  return request<unknown>(`/api/compute/local-demo/session/${encodeURIComponent(parsedRole)}`, {
+  return requestRaw<unknown>(`/api/compute/local-demo/session/${encodeURIComponent(parsedRole)}`, {
     method: 'POST',
     retry: 0,
+    signal,
   }).then((data) => LocalDemoSessionSchema.parse(data))
 }
 

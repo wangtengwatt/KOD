@@ -12,6 +12,7 @@ interface AuthTokensState {
 
 interface AuthTokensActions {
   setTokens: (tokens: AuthTokens, options?: { preserveEmail?: boolean; preserveAccountId?: boolean }) => void
+  setAccessOnlySession: (session: { accessToken: string; accountId: string }) => void
   clearTokens: () => void
   getTokens: () => AuthTokens | null
 }
@@ -39,6 +40,15 @@ export const authInfoStore = createStore<AuthTokensState & AuthTokensActions>()(
             if (!options?.preserveEmail || tokens.email) {
               state.loginEmail = tokens.email ? tokens.email.trim().toLowerCase() : null
             }
+          })
+        },
+
+        setAccessOnlySession: (session) => {
+          set((state) => {
+            state.accessToken = session.accessToken
+            state.refreshToken = null
+            state.accountId = session.accountId
+            state.loginEmail = null
           })
         },
 
@@ -87,6 +97,7 @@ export const useAuthTokens = () => {
     refreshToken: state.refreshToken,
     accountId: state.accountId,
     setTokens: state.setTokens,
+    setAccessOnlySession: state.setAccessOnlySession,
     clearTokens: state.clearTokens,
     getTokens: state.getTokens,
   }))

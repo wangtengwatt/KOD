@@ -37,8 +37,8 @@ type HostingLotteryContracts = {
   listLotteryEligibilities: (status?: 'PENDING' | 'DRAWN' | 'DISMISSED') => Promise<unknown>
   drawLotteryEligibility: (eligibilityId: string, requestId: string) => Promise<unknown>
   listLotteryHistory: () => Promise<unknown>
-  getLocalDemoCapability: () => Promise<unknown>
-  switchLocalDemoRole: (role: 'ADMIN' | 'HOSTING_TENANT' | 'GPU_BUYER') => Promise<unknown>
+  getLocalDemoCapability: (signal?: AbortSignal) => Promise<unknown>
+  switchLocalDemoRole: (role: 'ADMIN' | 'HOSTING_TENANT' | 'GPU_BUYER', signal?: AbortSignal) => Promise<unknown>
 }
 
 const contracts: HostingLotteryContracts = computeCenter
@@ -372,6 +372,8 @@ describe('hosting, lottery, and local demo contracts', () => {
     expect(() => contracts.LotteryEligibilitySchema.parse({ ...lotteryEligibility, sourceType: 'GPU_ORDER' })).toThrow()
     expect(() => contracts.LotteryDrawSchema.parse({ ...lotteryDraw, rateBasisPoints: 400 })).toThrow()
     expect(() => contracts.LocalDemoCapabilitySchema.parse({ enabled: true, roles: ['OPERATOR'] })).toThrow()
+    expect(() => contracts.LocalDemoCapabilitySchema.parse({ code: 0, data: { enabled: true, roles: [] } })).toThrow()
+    expect(() => contracts.LocalDemoCapabilitySchema.parse({ enabled: false, roles: [], unexpected: true })).toThrow()
   })
 
   it('uses exact routes, methods, bodies, and the captured authenticated identity', async () => {
@@ -381,10 +383,11 @@ describe('hosting, lottery, and local demo contracts', () => {
       .mockResolvedValueOnce({ code: 0, data: platformSku })
       .mockResolvedValueOnce({ code: 0, data: [lotteryEligibility] })
       .mockResolvedValueOnce({ code: 0, data: lotteryDraw })
-      .mockResolvedValueOnce({ code: 0, data: { enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] } })
+      .mockResolvedValueOnce({ enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] })
       .mockResolvedValueOnce({
-        code: 0,
-        data: { token: 'demo-access-token', refreshToken: 'demo-refresh-token', accountId: ids.user },
+        token: 'demo-access-token',
+        accountId: ids.user,
+        expiresAt: '2026-08-25T13:10:00Z',
       })
 
     await expect(contracts.getPlatformLeaseDetails(ids.lease)).resolves.toMatchObject({ totalCost: '720.000' })
@@ -440,13 +443,34 @@ describe('hosting, lottery, and local demo contracts', () => {
     expect(mocks.ofetch).toHaveBeenNthCalledWith(
       6,
       'https://kod.test/api/compute/local-demo/capability',
-      expect.objectContaining({ headers: authenticated })
+      expect.objectContaining({ headers: authenticated, ignoreResponseError: false })
     )
     expect(mocks.ofetch).toHaveBeenNthCalledWith(
       7,
       'https://kod.test/api/compute/local-demo/session/HOSTING_TENANT',
-      expect.objectContaining({ method: 'POST', retry: 0, headers: authenticated })
+      expect.objectContaining({ method: 'POST', retry: 0, headers: authenticated, ignoreResponseError: false })
     )
+  })
+
+  it('rejects wrapped, refresh-bearing, and expired local-demo sessions from the raw contract', async () => {
+    mocks.ofetch
+      .mockResolvedValueOnce({ code: 0, data: { enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] } })
+      .mockResolvedValueOnce({
+        token: 'demo-access-token',
+        refreshToken: 'unexpected-refresh-token',
+        accountId: ids.user,
+        expiresAt: '2026-08-25T13:10:00Z',
+      })
+
+    await expect(contracts.getLocalDemoCapability()).rejects.toThrow()
+    await expect(contracts.switchLocalDemoRole('ADMIN')).rejects.toThrow()
+  })
+
+  it('does not attempt a refresh when an access-only local-demo session expires', async () => {
+    mocks.ofetch.mockResolvedValueOnce({ code: 401, message: 'expired' })
+
+    await expect(contracts.getPlatformLeaseDetails(ids.lease)).rejects.toThrow('expired')
+    expect(mocks.refreshKodSession).not.toHaveBeenCalled()
   })
 
   it('rejects a response that arrives after the authenticated account changes', async () => {

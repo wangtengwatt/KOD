@@ -54,6 +54,7 @@ import { z } from 'zod'
 import { AdminProductReviewCard, AdminReviewHistory } from '@/components/compute/AdminMarketplaceReview'
 import { CardHourAdminPanel, CardHourBusiness, CardHourMarketplace } from '@/components/compute/CardHourBusiness'
 import { HostedComputePanel } from '@/components/compute/HostedComputePanel'
+import { LocalDemoRoleSwitcher } from '@/components/compute/LocalDemoRoleSwitcher'
 import { MarketplaceOrderWorkspace } from '@/components/compute/MarketplaceOrderWorkspace'
 import { PlatformHostingPanel } from '@/components/compute/PlatformHostingPanel'
 import { PlatformInventoryAdminPanel } from '@/components/compute/PlatformInventoryAdminPanel'
@@ -62,7 +63,7 @@ import { SettlementLotteryPanel } from '@/components/compute/SettlementLotteryPa
 import { MarketIntelligencePanel } from '@/components/compute-market'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
-import { useComputeQueryKey, useWalletIdentity, type WalletIdentity } from '@/hooks/useWallet'
+import { computeKeys, useComputeQueryKey, useWalletIdentity, type WalletIdentity, walletKeys } from '@/hooks/useWallet'
 import { isTrustedMarketSourceUrl } from '@/packages/compute-market/marketIntelligence'
 import { createSimulatedMarketApi } from '@/packages/compute-market/simulatedMarket'
 import {
@@ -121,6 +122,7 @@ import {
   getComputeProductImageUrl,
   getComputeSupplier,
   grantAdminCardHours,
+  type LocalDemoSession,
   type LotteryEligibility,
   listAdminIdentities,
   listAdminNodes,
@@ -190,6 +192,7 @@ import {
 import { classifyComputeReservationReview } from '@/packages/computeReservationReview'
 import { copyToClipboard } from '@/packages/navigator'
 import platform from '@/platform'
+import { authInfoStore } from '@/stores/authInfoStore'
 import { featureFlags } from '@/utils/feature-flags'
 import {
   COMPUTE_MARKET_SIMULATION_ALLOWED_ORIGINS,
@@ -265,6 +268,7 @@ export function ComputeCenterPage() {
   const [cardHourPrompt, setCardHourPrompt] = useState<CardHourPrompt | null>(null)
   const [settlementLotteryPrompt, setSettlementLotteryPrompt] = useState<SettlementLotteryPrompt | null>(null)
   const [dismissedLotteryEligibilityIds, setDismissedLotteryEligibilityIds] = useState<Set<string>>(() => new Set())
+  const [roleSwitchGeneration, setRoleSwitchGeneration] = useState(0)
   const currentIdentityRef = useRef(identity)
   currentIdentityRef.current = identity
   const previousIdentityRef = useRef(identity)
@@ -274,7 +278,35 @@ export function ComputeCenterPage() {
   const [productLikeCountsLoaded, setProductLikeCountsLoaded] = useState(false)
   const productLikeCountsRef = useRef<ComputeProductLikeCounts>({})
   const productLikeWriteQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const localDemoSessionGenerationRef = useRef(0)
   const closeMessage = useCallback(() => setMessage(null), [])
+
+  const installLocalDemoSession = useCallback(
+    async (session: LocalDemoSession) => {
+      const generation = ++localDemoSessionGenerationRef.current
+      currentIdentityRef.current = null
+      const stalePrompt = promptOwnerRef.current
+      promptOwnerRef.current = null
+      stalePrompt?.resolve(false)
+      setCardHourPrompt(null)
+      setSettlementLotteryPrompt(null)
+      setDismissedLotteryEligibilityIds(new Set())
+      setBusy(null)
+      setMessage(null)
+      setActiveTab('market')
+      setRoleSwitchGeneration((current) => current + 1)
+      authInfoStore.getState().setAccessOnlySession({ accessToken: session.token, accountId: session.accountId })
+
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: computeKeys.all }),
+        queryClient.cancelQueries({ queryKey: walletKeys.all }),
+      ])
+      if (localDemoSessionGenerationRef.current !== generation) return
+      queryClient.removeQueries({ queryKey: computeKeys.all })
+      queryClient.removeQueries({ queryKey: walletKeys.all })
+    },
+    [queryClient]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -511,6 +543,8 @@ export function ComputeCenterPage() {
             </Alert>
           )}
 
+          <LocalDemoRoleSwitcher onSession={installLocalDemoSession} />
+
           <FeedbackToast message={message} onClose={closeMessage} />
           <CardHourTopUpModal prompt={cardHourPrompt} />
           <ReferralInviteModal
@@ -536,7 +570,12 @@ export function ComputeCenterPage() {
             }}
           />
 
-          <Tabs value={activeTab} onChange={(value) => value && setActiveTab(value)} keepMounted={false}>
+          <Tabs
+            key={roleSwitchGeneration}
+            value={activeTab}
+            onChange={(value) => value && setActiveTab(value)}
+            keepMounted={false}
+          >
             <ScrollArea type="never" offsetScrollbars>
               <Tabs.List style={{ flexWrap: 'nowrap' }}>
                 {tabs

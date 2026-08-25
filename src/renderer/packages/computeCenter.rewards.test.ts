@@ -4,7 +4,11 @@ const mocks = vi.hoisted(() => ({
   ofetch: vi.fn(),
   prepareComputeImageUpload: vi.fn(),
   refreshKodSession: vi.fn(),
-  authState: { accessToken: 'test-access-token' as string | null, accountId: 'account-7' as string | null },
+  authState: {
+    accessToken: 'test-access-token' as string | null,
+    refreshToken: 'test-refresh-token' as string | null,
+    accountId: 'account-7' as string | null,
+  },
 }))
 
 vi.mock('ofetch', () => ({ ofetch: mocks.ofetch }))
@@ -140,6 +144,7 @@ describe('reward referral and platform hosting contracts', () => {
     vi.clearAllMocks()
     vi.useRealTimers()
     mocks.authState.accessToken = 'test-access-token'
+    mocks.authState.refreshToken = 'test-refresh-token'
     mocks.authState.accountId = 'account-7'
     mocks.refreshKodSession.mockImplementation(() => {
       mocks.authState.accessToken = 'fresh-access-token'
