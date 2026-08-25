@@ -33,3 +33,9 @@
 - Added runtime Zod parsing for lottery eligibility status so an invalid status cannot issue a request.
 - Route ruling: `/api/compute/local-demo/*` is authoritative. The platform design's API-placement section still says `/api/local-demo/*`; the reviewed implementation plan and this client intentionally retain the `/api/compute/local-demo/*` prefix.
 - Review TDD: the expanded focused suite produced five expected failures before implementation, then passed 8/8 after the contract fixes.
+
+## Review round 2
+
+- Corrected `ramGb` and `storageGb` to the backend's nonnegative integer contract: zero is accepted and negative values are rejected.
+- Added a request/response regression proving zero RAM/storage is sent unchanged and decoded from the returned administrator SKU, while negative values issue no request.
+- Review TDD: the new zero-capacity regression failed on `positive()` before the schema fix and the focused suite passed 9/9 afterward.

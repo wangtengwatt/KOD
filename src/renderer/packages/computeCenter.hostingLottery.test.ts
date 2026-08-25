@@ -231,8 +231,6 @@ describe('hosting, lottery, and local demo contracts', () => {
     const invalidInputs = [
       { ...adminSku, gpuMemoryGb: 0 },
       { ...adminSku, gpuCount: 0 },
-      { ...adminSku, ramGb: 0 },
-      { ...adminSku, storageGb: 0 },
       { ...adminSku, packageDurationHours: 0 },
       { ...adminSku, deliveryDeadlineHours: 0 },
       { ...adminSku, monthlyRent: '0.000' },
@@ -245,6 +243,24 @@ describe('hosting, lottery, and local demo contracts', () => {
     expect(() => contracts.PlatformSkuAdminInputSchema.parse({ ...adminSku, packageDurationHours: 8_761 })).toThrow()
     expect(() => contracts.PlatformSkuAdminInputSchema.parse({ ...adminSku, deliveryDeadlineHours: 721 })).toThrow()
     expect(() => contracts.PlatformSkuAdminInputSchema.parse({ ...adminSku, status: 'PAUSED' })).toThrow()
+    expect(mocks.ofetch).not.toHaveBeenCalled()
+  })
+
+  it('sends and decodes zero RAM and storage while rejecting negative values before requesting', async () => {
+    const zeroCapacityInput = { ...adminSku, ramGb: 0, storageGb: 0 }
+    const zeroCapacitySku = { id: ids.product, ...zeroCapacityInput, availableInventory: 4 }
+    mocks.ofetch.mockResolvedValueOnce({ code: 0, data: zeroCapacitySku })
+
+    expect(contracts.PlatformSkuAdminInputSchema.parse(zeroCapacityInput)).toMatchObject({ ramGb: 0, storageGb: 0 })
+    await expect(contracts.upsertAdminPlatformSku(zeroCapacityInput)).resolves.toMatchObject({ ramGb: 0, storageGb: 0 })
+    expect(mocks.ofetch).toHaveBeenCalledWith(
+      'https://kod.test/api/compute/admin/platform-hosting/skus',
+      expect.objectContaining({ method: 'POST', body: zeroCapacityInput, retry: 0 })
+    )
+
+    mocks.ofetch.mockClear()
+    expect(() => contracts.upsertAdminPlatformSku({ ...adminSku, ramGb: -1 })).toThrow()
+    expect(() => contracts.upsertAdminPlatformSku({ ...adminSku, storageGb: -1 })).toThrow()
     expect(mocks.ofetch).not.toHaveBeenCalled()
   })
 
