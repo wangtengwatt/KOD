@@ -106,6 +106,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   authInfoStore.getState().clearTokens()
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
@@ -143,7 +144,11 @@ describe('SettlementLotteryModal', () => {
     fireEvent.click(drawButton)
     fireEvent.click(drawButton)
 
-    expect(mocks.drawLotteryEligibility).toHaveBeenCalledWith(gpuEligibility.id, 'draw-request-1')
+    expect(mocks.drawLotteryEligibility).toHaveBeenCalledWith(
+      gpuEligibility.id,
+      'draw-request-1',
+      expect.any(AbortSignal)
+    )
     expect(mocks.drawLotteryEligibility).toHaveBeenCalledTimes(1)
     expect((screen.getByRole('button', { name: '等待服务端确认中' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByLabelText('转盘结果 5%')).toBeNull()
@@ -159,10 +164,41 @@ describe('SettlementLotteryModal', () => {
     expect(screen.getByText('获得奖励 0.600 卡时')).toBeTruthy()
     expect(screen.getByText('奖励比例 5%')).toBeTruthy()
     expect(screen.getByText('奖励流水 ID 9007199254740994202')).toBeTruthy()
+    expect(screen.getByText('已领取')).toBeTruthy()
+    expect(screen.queryByText('待领取')).toBeNull()
+    const resultStatus = screen.getByRole('status', { name: '抽奖结果：获得奖励 0.600 卡时' })
+    expect(resultStatus.getAttribute('aria-live')).toBe('polite')
+    await waitFor(() => expect(document.activeElement).toBe(resultStatus))
     await waitFor(() => expect(onDrawn).toHaveBeenCalledWith(authoritativeDraw))
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['compute', 'account:7', 'lottery'] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['wallet', 'account:7', 'card-time-account'] })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['compute', 'account:7', 'ledger'] })
+  })
+
+  it('ends a never-resolving draw at the deadline and restores a safe close path', async () => {
+    mocks.drawLotteryEligibility.mockReturnValue(new Promise<LotteryDraw>(() => undefined))
+    const onClose = vi.fn()
+    renderModal(gpuEligibility, { onClose })
+    vi.useFakeTimers()
+
+    fireEvent.click(screen.getByRole('button', { name: '开始抽奖' }))
+    const closeButton = screen.getByRole('button', { name: '关闭抽奖弹窗' }) as HTMLButtonElement
+    expect(closeButton.disabled).toBe(true)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+
+    expect(screen.getByText('抽奖服务响应超时，请稍后使用同一请求编号重试。')).toBeTruthy()
+    expect(closeButton.disabled).toBe(false)
+    fireEvent.click(closeButton)
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(mocks.drawLotteryEligibility).toHaveBeenCalledTimes(1)
+    expect(mocks.drawLotteryEligibility).toHaveBeenCalledWith(
+      gpuEligibility.id,
+      'draw-request-1',
+      expect.any(AbortSignal)
+    )
   })
 
   it('reuses the same request id after an ambiguous failure and never rerolls locally', async () => {
@@ -178,16 +214,33 @@ describe('SettlementLotteryModal', () => {
 
     expect(await screen.findByText('获得奖励 0.600 卡时')).toBeTruthy()
     expect(mocks.drawLotteryEligibility).toHaveBeenCalledTimes(2)
-    expect(mocks.drawLotteryEligibility).toHaveBeenNthCalledWith(1, gpuEligibility.id, 'draw-request-1')
-    expect(mocks.drawLotteryEligibility).toHaveBeenNthCalledWith(2, gpuEligibility.id, 'draw-request-1')
+    expect(mocks.drawLotteryEligibility).toHaveBeenNthCalledWith(
+      1,
+      gpuEligibility.id,
+      'draw-request-1',
+      expect.any(AbortSignal)
+    )
+    expect(mocks.drawLotteryEligibility).toHaveBeenNthCalledWith(
+      2,
+      gpuEligibility.id,
+      'draw-request-1',
+      expect.any(AbortSignal)
+    )
     expect(mocks.uuidv4).toHaveBeenCalledTimes(1)
   })
 
-  it('explains a zero reward base without inventing a reward', () => {
-    renderModal({ ...gpuEligibility, rewardBase: '0.000', sourceType: 'HOSTING_PERIOD' })
+  it.each([
+    [
+      'GPU_RESERVATION' as const,
+      'GPU 租赁订单',
+      '本次 GPU 租赁订单的可回购卡时结算贡献为 0，因此奖励基数为 0.000 卡时。',
+    ],
+    ['HOSTING_PERIOD' as const, '卡时托管租期', '本次卡时托管租期实际支付月租为 0，因此奖励基数为 0.000 卡时。'],
+  ])('explains a zero %s reward base from its authoritative contribution', (sourceType, sourceLabel, explanation) => {
+    renderModal({ ...gpuEligibility, rewardBase: '0.000', sourceType })
 
-    expect(screen.getByText('本次可回购资金贡献为 0，因此奖励基数为 0.000 卡时。')).toBeTruthy()
-    expect(screen.getByText('卡时托管租期')).toBeTruthy()
+    expect(screen.getByText(explanation)).toBeTruthy()
+    expect(screen.getByText(sourceLabel)).toBeTruthy()
   })
 
   it('drops an account-a late draw response after switching to account b', async () => {
@@ -200,6 +253,8 @@ describe('SettlementLotteryModal', () => {
     const view = renderModal(gpuEligibility, { onDrawn })
 
     fireEvent.click(screen.getByRole('button', { name: '开始抽奖' }))
+    const accountASignal = mocks.drawLotteryEligibility.mock.calls[0]?.[2] as AbortSignal
+    expect(accountASignal.aborted).toBe(false)
     act(() => {
       authInfoStore.setState({
         accessToken: 'account-b-access',
@@ -225,6 +280,8 @@ describe('SettlementLotteryModal', () => {
         </MantineProvider>
       </QueryClientProvider>
     )
+
+    expect(accountASignal.aborted).toBe(true)
 
     await act(async () => {
       resolveDraw?.(authoritativeDraw)

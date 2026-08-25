@@ -3,9 +3,15 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { computeKeys, useWalletIdentity, walletKeys } from '@/hooks/useWallet'
-import { drawLotteryEligibility, type LotteryDraw, type LotteryEligibility } from '@/packages/computeCenter'
+import {
+  drawLotteryEligibility,
+  LOTTERY_DRAW_DEADLINE_MS,
+  type LotteryDraw,
+  type LotteryEligibility,
+} from '@/packages/computeCenter'
 
 const DRAW_REQUEST_STORAGE_PREFIX = 'kod.compute.lottery.draw.'
+const DRAW_TIMEOUT_MESSAGE = '抽奖服务响应超时，请稍后使用同一请求编号重试。'
 const pendingDrawRequestIds = new Map<string, string>()
 
 export const LOTTERY_SEGMENTS = [
@@ -38,15 +44,26 @@ export function SettlementLotteryModal({ opened, eligibility, onClose, onDrawn }
   const currentOwnerKey = `${identity ?? 'signed-out'}:${eligibility?.id ?? 'none'}`
   const currentOwnerKeyRef = useRef(currentOwnerKey)
   const pendingOwnerKeyRef = useRef<string | null>(null)
+  const pendingAbortControllerRef = useRef<AbortController | null>(null)
+  const resultStatusRef = useRef<HTMLDivElement>(null)
   currentOwnerKeyRef.current = currentOwnerKey
 
   useEffect(() => {
+    pendingAbortControllerRef.current?.abort()
+    pendingAbortControllerRef.current = null
     currentOwnerKeyRef.current = currentOwnerKey
     pendingOwnerKeyRef.current = null
     setDrawResult(null)
     setError(null)
     setSubmitting(false)
+    return () => pendingAbortControllerRef.current?.abort()
   }, [currentOwnerKey])
+
+  useEffect(() => {
+    if (!drawResult) return
+    const focusResult = setTimeout(() => resultStatusRef.current?.focus(), 0)
+    return () => clearTimeout(focusResult)
+  }, [drawResult])
 
   const startDraw = async () => {
     if (!identity || !eligibility || drawResult || pendingOwnerKeyRef.current) return
@@ -54,11 +71,16 @@ export function SettlementLotteryModal({ opened, eligibility, onClose, onDrawn }
     const ownerEligibility = eligibility
     const ownerKey = `${ownerIdentity}:${ownerEligibility.id}`
     const requestId = getDrawRequestId(ownerIdentity, ownerEligibility.id)
+    const abortController = new AbortController()
     pendingOwnerKeyRef.current = ownerKey
+    pendingAbortControllerRef.current = abortController
     setSubmitting(true)
     setError(null)
     try {
-      const authoritativeResult = await drawLotteryEligibility(ownerEligibility.id, requestId)
+      const authoritativeResult = await withDrawDeadline(
+        drawLotteryEligibility(ownerEligibility.id, requestId, abortController.signal),
+        abortController
+      )
       if (currentOwnerKeyRef.current !== ownerKey) return
       if (authoritativeResult.eligibilityId !== ownerEligibility.id) {
         throw new Error('服务端返回的抽奖资格不匹配，请稍后重试。')
@@ -78,6 +100,7 @@ export function SettlementLotteryModal({ opened, eligibility, onClose, onDrawn }
       }
     } finally {
       if (pendingOwnerKeyRef.current === ownerKey) pendingOwnerKeyRef.current = null
+      if (pendingAbortControllerRef.current === abortController) pendingAbortControllerRef.current = null
       if (currentOwnerKeyRef.current === ownerKey) setSubmitting(false)
     }
   }
@@ -108,8 +131,8 @@ export function SettlementLotteryModal({ opened, eligibility, onClose, onDrawn }
                 </Text>
                 <Text fw={700}>{lotterySourceLabel(eligibility.sourceType)}</Text>
               </div>
-              <Badge color="teal" variant="light">
-                待领取
+              <Badge color={drawResult ? 'green' : 'teal'} variant="light">
+                {drawResult ? '已领取' : '待领取'}
               </Badge>
             </Group>
             <Text size="sm" mt="xs">
@@ -123,7 +146,7 @@ export function SettlementLotteryModal({ opened, eligibility, onClose, onDrawn }
             </Text>
             {isZeroLotteryBase(eligibility.rewardBase) && (
               <Text size="sm" c="orange" mt={4}>
-                本次可回购资金贡献为 0，因此奖励基数为 0.000 卡时。
+                {zeroLotteryBaseExplanation(eligibility.sourceType)}
               </Text>
             )}
           </Paper>
@@ -202,7 +225,17 @@ export function SettlementLotteryModal({ opened, eligibility, onClose, onDrawn }
           )}
 
           {drawResult && rateLabel ? (
-            <Paper withBorder p="md" radius="md" bg="teal.0">
+            <Paper
+              ref={resultStatusRef}
+              role="status"
+              aria-live="polite"
+              aria-label={`抽奖结果：获得奖励 ${drawResult.rewardAmount} 卡时`}
+              tabIndex={-1}
+              withBorder
+              p="md"
+              radius="md"
+              bg="teal.0"
+            >
               <Title order={4}>获得奖励 {drawResult.rewardAmount} 卡时</Title>
               <SimpleGrid cols={{ base: 1, sm: 2 }} mt="sm" spacing="xs">
                 <Text size="sm">奖励比例 {rateLabel}</Text>
@@ -249,6 +282,29 @@ function lotteryLandingRotation(rateBasisPoints: number) {
 
 function isZeroLotteryBase(value: string) {
   return /^0(?:\.0{1,3})?$/.test(value)
+}
+
+function zeroLotteryBaseExplanation(sourceType: LotteryEligibility['sourceType']) {
+  return sourceType === 'GPU_RESERVATION'
+    ? '本次 GPU 租赁订单的可回购卡时结算贡献为 0，因此奖励基数为 0.000 卡时。'
+    : '本次卡时托管租期实际支付月租为 0，因此奖励基数为 0.000 卡时。'
+}
+
+async function withDrawDeadline<T>(request: Promise<T>, abortController: AbortController) {
+  let deadline: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => {
+          abortController.abort()
+          reject(new Error(DRAW_TIMEOUT_MESSAGE))
+        }, LOTTERY_DRAW_DEADLINE_MS)
+      }),
+    ])
+  } finally {
+    if (deadline !== undefined) clearTimeout(deadline)
+  }
 }
 
 function formatContractDateTime(value: string) {

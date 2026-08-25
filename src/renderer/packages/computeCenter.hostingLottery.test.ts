@@ -433,6 +433,7 @@ describe('hosting, lottery, and local demo contracts', () => {
         method: 'POST',
         body: { requestId: 'draw-request-1' },
         retry: 0,
+        timeout: 15_000,
         headers: authenticated,
       })
     )

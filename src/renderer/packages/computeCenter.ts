@@ -771,6 +771,8 @@ export const LotteryHistorySchema = z
   .strict()
 export type LotteryHistory = z.infer<typeof LotteryHistorySchema>
 
+export const LOTTERY_DRAW_DEADLINE_MS = 15_000
+
 export const LocalDemoCapabilitySchema = z.object({
   enabled: z.boolean(),
   roles: z.array(z.enum(['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'])),
@@ -1366,13 +1368,15 @@ export function listLotteryEligibilities(status?: LotteryEligibility['status']) 
   )
 }
 
-export function drawLotteryEligibility(eligibilityId: string, requestId: string) {
+export function drawLotteryEligibility(eligibilityId: string, requestId: string, signal?: AbortSignal) {
   strictContractId.parse(eligibilityId)
   const body = z.object({ requestId: z.string().min(1) }).parse({ requestId })
   return request<unknown>(`/api/compute/lottery/eligibilities/${encodeURIComponent(eligibilityId)}/draw`, {
     method: 'POST',
     body,
     retry: 0,
+    signal,
+    timeout: LOTTERY_DRAW_DEADLINE_MS,
   }).then((data) => LotteryDrawSchema.parse(data))
 }
 
