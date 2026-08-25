@@ -50,3 +50,7 @@ Task 4: implementation complete (feature range 4922497..5fb5026); independent re
 Task 3 review fix round 1: platform lease IDs and financial values are strict strings, raw lease prices retain full service precision, and failed detail requests have a retry-success regression; focused 39/39 and related 79/79 pass.
 
 Task 3 review fix round 1 verification: TypeScript, changed Biome, strict OpenSpec, and production build pass; full 1,729 pass / 54 skip with the same 6 unrelated baseline failures; exact feature range 10cdd53..e0003a4.
+
+Task 4 review fix round 1: draw requests now have a 15-second bounded deadline and AbortSignal cancellation, retain their idempotency request ID, restore a safe close path after timeout, abort on account change, announce and focus the authoritative result, change the qualification badge to claimed, and explain zero bases by source contribution.
+
+Task 4 review fix round 1 verification: focused 19/19 and related 63/63 pass; TypeScript, changed Biome, strict OpenSpec, production build, diff/protected/secret/local-random scans pass; full 1,731 pass / 54 skip with the same 6 unrelated baseline failures; exact feature range 39a6243..de9926f.
