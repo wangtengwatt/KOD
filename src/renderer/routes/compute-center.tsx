@@ -38,6 +38,7 @@ import {
   IconDatabaseDollar,
   IconExternalLink,
   IconGauge,
+  IconGift,
   IconReceipt,
   IconRefresh,
   IconServer,
@@ -56,6 +57,8 @@ import { HostedComputePanel } from '@/components/compute/HostedComputePanel'
 import { MarketplaceOrderWorkspace } from '@/components/compute/MarketplaceOrderWorkspace'
 import { PlatformHostingPanel } from '@/components/compute/PlatformHostingPanel'
 import { PlatformInventoryAdminPanel } from '@/components/compute/PlatformInventoryAdminPanel'
+import { lotteryKeys, SettlementLotteryModal } from '@/components/compute/SettlementLotteryModal'
+import { SettlementLotteryPanel } from '@/components/compute/SettlementLotteryPanel'
 import { MarketIntelligencePanel } from '@/components/compute-market'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
@@ -118,6 +121,7 @@ import {
   getComputeProductImageUrl,
   getComputeSupplier,
   grantAdminCardHours,
+  type LotteryEligibility,
   listAdminIdentities,
   listAdminNodes,
   listAdminProducts,
@@ -135,6 +139,7 @@ import {
   listComputeReservations,
   listComputeTransfers,
   listComputeWithdrawals,
+  listLotteryEligibilities,
   listSupplierNodes,
   listSupplierProducts,
   markComputeNotificationRead,
@@ -225,6 +230,10 @@ type CardHourPrompt = {
   onConfirm: () => void
   onCancel: () => void
 }
+type SettlementLotteryPrompt = {
+  identity: string
+  eligibility: LotteryEligibility
+}
 
 const roleLabels: Record<string, string> = {
   BUYER: '购买方',
@@ -254,6 +263,8 @@ export function ComputeCenterPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<FeedbackMessage | null>(null)
   const [cardHourPrompt, setCardHourPrompt] = useState<CardHourPrompt | null>(null)
+  const [settlementLotteryPrompt, setSettlementLotteryPrompt] = useState<SettlementLotteryPrompt | null>(null)
+  const [dismissedLotteryEligibilityIds, setDismissedLotteryEligibilityIds] = useState<Set<string>>(() => new Set())
   const currentIdentityRef = useRef(identity)
   currentIdentityRef.current = identity
   const previousIdentityRef = useRef(identity)
@@ -316,6 +327,12 @@ export function ComputeCenterPage() {
     enabled: isLoggedIn && Boolean(search.invite),
     retry: false,
   })
+  const settlementLotteryPendingQuery = useQuery({
+    queryKey: lotteryKeys.pending(identity ?? 'signed-out'),
+    queryFn: () => listLotteryEligibilities('PENDING'),
+    enabled: isLoggedIn,
+    retry: false,
+  })
 
   useEffect(() => {
     if (previousIdentityRef.current === identity) return
@@ -324,9 +341,19 @@ export function ComputeCenterPage() {
     promptOwnerRef.current = null
     stalePrompt?.resolve(false)
     setCardHourPrompt(null)
+    setSettlementLotteryPrompt(null)
+    setDismissedLotteryEligibilityIds(new Set())
     setBusy(null)
     setMessage(null)
   }, [identity])
+
+  useEffect(() => {
+    if (!identity || settlementLotteryPrompt?.identity === identity) return
+    const nextEligibility = settlementLotteryPendingQuery.data?.find(
+      (eligibility) => !dismissedLotteryEligibilityIds.has(eligibility.id)
+    )
+    if (nextEligibility) setSettlementLotteryPrompt({ identity, eligibility: nextEligibility })
+  }, [dismissedLotteryEligibilityIds, identity, settlementLotteryPendingQuery.data, settlementLotteryPrompt])
 
   useEffect(() => {
     if (isLoggedIn && search.invite) setActiveTab('account')
@@ -453,6 +480,7 @@ export function ComputeCenterPage() {
     { value: 'market', label: '算力市场', icon: <IconBuildingStore size={16} /> },
     { value: 'card-hours', label: '卡时资产', icon: <IconDatabaseDollar size={16} /> },
     { value: 'platform-hosting', label: '卡时托管', icon: <IconServer size={16} />, login: true },
+    { value: 'settlement-lottery', label: '抽奖中心', icon: <IconGift size={16} />, login: true },
     { value: 'account', label: '我的资产', icon: <IconWallet size={16} />, login: true },
     { value: 'purchases', label: '购买记录', icon: <IconReceipt size={16} />, login: true },
     { value: 'reservations', label: '租赁订单', icon: <IconServer size={16} />, login: true },
@@ -516,6 +544,11 @@ export function ComputeCenterPage() {
                   .map((tab) => (
                     <Tabs.Tab key={tab.value} value={tab.value} leftSection={tab.icon}>
                       {tab.label}
+                      {tab.value === 'settlement-lottery' && (settlementLotteryPendingQuery.data?.length || 0) > 0 && (
+                        <Badge size="xs" ml={6} circle color="teal">
+                          {settlementLotteryPendingQuery.data?.length}
+                        </Badge>
+                      )}
                       {tab.value === 'reservations' && (account?.unreadOrderMessages || 0) > 0 && (
                         <Badge size="xs" ml={6} circle color="orange">
                           {account?.unreadOrderMessages}
@@ -612,6 +645,9 @@ export function ComputeCenterPage() {
                 <Tabs.Panel value="platform-hosting" pt="md">
                   <PlatformHostingPanel />
                 </Tabs.Panel>
+                <Tabs.Panel value="settlement-lottery" pt="md">
+                  <SettlementLotteryPanel />
+                </Tabs.Panel>
                 <Tabs.Panel value="account" pt="md">
                   <AccountPanel account={account} busy={busy} run={run} onOpen={setActiveTab} />
                 </Tabs.Panel>
@@ -635,6 +671,25 @@ export function ComputeCenterPage() {
               </>
             )}
           </Tabs>
+
+          <SettlementLotteryModal
+            opened={settlementLotteryPrompt?.identity === identity}
+            eligibility={settlementLotteryPrompt?.identity === identity ? settlementLotteryPrompt.eligibility : null}
+            onClose={() => {
+              if (settlementLotteryPrompt?.identity !== identity) return
+              const currentPendingIds = (settlementLotteryPendingQuery.data ?? []).map((eligibility) => eligibility.id)
+              setDismissedLotteryEligibilityIds(
+                (current) => new Set([...current, settlementLotteryPrompt.eligibility.id, ...currentPendingIds])
+              )
+              setSettlementLotteryPrompt(null)
+            }}
+            onDrawn={() => {
+              if (settlementLotteryPrompt?.identity !== identity) return
+              setDismissedLotteryEligibilityIds(
+                (current) => new Set([...current, settlementLotteryPrompt.eligibility.id])
+              )
+            }}
+          />
         </Stack>
       </Container>
     </Page>
