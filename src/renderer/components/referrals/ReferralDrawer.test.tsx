@@ -220,14 +220,14 @@ describe('ReferralDrawer', () => {
     expect(await screen.findByText('10 卡时已到账')).toBeTruthy()
     expect(mocks.markComputeNotificationRead).toHaveBeenCalledWith(501)
     await waitFor(() => {
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'member@example.com', 'account'] })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'email:member@example.com', 'account'] })
       expect(invalidate).toHaveBeenCalledWith({
-        queryKey: ['wallet', 'member@example.com', 'card-time-account'],
+        queryKey: ['wallet', 'email:member@example.com', 'card-time-account'],
       })
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'member@example.com', 'ledger'] })
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'member@example.com', 'notifications'] })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'email:member@example.com', 'ledger'] })
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['compute', 'email:member@example.com', 'notifications'] })
       expect(invalidate).toHaveBeenCalledWith({
-        queryKey: ['compute', 'member@example.com', 'referrals', 'email-invites', 90],
+        queryKey: ['compute', 'email:member@example.com', 'referrals', 'email-invites', 90],
       })
     })
   })
@@ -250,7 +250,7 @@ describe('ReferralDrawer', () => {
     const { queryClient } = renderDrawer(<ReferralDrawer opened={false} onClose={() => {}} />)
 
     await waitFor(() =>
-      expect(queryClient.getQueryData(['compute', 'member@example.com', 'notifications'])).toEqual(
+      expect(queryClient.getQueryData(['compute', 'email:member@example.com', 'notifications'])).toEqual(
         expect.arrayContaining([expect.objectContaining({ id: 500, isRead: 1 })])
       )
     )

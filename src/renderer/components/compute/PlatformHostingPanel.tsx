@@ -22,8 +22,9 @@ export function PlatformHostingPanel() {
   const queryClient = useQueryClient()
   const accessToken = useAuthInfoStore((state) => state.accessToken)
   const refreshToken = useAuthInfoStore((state) => state.refreshToken)
+  const accountId = useAuthInfoStore((state) => state.accountId)
   const loginEmail = useAuthInfoStore((state) => state.loginEmail)
-  const queryIdentity = getWalletIdentity(loginEmail, accessToken, refreshToken) ?? 'signed-out'
+  const queryIdentity = getWalletIdentity(accountId, loginEmail, accessToken, refreshToken) ?? 'signed-out'
   const platformLeasesQueryKey = computeKeys.platformLeases(queryIdentity)
   const accountQueryKey = computeKeys.account(queryIdentity)
   const [checkout, setCheckout] = useState<{

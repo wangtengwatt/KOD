@@ -9,16 +9,25 @@ import { queryClient as accountQueryClient } from '@/stores/queryClient'
 
 export type WalletIdentity = string
 
-export function getWalletIdentity(loginEmail: string | null, accessToken: string | null, refreshToken: string | null) {
-  if (!loginEmail || !accessToken || !refreshToken) return null
-  return loginEmail.trim().toLowerCase()
+export function getWalletIdentity(
+  accountId: string | null,
+  loginEmail: string | null,
+  accessToken: string | null,
+  refreshToken: string | null
+) {
+  if (!accessToken || !refreshToken) return null
+  const normalizedAccountId = accountId?.trim()
+  if (normalizedAccountId) return `account:${normalizedAccountId}`
+  const normalizedEmail = loginEmail?.trim().toLowerCase()
+  return normalizedEmail ? `email:${normalizedEmail}` : null
 }
 
 export function useWalletIdentity() {
   const accessToken = useAuthInfoStore((state) => state.accessToken)
   const refreshToken = useAuthInfoStore((state) => state.refreshToken)
+  const accountId = useAuthInfoStore((state) => state.accountId)
   const loginEmail = useAuthInfoStore((state) => state.loginEmail)
-  return getWalletIdentity(loginEmail, accessToken, refreshToken)
+  return getWalletIdentity(accountId, loginEmail, accessToken, refreshToken)
 }
 
 export const walletKeys = {
@@ -73,7 +82,7 @@ export async function clearWalletCache() {
 }
 
 authInfoStore.subscribe(
-  (state) => [state.loginEmail, state.accessToken, state.refreshToken] as const,
+  (state) => [state.accountId, state.loginEmail, state.accessToken, state.refreshToken] as const,
   (identity, previous) => {
     if (identity.some((value, index) => value !== previous[index])) void clearWalletCache()
   }

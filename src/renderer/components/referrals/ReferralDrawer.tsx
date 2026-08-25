@@ -78,9 +78,10 @@ export default function ReferralDrawer({ opened, onClose }: { opened: boolean; o
   const queryClient = useQueryClient()
   const accessToken = useAuthInfoStore((state) => state.accessToken)
   const refreshToken = useAuthInfoStore((state) => state.refreshToken)
+  const accountId = useAuthInfoStore((state) => state.accountId)
   const loginEmail = useAuthInfoStore((state) => state.loginEmail)
   const isLoggedIn = Boolean(accessToken)
-  const walletIdentity = getWalletIdentity(loginEmail, accessToken, refreshToken)
+  const walletIdentity = getWalletIdentity(accountId, loginEmail, accessToken, refreshToken)
   const queryIdentity = walletIdentity ?? 'signed-out'
   const [view, setView] = useState<DrawerView>('invite')
   const [email, setEmail] = useState('')

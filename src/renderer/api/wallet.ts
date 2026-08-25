@@ -375,8 +375,18 @@ export const TopupHistoryWireSchema = z
     items: z.array(TopupRecordWireSchema),
     total: decimalWire.pipe(nonnegativeInteger),
     page: decimalWire.pipe(positiveIntegerInput),
-    pageSize: decimalWire.pipe(positiveIntegerInput),
+    pageSize: decimalWire.pipe(positiveIntegerInput).optional(),
+    page_size: decimalWire.pipe(positiveIntegerInput).optional(),
   })
+  .superRefine((value, context) => {
+    if (value.pageSize == null && value.page_size == null) {
+      context.addIssue({ code: 'custom', path: ['pageSize'], message: 'page size is required' })
+    }
+    if (value.pageSize != null && value.page_size != null && value.pageSize !== value.page_size) {
+      context.addIssue({ code: 'custom', path: ['pageSize'], message: 'pagination aliases conflict' })
+    }
+  })
+  .transform((value) => ({ ...value, pageSize: value.pageSize ?? (value.page_size as number) }))
   .refine((value) => value.total >= value.items.length, { path: ['total'], message: 'total must cover returned items' })
 export const TopupHistorySchema = TopupHistoryWireSchema.transform((value) => ({
   items: value.items.map((item) => TopupRecordSchema.parse(item)),

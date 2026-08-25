@@ -23,6 +23,18 @@ afterEach(() => {
   authInfoStore.getState().clearTokens()
 })
 describe('wallet contracts', () => {
+  it('normalizes the website page_size recharge-history contract', async () => {
+    authInfoStore.getState().setTokens({ accessToken: 'secret', refreshToken: 'secret' })
+    vi.stubGlobal('fetch', vi.fn(async () => ok({ items: [], total: 0, page: 1, page_size: 10 })))
+
+    await expect(walletApi.getTopupHistory(1, 10)).resolves.toEqual({
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 10,
+    })
+  })
+
   it('parses object pay methods and epoch seconds', () => {
     expect(PayMethodSchema.parse({ name: '支付宝', type: 'alipay', min_topup: '5' }).minTopup).toBe(5)
     const history = TopupHistorySchema.parse({
