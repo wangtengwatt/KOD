@@ -5,11 +5,11 @@ Give administrators and hosting users one understandable desktop workflow for KA
 ## ADDED Requirements
 
 ### Requirement: Administrator can manage platform server inventory
-The client SHALL expose platform SKU listing and idempotent create/update controls only inside the existing authenticated compute administrator workspace.
+The client SHALL expose platform SKU listing and idempotent create/update controls only inside the existing authenticated compute administrator workspace. It SHALL consume the server-returned allocated inventory as authoritative and SHALL validate administrator SKU inputs against the server code and Java-integer boundaries before sending a request.
 
 #### Scenario: Administrator saves inventory
 - **WHEN** an administrator submits valid server specifications, prices, inventory, and status
-- **THEN** the client SHALL display the server-returned total and available inventory plus audit confirmation without calculating allocation locally
+- **THEN** the client SHALL normalize and validate the SKU code, display the server-returned total, allocated, and available inventory without calculating allocation locally, and confirm only that the server accepted and returned the latest configuration
 
 ### Requirement: Hosting user can reconcile cost and income
 The client SHALL show monthly rent periods, settled and pending order income, platform fee, net income, renewal, and exit status for each lease.

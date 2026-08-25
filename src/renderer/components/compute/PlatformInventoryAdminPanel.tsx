@@ -18,7 +18,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useComputeQueryKey, useWalletIdentity } from '@/hooks/useWallet'
 import {
+  JAVA_INT_MAX,
   listAdminPlatformSkus,
+  PLATFORM_SKU_CODE_PATTERN,
   type PlatformSkuAdmin,
   type PlatformSkuAdminInput,
   PlatformSkuAdminInputSchema,
@@ -85,7 +87,7 @@ export function PlatformInventoryAdminPanel({ isAdmin }: { isAdmin: boolean }) {
       setEditingSkuCode(null)
       setForm(emptyForm())
       setFormErrors({})
-      setFeedback({ color: 'green', text: `SKU ${saved.skuCode} 已保存；审计记录由服务端生成。` })
+      setFeedback({ color: 'green', text: `SKU ${saved.skuCode} 已保存，服务端已核验最新配置。` })
     },
     onError: (error, variables) => {
       if (currentIdentityRef.current !== variables.identity) return
@@ -206,6 +208,7 @@ export function PlatformInventoryAdminPanel({ isAdmin }: { isAdmin: boolean }) {
           <NumberInput
             label="单卡显存（GB）"
             min={1}
+            max={JAVA_INT_MAX}
             clampBehavior="none"
             allowDecimal={false}
             value={form.gpuMemoryGb}
@@ -215,6 +218,7 @@ export function PlatformInventoryAdminPanel({ isAdmin }: { isAdmin: boolean }) {
           <NumberInput
             label="GPU 数量"
             min={1}
+            max={JAVA_INT_MAX}
             clampBehavior="none"
             allowDecimal={false}
             value={form.gpuCount}
@@ -230,6 +234,7 @@ export function PlatformInventoryAdminPanel({ isAdmin }: { isAdmin: boolean }) {
           <NumberInput
             label="内存（GB）"
             min={0}
+            max={JAVA_INT_MAX}
             clampBehavior="none"
             allowDecimal={false}
             value={form.ramGb}
@@ -239,6 +244,7 @@ export function PlatformInventoryAdminPanel({ isAdmin }: { isAdmin: boolean }) {
           <NumberInput
             label="存储（GB）"
             min={0}
+            max={JAVA_INT_MAX}
             clampBehavior="none"
             allowDecimal={false}
             value={form.storageGb}
@@ -288,6 +294,7 @@ export function PlatformInventoryAdminPanel({ isAdmin }: { isAdmin: boolean }) {
           <NumberInput
             label="总库存"
             min={0}
+            max={JAVA_INT_MAX}
             clampBehavior="none"
             allowDecimal={false}
             value={form.totalInventory}
@@ -325,7 +332,6 @@ export function PlatformInventoryAdminPanel({ isAdmin }: { isAdmin: boolean }) {
 }
 
 function InventoryCard({ sku, onEdit }: { sku: PlatformSkuAdmin; onEdit: () => void }) {
-  const allocatedInventory = sku.totalInventory - sku.availableInventory
   const hardware = [
     sku.cpuDescription,
     `内存 ${sku.ramGb}GB`,
@@ -360,12 +366,13 @@ function InventoryCard({ sku, onEdit }: { sku: PlatformSkuAdmin; onEdit: () => v
         <Text size="sm">
           平台统一销售价 {sku.platformSalePrice} 卡时 / {sku.packageDurationHours} 小时
         </Text>
+        <Text size="sm">交付时限 {sku.deliveryDeadlineHours} 小时</Text>
         <Group gap="xs">
           <Badge color="gray" variant="light">
             总量 {sku.totalInventory}
           </Badge>
           <Badge color="teal" variant="light">
-            已分配 {allocatedInventory}
+            已分配 {sku.allocatedInventory}
           </Badge>
           <Badge color={sku.availableInventory > 0 ? 'green' : 'gray'} variant="light">
             可用 {sku.availableInventory}
@@ -428,7 +435,7 @@ function emptyForm(): PlatformSkuAdminInput {
 function normalizeForm(form: PlatformSkuAdminInput): PlatformSkuAdminInput {
   return {
     ...form,
-    skuCode: form.skuCode.trim(),
+    skuCode: form.skuCode.trim().toUpperCase(),
     name: form.name.trim(),
     description: form.description.trim(),
     region: form.region.trim(),
@@ -474,7 +481,13 @@ function validationMessage(
   if (textLimit !== undefined && String(value).length > textLimit) {
     return `${label}不能超过 ${textLimit} 个字符`
   }
+  if (field === 'skuCode' && !PLATFORM_SKU_CODE_PATTERN.test(String(value))) {
+    return 'SKU 编码只能包含字母、数字、点、连字符和下划线'
+  }
   const numeric = typeof value === 'number' ? value : Number.NaN
+  if (numeric > JAVA_INT_MAX) {
+    return `${label}不能超过 ${JAVA_INT_MAX}`
+  }
   if (field === 'packageDurationHours' && numeric > 8760) {
     return '套餐时长不能超过 8760 小时'
   }

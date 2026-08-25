@@ -42,6 +42,7 @@ const sku = {
   deliveryDeadlineHours: 12,
   totalInventory: 5,
   availableInventory: 3,
+  allocatedInventory: 1,
   status: 'ACTIVE',
 } satisfies PlatformSkuAdmin
 
@@ -102,6 +103,7 @@ beforeEach(() => {
     ...input,
     id: sku.id,
     availableInventory: input.totalInventory,
+    allocatedInventory: 0,
   }))
   vi.stubGlobal(
     'ResizeObserver',
@@ -172,8 +174,9 @@ describe('PlatformInventoryAdminPanel', () => {
     expect(scope.getByText('128 vCPU · 内存 1024GB · 存储 8192GB · 100 Gbps')).toBeTruthy()
     expect(scope.getByText('月租 1200.000 卡时')).toBeTruthy()
     expect(scope.getByText('平台统一销售价 24.000 卡时 / 24 小时')).toBeTruthy()
+    expect(scope.getByText('交付时限 12 小时')).toBeTruthy()
     expect(scope.getByText('总量 5')).toBeTruthy()
-    expect(scope.getByText('已分配 2')).toBeTruthy()
+    expect(scope.getByText('已分配 1')).toBeTruthy()
     expect(scope.getByText('可用 3')).toBeTruthy()
     expect(scope.getByText('启用中')).toBeTruthy()
   })
@@ -223,6 +226,19 @@ describe('PlatformInventoryAdminPanel', () => {
     expect(mocks.upsertAdminPlatformSku).not.toHaveBeenCalled()
   })
 
+  it('rejects an invalid SKU code and Java-int overflow locally without requesting', async () => {
+    mocks.listAdminPlatformSkus.mockResolvedValue([])
+    renderPanel()
+    fillValidForm()
+    fireEvent.change(screen.getByLabelText('SKU 编码'), { target: { value: ' kai/h100 ' } })
+    fireEvent.change(screen.getByLabelText('单卡显存（GB）'), { target: { value: '2147483648' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存 SKU' }))
+
+    expect(await screen.findByText('SKU 编码只能包含字母、数字、点、连字符和下划线')).toBeTruthy()
+    expect(screen.getByText('单卡显存不能超过 2147483647')).toBeTruthy()
+    expect(mocks.upsertAdminPlatformSku).not.toHaveBeenCalled()
+  })
+
   it('updates one SKU idempotently and visibly confirms the server audit result', async () => {
     let serverSku: PlatformSkuAdmin = sku
     mocks.listAdminPlatformSkus.mockImplementation(async () => [serverSku])
@@ -238,7 +254,7 @@ describe('PlatformInventoryAdminPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存 SKU' }))
 
     expect(await screen.findByText('KAI 上海 H100 统一库存')).toBeTruthy()
-    expect(screen.getByText('SKU KAI-H100-SH-8 已保存；审计记录由服务端生成。')).toBeTruthy()
+    expect(screen.getByText('SKU KAI-H100-SH-8 已保存，服务端已核验最新配置。')).toBeTruthy()
     expect(screen.getAllByText('KAI-H100-SH-8')).toHaveLength(1)
     expect(invalidation).toHaveBeenCalledWith({
       queryKey: ['compute', 'account:100', 'admin', 'platform-hosting', 'skus'],
@@ -263,7 +279,7 @@ describe('PlatformInventoryAdminPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存 SKU' }))
 
     expect(await screen.findByText('总库存不能低于已分配数量 2')).toBeTruthy()
-    expect(screen.queryByText(/已保存；审计记录/)).toBeNull()
+    expect(screen.queryByText(/已保存，服务端已核验/)).toBeNull()
   })
 
   it('discards an old account list response after switching identities', async () => {
@@ -317,7 +333,7 @@ describe('PlatformInventoryAdminPanel', () => {
     })
 
     expect(screen.queryByText('账户 A 保存结果')).toBeNull()
-    expect(screen.queryByText(/已保存；审计记录/)).toBeNull()
+    expect(screen.queryByText(/已保存，服务端已核验/)).toBeNull()
     expect(screen.getByText('账户 B 库存')).toBeTruthy()
   })
 })

@@ -170,6 +170,7 @@ const adminSku = {
   deliveryDeadlineHours: 12,
   totalInventory: 5,
   availableInventory: 3,
+  allocatedInventory: 2,
   status: 'ACTIVE',
 } satisfies PlatformSkuAdmin
 

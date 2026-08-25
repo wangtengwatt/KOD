@@ -681,30 +681,45 @@ export const PlatformLeaseDetailsSchema = z.object({
 })
 export type PlatformLeaseDetails = z.infer<typeof PlatformLeaseDetailsSchema>
 
+export const JAVA_INT_MAX = 2_147_483_647
+export const PLATFORM_SKU_CODE_PATTERN = /^[A-Z0-9][A-Z0-9._-]{0,63}$/
+
+const positiveJavaInt = z.number().int().positive().max(JAVA_INT_MAX).safe()
+const nonnegativeJavaInt = z.number().int().nonnegative().max(JAVA_INT_MAX).safe()
+
 export const PlatformSkuAdminInputSchema = z.object({
-  skuCode: z.string().min(1).max(64),
+  skuCode: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .transform((value) => value.toUpperCase())
+    .refine((value) => PLATFORM_SKU_CODE_PATTERN.test(value), {
+      message: 'SKU code is invalid',
+    }),
   name: z.string().min(1).max(128),
   description: z.string().max(1_000),
   region: z.string().min(1).max(128),
   gpuModel: z.string().min(1).max(128),
-  gpuMemoryGb: z.number().int().positive().safe(),
-  gpuCount: z.number().int().positive().safe(),
+  gpuMemoryGb: positiveJavaInt,
+  gpuCount: positiveJavaInt,
   cpuDescription: z.string().max(256),
-  ramGb: z.number().int().nonnegative().safe(),
-  storageGb: z.number().int().nonnegative().safe(),
+  ramGb: nonnegativeJavaInt,
+  storageGb: nonnegativeJavaInt,
   networkDescription: z.string().max(256),
   monthlyRent: strictPositiveContractDecimal,
   platformSalePrice: strictPositiveContractDecimal,
-  packageDurationHours: z.number().int().positive().max(8_760).safe(),
-  deliveryDeadlineHours: z.number().int().positive().max(720).safe(),
-  totalInventory: z.number().int().nonnegative().safe(),
+  packageDurationHours: positiveJavaInt.max(8_760),
+  deliveryDeadlineHours: positiveJavaInt.max(720),
+  totalInventory: nonnegativeJavaInt,
   status: z.enum(['ACTIVE', 'DISABLED']),
 })
 export type PlatformSkuAdminInput = z.infer<typeof PlatformSkuAdminInputSchema>
 
 const PlatformSkuAdminSchema = PlatformSkuAdminInputSchema.extend({
   id: strictContractId,
-  availableInventory: z.number().int().nonnegative(),
+  availableInventory: nonnegativeJavaInt,
+  allocatedInventory: nonnegativeJavaInt,
 }).refine((value) => value.availableInventory <= value.totalInventory, {
   path: ['availableInventory'],
   message: 'available inventory cannot exceed total inventory',

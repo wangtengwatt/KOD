@@ -76,7 +76,7 @@ const adminSku = {
   status: 'ACTIVE',
 } as const
 
-const platformSku = { id: ids.product, ...adminSku, availableInventory: 3 } as const
+const platformSku = { id: ids.product, ...adminSku, availableInventory: 3, allocatedInventory: 1 } as const
 
 const leaseDetails = {
   lease: {
@@ -246,9 +246,71 @@ describe('hosting, lottery, and local demo contracts', () => {
     expect(mocks.ofetch).not.toHaveBeenCalled()
   })
 
+  it('normalizes valid SKU codes and accepts every exact administrator Java-int boundary', async () => {
+    const boundaryInput = {
+      ...adminSku,
+      skuCode: '  kai.h100_80g-1  ',
+      gpuMemoryGb: 2_147_483_647,
+      gpuCount: 2_147_483_647,
+      ramGb: 2_147_483_647,
+      storageGb: 2_147_483_647,
+      packageDurationHours: 8_760,
+      deliveryDeadlineHours: 720,
+      totalInventory: 2_147_483_647,
+    }
+    const normalizedInput = { ...boundaryInput, skuCode: 'KAI.H100_80G-1' }
+    const response = {
+      id: ids.product,
+      ...normalizedInput,
+      availableInventory: 2_147_483_646,
+      allocatedInventory: 1,
+    }
+    mocks.ofetch.mockResolvedValueOnce({ code: 0, data: response })
+
+    await expect(contracts.upsertAdminPlatformSku(boundaryInput)).resolves.toEqual(response)
+    expect(mocks.ofetch).toHaveBeenCalledWith(
+      'https://kod.test/api/compute/admin/platform-hosting/skus',
+      expect.objectContaining({ method: 'POST', body: normalizedInput, retry: 0 })
+    )
+  })
+
+  it('rejects invalid normalized SKU codes and every Java-int overflow before requesting', () => {
+    mocks.ofetch.mockResolvedValue({ code: 0, data: platformSku })
+    const invalidInputs = [
+      { ...adminSku, skuCode: 'KAI/H100' },
+      { ...adminSku, gpuMemoryGb: 2_147_483_648 },
+      { ...adminSku, gpuCount: 2_147_483_648 },
+      { ...adminSku, ramGb: 2_147_483_648 },
+      { ...adminSku, storageGb: 2_147_483_648 },
+      { ...adminSku, packageDurationHours: 2_147_483_648 },
+      { ...adminSku, deliveryDeadlineHours: 2_147_483_648 },
+      { ...adminSku, totalInventory: 2_147_483_648 },
+    ]
+
+    for (const input of invalidInputs) {
+      expect(() => contracts.upsertAdminPlatformSku(input as PlatformSkuAdminInput)).toThrow()
+    }
+    expect(mocks.ofetch).not.toHaveBeenCalled()
+  })
+
+  it('rejects missing, negative, fractional, and overflowing allocated inventory from the server', async () => {
+    const { allocatedInventory: _allocatedInventory, ...missingAllocation } = platformSku
+    const invalidResponses = [
+      missingAllocation,
+      { ...platformSku, allocatedInventory: -1 },
+      { ...platformSku, allocatedInventory: 0.5 },
+      { ...platformSku, allocatedInventory: 2_147_483_648 },
+    ]
+
+    for (const response of invalidResponses) {
+      mocks.ofetch.mockResolvedValueOnce({ code: 0, data: [response] })
+      await expect(contracts.listAdminPlatformSkus()).rejects.toThrow()
+    }
+  })
+
   it('sends and decodes zero RAM and storage while rejecting negative values before requesting', async () => {
     const zeroCapacityInput = { ...adminSku, ramGb: 0, storageGb: 0 }
-    const zeroCapacitySku = { id: ids.product, ...zeroCapacityInput, availableInventory: 4 }
+    const zeroCapacitySku = { id: ids.product, ...zeroCapacityInput, availableInventory: 4, allocatedInventory: 0 }
     mocks.ofetch.mockResolvedValueOnce({ code: 0, data: zeroCapacitySku })
 
     expect(contracts.PlatformSkuAdminInputSchema.parse(zeroCapacityInput)).toMatchObject({ ramGb: 0, storageGb: 0 })
