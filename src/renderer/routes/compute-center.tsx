@@ -55,6 +55,7 @@ import { CardHourAdminPanel, CardHourBusiness, CardHourMarketplace } from '@/com
 import { HostedComputePanel } from '@/components/compute/HostedComputePanel'
 import { MarketplaceOrderWorkspace } from '@/components/compute/MarketplaceOrderWorkspace'
 import { PlatformHostingPanel } from '@/components/compute/PlatformHostingPanel'
+import { PlatformInventoryAdminPanel } from '@/components/compute/PlatformInventoryAdminPanel'
 import { MarketIntelligencePanel } from '@/components/compute-market'
 import Page from '@/components/layout/Page'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
@@ -4252,8 +4253,13 @@ function AdminPanel({ busy, run }: { busy: string | null; run: RunAction }) {
         <Tabs.List>
           <Tabs.Tab value="reviews">审核中心</Tabs.Tab>
           <Tabs.Tab value="operations">资源与争议</Tabs.Tab>
+          <Tabs.Tab value="platform-inventory">平台服务器库存</Tabs.Tab>
           <Tabs.Tab value="settings">运营设置</Tabs.Tab>
         </Tabs.List>
+
+        <Tabs.Panel value="platform-inventory" pt="md">
+          <PlatformInventoryAdminPanel isAdmin />
+        </Tabs.Panel>
 
         <Tabs.Panel value="settings" pt="md">
           <Stack>
