@@ -37,6 +37,8 @@ type HostingLotteryContracts = {
   LotteryDrawSchema: { parse: (value: unknown) => unknown }
   LotteryHistorySchema: { parse: (value: unknown) => unknown }
   LocalDemoCapabilitySchema: { parse: (value: unknown) => unknown }
+  LocalDemoSessionSchema: { parse: (value: unknown) => unknown }
+  LocalDemoScenarioSchema: { parse: (value: unknown) => unknown }
   parseLocalDemoApiOrigin: (origin: string) => string
   getPlatformLeaseDetails: (leaseId: string) => Promise<unknown>
   listAdminPlatformSkus: () => Promise<unknown>
@@ -45,6 +47,8 @@ type HostingLotteryContracts = {
   drawLotteryEligibility: (eligibilityId: string, requestId: string) => Promise<unknown>
   listLotteryHistory: () => Promise<unknown>
   getLocalDemoCapability: (signal?: AbortSignal, origin?: string) => Promise<unknown>
+  getLocalDemoScenario: (signal?: AbortSignal, origin?: string) => Promise<unknown>
+  runLocalDemoScenario: (signal?: AbortSignal, origin?: string) => Promise<unknown>
   switchLocalDemoRole: (
     role: 'ADMIN' | 'HOSTING_TENANT' | 'GPU_BUYER',
     signal?: AbortSignal,
@@ -65,6 +69,27 @@ const ids = {
   order: '9007199254740993008',
   eligibility: '9007199254740993009',
   draw: '9007199254740993010',
+} as const
+
+const completedScenario = {
+  scenarioKey: 'kai-hosting-lottery-v1',
+  stage: 'COMPLETED',
+  adminAccountId: '9007199254740993101',
+  tenantAccountId: '9007199254740993102',
+  buyerAccountId: '9007199254740993103',
+  skuId: '9007199254740993104',
+  leaseId: '9007199254740993105',
+  productId: '9007199254740993106',
+  reservationId: '9007199254740993107',
+  buyerEligibilityId: '9007199254740993108',
+  tenantEligibilityId: '9007199254740993109',
+  monthlyRentCardHours: '30.000',
+  salePriceCardHours: '12.000',
+  settledIncomeCardHours: '12.000',
+  buyerRewardCardHours: '0.060',
+  tenantRewardCardHours: '0.120',
+  skuAvailableInventory: 1,
+  reconciled: true,
 } as const
 
 const adminSku = {
@@ -455,7 +480,7 @@ describe('hosting, lottery, and local demo contracts', () => {
       .mockResolvedValueOnce({
         token: 'demo-access-token',
         accountId: ids.user,
-        expiresAt: '2026-08-25T13:10:00Z',
+        expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       })
 
     await expect(contracts.getLocalDemoCapability()).resolves.toEqual({
@@ -474,6 +499,34 @@ describe('hosting, lottery, and local demo contracts', () => {
       'http://localhost:8080/api/compute/local-demo/session/HOSTING_TENANT',
       expect.objectContaining({ method: 'POST', retry: 0, headers: {}, ignoreResponseError: false })
     )
+  })
+
+  it('loads and idempotently runs the exact raw loopback scenario contract', async () => {
+    mocks.apiOrigin = 'http://localhost:8080/'
+    mocks.ofetch.mockResolvedValueOnce(completedScenario).mockResolvedValueOnce(completedScenario)
+
+    await expect(contracts.getLocalDemoScenario()).resolves.toEqual(completedScenario)
+    await expect(contracts.runLocalDemoScenario()).resolves.toEqual(completedScenario)
+
+    expect(mocks.ofetch).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:8080/api/compute/local-demo/scenario',
+      expect.objectContaining({ headers: {}, ignoreResponseError: false })
+    )
+    expect(mocks.ofetch).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:8080/api/compute/local-demo/scenario/run',
+      expect.objectContaining({ method: 'POST', retry: 0, headers: {}, ignoreResponseError: false })
+    )
+  })
+
+  it('strictly preserves scenario string identifiers and decimals', () => {
+    expect(contracts.LocalDemoScenarioSchema.parse(completedScenario)).toEqual(completedScenario)
+    expect(() => contracts.LocalDemoScenarioSchema.parse({ ...completedScenario, leaseId: 42 })).toThrow()
+    expect(() =>
+      contracts.LocalDemoScenarioSchema.parse({ ...completedScenario, settledIncomeCardHours: 12 })
+    ).toThrow()
+    expect(() => contracts.LocalDemoScenarioSchema.parse({ ...completedScenario, internalNote: 'private' })).toThrow()
   })
 
   it('accepts only canonical HTTP loopback origins for local-demo transport', async () => {
@@ -536,12 +589,16 @@ describe('hosting, lottery, and local demo contracts', () => {
       )
       const pending = contracts.switchLocalDemoRole('GPU_BUYER')
       Object.assign(mocks.authState, change)
-      resolveResponse?.({ token: 'late-token', accountId: ids.user, expiresAt: '2026-08-25T13:10:00Z' })
+      resolveResponse?.({
+        token: 'late-token',
+        accountId: ids.user,
+        expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      })
       await expect(pending).rejects.toThrow('账户已切换')
     }
   })
 
-  it('rejects wrapped, refresh-bearing, and expired local-demo sessions from the raw contract', async () => {
+  it('rejects wrapped and refresh-bearing local-demo responses from the raw contract', async () => {
     mocks.apiOrigin = 'http://localhost:8080'
     mocks.ofetch
       .mockResolvedValueOnce({ code: 0, data: { enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] } })
@@ -549,11 +606,27 @@ describe('hosting, lottery, and local demo contracts', () => {
         token: 'demo-access-token',
         refreshToken: 'unexpected-refresh-token',
         accountId: ids.user,
-        expiresAt: '2026-08-25T13:10:00Z',
+        expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
       })
 
     await expect(contracts.getLocalDemoCapability()).rejects.toThrow()
     await expect(contracts.switchLocalDemoRole('ADMIN')).rejects.toThrow()
+  })
+
+  it('rejects an expired otherwise-valid local-demo session independently of extra fields', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-26T03:00:00Z'))
+    try {
+      expect(() =>
+        contracts.LocalDemoSessionSchema.parse({
+          token: 'expired-demo-access-token',
+          accountId: ids.user,
+          expiresAt: '2026-08-26T02:59:59Z',
+        })
+      ).toThrow()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('does not attempt a refresh when an access-only local-demo session expires', async () => {

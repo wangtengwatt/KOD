@@ -10,10 +10,12 @@ const mocks = vi.hoisted(() => ({
   getComputeAccount: vi.fn(),
   getComputeConfig: vi.fn(),
   getLocalDemoCapability: vi.fn(),
+  getLocalDemoScenario: vi.fn(),
   listComputeProducts: vi.fn(),
   listLotteryEligibilities: vi.fn(),
   platformGetStoreValue: vi.fn(),
   platformSetStoreValue: vi.fn(),
+  runLocalDemoScenario: vi.fn(),
   switchLocalDemoRole: vi.fn(),
 }))
 
@@ -43,8 +45,10 @@ vi.mock('@/packages/computeCenter', async (importOriginal) => {
     getComputeAccount: mocks.getComputeAccount,
     getComputeConfig: mocks.getComputeConfig,
     getLocalDemoCapability: mocks.getLocalDemoCapability,
+    getLocalDemoScenario: mocks.getLocalDemoScenario,
     listComputeProducts: mocks.listComputeProducts,
     listLotteryEligibilities: mocks.listLotteryEligibilities,
+    runLocalDemoScenario: mocks.runLocalDemoScenario,
     switchLocalDemoRole: mocks.switchLocalDemoRole,
   }
 })
@@ -97,10 +101,12 @@ beforeEach(() => {
   mocks.listComputeProducts.mockResolvedValue([])
   mocks.listLotteryEligibilities.mockResolvedValue([])
   mocks.getLocalDemoCapability.mockResolvedValue({ enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] })
+  mocks.getLocalDemoScenario.mockResolvedValue(null)
+  mocks.runLocalDemoScenario.mockResolvedValue(null)
   mocks.switchLocalDemoRole.mockResolvedValue({
     token: 'buyer-access',
     accountId: '9007199254740993002',
-    expiresAt: '2026-08-25T13:10:00Z',
+    expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
   })
   mocks.platformGetStoreValue.mockResolvedValue(undefined)
   mocks.platformSetStoreValue.mockResolvedValue(undefined)
@@ -155,6 +161,53 @@ it('atomically installs an access-only role session and clears prior compute, ma
   expect(queryClient.getQueryData(['wallet', 'account:9007199254740993001', 'balance'])).toBeUndefined()
 })
 
+it('finishes deferred old-owner cleanup before mounting a successful new-role account query', async () => {
+  const computeCancellation = deferred<void>()
+  const walletCancellation = deferred<void>()
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const cancelQueries = vi
+    .spyOn(queryClient, 'cancelQueries')
+    .mockImplementationOnce(() => computeCancellation.promise)
+    .mockImplementationOnce(() => walletCancellation.promise)
+  mocks.getComputeAccount.mockImplementation(() => {
+    const accountId = authInfoStore.getState().accountId as string
+    return {
+      userId: accountId,
+      email: `${accountId}@demo.invalid`,
+      isAdmin: false,
+      roles: ['BUYER'],
+      unreadOrderMessages: 0,
+      unreadNotifications: 0,
+    }
+  })
+  renderPage(queryClient)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'GPU 买家' }))
+  await waitFor(() => expect(cancelQueries).toHaveBeenCalledTimes(2))
+  expect(authInfoStore.getState()).toMatchObject({
+    accessToken: 'old-access',
+    accountId: '9007199254740993001',
+  })
+
+  await act(async () => {
+    computeCancellation.resolve(undefined)
+    walletCancellation.resolve(undefined)
+    await Promise.all([computeCancellation.promise, walletCancellation.promise])
+  })
+
+  await waitFor(() =>
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: 'buyer-access',
+      accountId: '9007199254740993002',
+    })
+  )
+  await waitFor(() =>
+    expect(queryClient.getQueryData(['compute', 'account:9007199254740993002', 'account'])).toMatchObject({
+      userId: '9007199254740993002',
+    })
+  )
+})
+
 it('preserves external role B caches and workflow when role A cancellation finishes late', async () => {
   const computeCancellation = deferred<void>()
   const walletCancellation = deferred<void>()
@@ -166,15 +219,8 @@ it('preserves external role B caches and workflow when role A cancellation finis
   renderPage(queryClient)
 
   fireEvent.click(await screen.findByRole('button', { name: 'GPU 买家' }))
-  await waitFor(() =>
-    expect(authInfoStore.getState()).toMatchObject({
-      accessToken: 'buyer-access',
-      refreshToken: null,
-      accountId: '9007199254740993002',
-      loginEmail: null,
-    })
-  )
   await waitFor(() => expect(cancelQueries).toHaveBeenCalledTimes(2))
+  expect(authInfoStore.getState()).toMatchObject({ accessToken: 'old-access', accountId: '9007199254740993001' })
 
   act(() => {
     authInfoStore.getState().setAccessOnlySession({
@@ -216,15 +262,8 @@ it('leaves external role B intact when role A cancellation fails late', async ()
   renderPage(queryClient)
 
   fireEvent.click(await screen.findByRole('button', { name: 'GPU 买家' }))
-  await waitFor(() =>
-    expect(authInfoStore.getState()).toMatchObject({
-      accessToken: 'buyer-access',
-      refreshToken: null,
-      accountId: '9007199254740993002',
-      loginEmail: null,
-    })
-  )
   await waitFor(() => expect(cancelQueries).toHaveBeenCalledTimes(2))
+  expect(authInfoStore.getState()).toMatchObject({ accessToken: 'old-access', accountId: '9007199254740993001' })
 
   act(() => {
     authInfoStore.getState().setAccessOnlySession({
@@ -277,7 +316,7 @@ it('preserves an externally installed session and caches when an earlier role re
     lateRole.resolve({
       token: 'late-a-access',
       accountId: '9007199254740993002',
-      expiresAt: '2026-08-25T13:10:00Z',
+      expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
     })
     await lateRole.promise
   })

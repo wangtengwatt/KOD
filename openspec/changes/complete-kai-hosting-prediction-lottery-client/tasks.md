@@ -33,3 +33,9 @@
 - [ ] 7.1 Run focused and full tests, type checking, changed-file Biome, production build, strict OpenSpec, diff/scope, secret, branding, and generated-artifact checks.
 - [ ] 7.2 Run the local full workflow and reconcile database rent, settlement, income, eligibility, draw, and reward ledger rows.
 - [ ] 7.3 Verify production read-only behavior and zero demo rows, build Windows artifacts, smoke the existing desktop shortcut, then integrate and push `suanlizhongxin_KOD`; stop on every conflict.
+
+## 8. Close final independent client review
+
+- [x] 8.1 Add RED tests and preserve evidence for default-feed inference visibility, trading-only selection, strict local scenario/session contracts, pre-install role cleanup, expanded lease settlement polling, concurrent same-account 401 refresh, exact public SKU strings, and independent expired-session rejection.
+- [x] 8.2 Implement the minimum client fixes without changing protected quote feeds, simulation semantics, website/public assets, KAI branding, or direct upstream access.
+- [x] 8.3 Run focused and full tests, type checking, changed-file Biome, production build, strict OpenSpec validation, diff/scope/secret/protected scans, and an independent final review; deliver one isolated commit without launcher or root-checkout changes.

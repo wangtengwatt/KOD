@@ -568,7 +568,7 @@ const EmailInvitationReceiptSchema = z.object({ acknowledgment: z.string().min(1
 
 export const PlatformServerSkuSchema = z
   .object({
-    id: contractLongId,
+    id: strictContractId,
     skuCode: z.string().min(1),
     name: z.string().min(1),
     description: z.string(),
@@ -580,8 +580,8 @@ export const PlatformServerSkuSchema = z
     ramGb: z.number().int().nonnegative(),
     storageGb: z.number().int().nonnegative(),
     networkDescription: z.string(),
-    monthlyRent: contractNonnegativeDecimal,
-    platformSalePrice: contractNonnegativeDecimal,
+    monthlyRent: strictContractDecimal,
+    platformSalePrice: strictContractDecimal,
     packageDurationHours: z.number().int().positive(),
     deliveryDeadlineHours: z.number().int().nonnegative(),
     totalInventory: z.number().int().nonnegative(),
@@ -786,11 +786,50 @@ export const LocalDemoSessionSchema = z
   .object({
     token: z.string().min(1),
     accountId: strictContractId,
-    expiresAt: z.iso.datetime({ offset: true }),
+    expiresAt: z.iso
+      .datetime({ offset: true })
+      .refine((value) => Date.parse(value) > Date.now(), { message: 'demo session is expired' }),
   })
   .strict()
 export type LocalDemoRole = z.infer<typeof LocalDemoCapabilitySchema>['roles'][number]
 export type LocalDemoSession = z.infer<typeof LocalDemoSessionSchema>
+
+const LocalDemoScenarioStageSchema = z.enum([
+  'INITIALIZED',
+  'INVENTORY_READY',
+  'LEASE_ACTIVE',
+  'ORDER_CREATED',
+  'SCHEDULED',
+  'DELIVERED',
+  'SETTLED',
+  'BUYER_DRAWN',
+  'LEASE_RELEASED',
+  'COMPLETED',
+])
+
+export const LocalDemoScenarioSchema = z
+  .object({
+    scenarioKey: z.literal('kai-hosting-lottery-v1'),
+    stage: LocalDemoScenarioStageSchema,
+    adminAccountId: strictContractId,
+    tenantAccountId: strictContractId,
+    buyerAccountId: strictContractId,
+    skuId: strictContractId.nullable(),
+    leaseId: strictContractId.nullable(),
+    productId: strictContractId.nullable(),
+    reservationId: strictContractId.nullable(),
+    buyerEligibilityId: strictContractId.nullable(),
+    tenantEligibilityId: strictContractId.nullable(),
+    monthlyRentCardHours: strictContractDecimal,
+    salePriceCardHours: strictContractDecimal,
+    settledIncomeCardHours: strictContractDecimal,
+    buyerRewardCardHours: strictContractDecimal,
+    tenantRewardCardHours: strictContractDecimal,
+    skuAvailableInventory: z.number().int().nonnegative(),
+    reconciled: z.boolean(),
+  })
+  .strict()
+export type LocalDemoScenario = z.infer<typeof LocalDemoScenarioSchema>
 
 const LOCAL_DEMO_API_ORIGIN_PATTERN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::(?:0|[1-9]\d{0,4}))?\/?$/
 
@@ -1207,6 +1246,16 @@ function requireCurrentAccountIdentity(accessToken: string | null, accountId: st
   }
 }
 
+function requireCurrentAccountOwner(accountId: string | null, loginEmail: string | null) {
+  const current = authInfoStore.getState()
+  if (
+    optionalAccountIdentity(current.accountId) !== accountId ||
+    (current.loginEmail?.trim().toLowerCase() || null) !== loginEmail
+  ) {
+    throw new Error('账户已切换，已取消旧账户操作')
+  }
+}
+
 async function request<T>(
   path: string,
   options?: FetchOptions<'json'>,
@@ -1218,6 +1267,7 @@ async function request<T>(
   const token = session.accessToken
   const refreshToken = session.refreshToken
   const accountId = optionalAccountIdentity(session.accountId)
+  const loginEmail = session.loginEmail?.trim().toLowerCase() || null
   if (authenticated && !token) {
     throw new Error('请先登录 KOD 账号')
   }
@@ -1229,12 +1279,14 @@ async function request<T>(
     },
     ignoreResponseError: true,
   })
-  if (authenticated) requireCurrentAccountIdentity(token, accountId)
   const isSafeToReplay = !options?.method || options.method === 'GET'
   if (json.code === 401 && authenticated && token && refreshToken && isSafeToReplay && !authRefreshAttempted) {
+    requireCurrentAccountOwner(accountId, loginEmail)
     await refreshKodSession(token, accountId)
+    requireCurrentAccountOwner(accountId, loginEmail)
     return request(path, options, authenticated, origin, true)
   }
+  if (authenticated) requireCurrentAccountIdentity(token, accountId)
   if (json.code !== 0) {
     throw new ComputeCenterApiError(json.code, json.message || '算力中心请求失败', json.data)
   }
@@ -1491,6 +1543,27 @@ export async function switchLocalDemoRole(role: LocalDemoRole, signal?: AbortSig
   )
   requireCurrentLocalDemoAuthOwner(owner)
   return LocalDemoSessionSchema.parse(data)
+}
+
+export async function getLocalDemoScenario(signal?: AbortSignal, apiOrigin = getKodApiOrigin()) {
+  const origin = parseLocalDemoApiOrigin(apiOrigin)
+  const owner = captureLocalDemoAuthOwner()
+  const data = await requestRaw<unknown>('/api/compute/local-demo/scenario', { signal }, false, origin)
+  requireCurrentLocalDemoAuthOwner(owner)
+  return LocalDemoScenarioSchema.parse(data)
+}
+
+export async function runLocalDemoScenario(signal?: AbortSignal, apiOrigin = getKodApiOrigin()) {
+  const origin = parseLocalDemoApiOrigin(apiOrigin)
+  const owner = captureLocalDemoAuthOwner()
+  const data = await requestRaw<unknown>(
+    '/api/compute/local-demo/scenario/run',
+    { method: 'POST', retry: 0, signal },
+    false,
+    origin
+  )
+  requireCurrentLocalDemoAuthOwner(owner)
+  return LocalDemoScenarioSchema.parse(data)
 }
 
 export function listCardHourMarketListings() {

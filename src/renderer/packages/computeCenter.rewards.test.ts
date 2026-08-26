@@ -59,7 +59,7 @@ const pendingInvitation = {
 } as const
 
 const platformSku = {
-  id: 42,
+  id: '42',
   skuCode: 'CN-A800-80G-1',
   name: 'A800 80G',
   description: 'Platform-managed monthly GPU server',
@@ -139,6 +139,14 @@ const computeAccount = {
   unreadNotifications: 0,
 } as const
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('reward referral and platform hosting contracts', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -209,6 +217,70 @@ describe('reward referral and platform hosting contracts', () => {
     )
   })
 
+  it('lets two concurrent rejected reads converge on a same-account fresh token', async () => {
+    const firstUnauthorized = deferred<unknown>()
+    const secondUnauthorized = deferred<unknown>()
+    mocks.ofetch
+      .mockImplementationOnce(() => firstUnauthorized.promise)
+      .mockImplementationOnce(() => secondUnauthorized.promise)
+      .mockResolvedValueOnce({ code: 0, data: computeAccount })
+      .mockResolvedValueOnce({ code: 0, data: computeAccount })
+
+    const firstRequest = getComputeAccount()
+    const secondRequest = getComputeAccount()
+    firstUnauthorized.resolve({ code: 401, message: 'first token expired', data: null })
+    await expect(firstRequest).resolves.toMatchObject({ userId: computeAccount.userId })
+
+    secondUnauthorized.resolve({ code: 401, message: 'same rejected token completed later', data: null })
+    await expect(secondRequest).resolves.toMatchObject({ userId: computeAccount.userId })
+
+    expect(mocks.refreshKodSession).toHaveBeenCalledTimes(2)
+    expect(mocks.refreshKodSession).toHaveBeenNthCalledWith(1, 'test-access-token', 'account-7')
+    expect(mocks.refreshKodSession).toHaveBeenNthCalledWith(2, 'test-access-token', 'account-7')
+    expect(mocks.ofetch).toHaveBeenNthCalledWith(
+      4,
+      'https://kod.test/api/compute/account',
+      expect.objectContaining({ headers: { Authorization: 'Bearer fresh-access-token' } })
+    )
+  })
+
+  it('does not refresh or replay a rejected account-a read after account b takes ownership', async () => {
+    const unauthorized = deferred<unknown>()
+    mocks.ofetch.mockImplementationOnce(() => unauthorized.promise)
+
+    const pending = getComputeAccount()
+    Object.assign(mocks.authState, {
+      accessToken: 'account-b-access',
+      refreshToken: 'account-b-refresh',
+      accountId: 'account-b',
+    })
+    unauthorized.resolve({ code: 401, message: 'old account unauthorized', data: null })
+
+    await expect(pending).rejects.toThrow('账户已切换')
+    expect(mocks.refreshKodSession).not.toHaveBeenCalled()
+    expect(mocks.ofetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not replay with account b when ownership changes while account a refresh is pending', async () => {
+    mocks.ofetch.mockResolvedValueOnce({ code: 401, message: 'account a token expired', data: null })
+    mocks.refreshKodSession.mockImplementationOnce(() => {
+      Object.assign(mocks.authState, {
+        accessToken: 'account-b-access',
+        refreshToken: 'account-b-refresh',
+        accountId: 'account-b',
+      })
+      return Promise.resolve({
+        accessToken: 'fresh-account-a-access',
+        refreshToken: 'fresh-account-a-refresh',
+        accountId: 'account-7',
+      })
+    })
+
+    await expect(getComputeAccount()).rejects.toThrow('账户已切换')
+    expect(mocks.refreshKodSession).toHaveBeenCalledWith('test-access-token', 'account-7')
+    expect(mocks.ofetch).toHaveBeenCalledTimes(1)
+  })
+
   it('does not loop when the retried card-hour account request is still unauthorized', async () => {
     mocks.ofetch
       .mockResolvedValueOnce({ code: 401, message: 'token expired', data: null })
@@ -256,12 +328,8 @@ describe('reward referral and platform hosting contracts', () => {
     ).toThrow()
   })
 
-  it('validates SKU decimals and preserves platform lease strings', () => {
-    expect(PlatformServerSkuSchema.parse(platformSku)).toMatchObject({
-      id: '42',
-      monthlyRent: 720,
-      platformSalePrice: 1.25,
-    })
+  it('preserves strict public SKU and lease strings without numeric coercion', () => {
+    expect(PlatformServerSkuSchema.parse(platformSku)).toEqual(platformSku)
     expect(PlatformServerLeaseSchema.parse(platformLease)).toMatchObject({
       id: '88',
       skuId: '42',
@@ -273,6 +341,20 @@ describe('reward referral and platform hosting contracts', () => {
     expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: '-1.000' })).toThrow()
     expect(() => PlatformServerSkuSchema.parse({ ...platformSku, monthlyRent: '720.0000' })).toThrow()
     expect(() => PlatformServerLeaseSchema.parse({ ...platformLease, salePrice: '1.2500' })).toThrow()
+    for (const field of ['id', 'monthlyRent', 'platformSalePrice'] as const) {
+      expect(() => PlatformServerSkuSchema.parse({ ...platformSku, [field]: 42 })).toThrow()
+    }
+  })
+
+  it('accepts the legal public SKU DECIMAL(20,3) boundary as original strings', () => {
+    const exactSku = {
+      ...platformSku,
+      id: '9007199254740993001',
+      monthlyRent: '12345678901234567.890',
+      platformSalePrice: '99999999999999999.999',
+    }
+
+    expect(PlatformServerSkuSchema.parse(exactSku)).toEqual(exactSku)
   })
 
   it('preserves 19-digit lease identifiers and DECIMAL(20,3) scale without numeric coercion', () => {
@@ -335,7 +417,7 @@ describe('reward referral and platform hosting contracts', () => {
       .mockResolvedValueOnce({ code: 0, data: platformLease })
       .mockResolvedValueOnce({ code: 0, data: { ...platformLease, autoRenew: false } })
 
-    await expect(listPlatformServerSkus()).resolves.toMatchObject([{ id: '42', monthlyRent: 720 }])
+    await expect(listPlatformServerSkus()).resolves.toMatchObject([{ id: '42', monthlyRent: '720.000' }])
     await expect(listPlatformServerLeases()).resolves.toMatchObject([{ id: '88', autoRenew: true }])
     await expect(rentPlatformServer('42', 'rent-request-1')).resolves.toMatchObject({ id: '88', autoRenew: true })
     await expect(setLeaseAutoRenew('88', false)).resolves.toMatchObject({

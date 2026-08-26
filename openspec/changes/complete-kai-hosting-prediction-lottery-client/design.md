@@ -26,6 +26,20 @@ Directory ownership includes wallet identity, realtime view, and normalized GPU 
 
 Demo controls require both a loopback API origin and a server capability response. A build-time flag alone cannot expose demo login or data controls.
 
+The guarded panel reads and runs the server-owned scenario through the loopback raw endpoints only after capability succeeds. Its compact status view strictly decodes the backend scenario record and displays source IDs, decimal strings, inventory, stage, and reconciliation without synthesizing progress or financial values. A returned demo session is usable only when its strict expiry is later than the renderer's current time.
+
+### Review closure preserves the default shared market feed
+
+The default simulation presentation is the existing shared server feed, not an authorization boundary for inference. Authenticated GPU views may therefore load the same-origin inference directory and inference snapshot while that presentation is active. The client retains every strictly decoded directory record in the query result, but exposes only exact `trading` records as selectable targets because the backend rejects every other status.
+
+### Query cleanup precedes demo-session installation
+
+A role switch cancels and removes the previous owner's compute and wallet queries before installing the returned access-only session. Generation and captured-owner checks run after awaited cleanup, so an external account change wins and broad cleanup never runs against a newly mounted demo role.
+
+### Refresh and precision boundaries remain server-owned
+
+Expanded lease details poll every ten seconds only while visible so pending settlement state can converge. Concurrent safe authenticated reads may converge on a same-account token refresh, but an account-ID change remains a hard replay boundary. Public platform SKU identifiers and DECIMAL(20,3) values remain exact backend strings through decoding and rendering.
+
 ## Risks / Trade-offs
 
 - Dense hosting information can reduce usability; summaries remain compact and order rows expand on demand.

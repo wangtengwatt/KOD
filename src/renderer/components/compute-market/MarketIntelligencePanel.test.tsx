@@ -437,6 +437,27 @@ describe('MarketIntelligencePanel', () => {
     ).toBe(true)
   })
 
+  it('excludes same-GPU non-trading contracts from selection and inference requests', async () => {
+    const inferenceApi = createInferenceApi()
+    renderPanel(createApi(), 'gpu-reference', false, false, ACCOUNT_A, inferenceApi)
+
+    const selector = (await screen.findByRole('textbox', { name: '预测合约' })) as HTMLInputElement
+    await waitFor(() => expect(selector.value).toContain('deepseek-v3'))
+    fireEvent.click(selector)
+
+    expect(screen.queryByRole('option', { name: /closed-model/ })).toBeNull()
+    expect(inferenceApi.getInference).not.toHaveBeenCalledWith(
+      'hk-h100-closed-vllm-2026082517',
+      expect.anything(),
+      expect.anything()
+    )
+    expect(inferenceApi.refreshInference).not.toHaveBeenCalledWith(
+      'hk-h100-closed-vllm-2026082517',
+      expect.anything(),
+      expect.anything()
+    )
+  })
+
   it('keeps cached inference visible while backend refresh is pending or unavailable and retries only with POST refresh', async () => {
     const inferenceApi = createInferenceApi()
     let rejectRefresh: ((reason?: unknown) => void) | undefined
@@ -907,16 +928,20 @@ describe('MarketIntelligencePanel', () => {
     expect(accountARefreshes).toBe(2)
   })
 
-  it('does not load inference without a wallet identity or in simulation mode', async () => {
+  it('does not load inference without a wallet identity', async () => {
     const signedOutApi = createInferenceApi()
     renderPanel(createApi(), 'gpu-reference', false, false, null, signedOutApi)
     await screen.findAllByText('$2.2500')
     expect(signedOutApi.getContracts).not.toHaveBeenCalled()
-    cleanup()
+  })
 
+  it('shows authenticated inference in the default shared simulation market view', async () => {
     const simulatedApi = createInferenceApi()
     renderPanel(createApi(), 'gpu-reference', false, true, ACCOUNT_A, simulatedApi)
     await screen.findByText(SIMULATED_MARKET_DISCLOSURE)
-    expect(simulatedApi.getContracts).not.toHaveBeenCalled()
+
+    await waitFor(() => expect(simulatedApi.getContracts).toHaveBeenCalledWith(ACCOUNT_A, expect.any(AbortSignal)))
+    expect(await screen.findByText(`prediction for ${CONTRACT_A}`)).toBeTruthy()
+    expect(simulatedApi.getInference).toHaveBeenCalledWith(CONTRACT_A, ACCOUNT_A, expect.any(AbortSignal))
   })
 })

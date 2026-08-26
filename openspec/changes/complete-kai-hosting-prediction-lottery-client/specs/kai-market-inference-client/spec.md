@@ -5,11 +5,15 @@ Present Kai prediction and risk analysis as a clearly labeled, failure-tolerant 
 ## ADDED Requirements
 
 ### Requirement: Prediction targets come from the authenticated real-contract directory
-The client SHALL load `GET /api/compute/market/inference/contracts` through the authenticated same-origin backend and SHALL accept only strict entries containing the string fields `contractId`, `name`, `model`, `gpuModel`, `runtime`, `deliveryAt`, and `status`. It SHALL filter entries by the currently selected GPU model, preserve server order, default to the first matching entry whose status is exactly `trading`, and provide a compact `预测合约` selector when matching entries exist. The client MUST NOT use a GPU model name or a hard-coded upstream identifier as a contract ID. A failed background directory refresh SHALL revoke request authority even when cached entries remain available for display; inference reads and refreshes SHALL resume only after a successful directory retry.
+The client SHALL load `GET /api/compute/market/inference/contracts` through the authenticated same-origin backend and SHALL accept only strict entries containing the string fields `contractId`, `name`, `model`, `gpuModel`, `runtime`, `deliveryAt`, and `status`. It SHALL retain the strict directory response, filter selectable entries by the currently selected GPU model and exact `trading` status, preserve server order, default to the first selectable entry, and provide a compact `预测合约` selector when selectable entries exist. The client MUST NOT offer a non-trading entry that the backend eligibility guard will reject. The client MUST NOT use a GPU model name or a hard-coded upstream identifier as a contract ID. A failed background directory refresh SHALL revoke request authority even when cached entries remain available for display; inference reads and refreshes SHALL resume only after a successful directory retry.
 
 #### Scenario: Multiple real contracts match the selected GPU model
 - **WHEN** the directory returns multiple H100 contracts and at least one has status `trading`
-- **THEN** the client SHALL select the first matching `trading` contract in server order and allow the user to switch to another matching contract
+- **THEN** the client SHALL select the first matching `trading` contract in server order and allow the user to switch only to another matching `trading` contract
+
+#### Scenario: Matching non-trading contracts are present
+- **WHEN** the strict directory includes a matching GPU contract whose status is not exactly `trading`
+- **THEN** the client SHALL keep strict directory parsing fail-closed, SHALL NOT expose that contract as selectable, and SHALL NOT issue an inference read or refresh for it
 
 #### Scenario: Contract discovery is unavailable or has no matching contract
 - **WHEN** the directory request fails, returns an invalid strict payload, or contains no contract matching the selected GPU model
@@ -21,6 +25,8 @@ The client SHALL load `GET /api/compute/market/inference/contracts` through the 
 
 ### Requirement: Realtime market shows cached inference independently from quotes
 The client SHALL show prediction, risk state, model, generation time, data freshness, and next-trade verification without changing the authoritative quote panel.
+
+An authenticated GPU view SHALL show inference when the default shared simulation market presentation is active. Simulation presentation mode MUST NOT disable authenticated same-origin inference, change the quote feed, or introduce a direct inference upstream.
 
 The inference query key SHALL include the stable wallet identity and selected real contract ID. Its query function SHALL consume the TanStack cancellation signal. Successful realtime quote refreshes SHALL request the backend refresh endpoint only for the selected real contract; the client SHALL NOT implement the 60-second or fingerprint decision locally.
 
@@ -49,6 +55,10 @@ Contract-directory, inference-read, and inference-refresh requests SHALL compose
 #### Scenario: Cached quote data is present for a new owner
 - **WHEN** the component mounts, wallet changes, or contract changes while an existing quote timestamp is cached
 - **THEN** the cached timestamp SHALL NOT trigger a refresh POST; only a strictly newer successful quote update SHALL arm one
+
+#### Scenario: Default shared simulation presentation is active
+- **WHEN** the authenticated user views GPU market data while the default simulation presentation flag is enabled
+- **THEN** the client SHALL load the authenticated inference directory and selected trading inference without changing the simulation feed or its display semantics
 
 #### Scenario: Inference service is unavailable after a success
 - **WHEN** the server returns an unavailable state with a prior successful snapshot

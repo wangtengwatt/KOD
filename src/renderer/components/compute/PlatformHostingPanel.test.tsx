@@ -64,8 +64,8 @@ const sku = {
   ramGb: 128,
   storageGb: 2048,
   networkDescription: '10 Gbps',
-  monthlyRent: 30,
-  platformSalePrice: 12,
+  monthlyRent: '30.000',
+  platformSalePrice: '12.000',
   packageDurationHours: 24,
   deliveryDeadlineHours: 6,
   totalInventory: 4,
@@ -259,6 +259,52 @@ describe('PlatformHostingPanel', () => {
     expect(within(pendingOrder).getByText('待结算')).toBeTruthy()
     expect(within(pendingOrder).getByText('9007199254740993304')).toBeTruthy()
     expect(within(pendingOrder).getByText('9007199254740993303')).toBeTruthy()
+  })
+
+  it('polls expanded lease details from pending to settled and stops after collapse', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const pendingEvent = leaseDetails.incomeEvents[1]
+    const pendingDetails: PlatformLeaseDetails = {
+      ...leaseDetails,
+      incomeEvents: [pendingEvent],
+      totalPendingIncome: '6.000',
+      totalSettledIncome: '0.000',
+      totalFee: '0.000',
+      totalNetIncome: '0.000',
+    }
+    const settledDetails: PlatformLeaseDetails = {
+      ...pendingDetails,
+      incomeEvents: [
+        {
+          ...pendingEvent,
+          supplierIncomeLedgerId: '9007199254740993306',
+          settlementStatus: 'SETTLED',
+          serviceEndedAt: '2026-08-26T13:00:00',
+          settledAt: '2026-08-26T13:00:00',
+        },
+      ],
+      totalPendingIncome: '0.000',
+      totalSettledIncome: '6.000',
+      totalFee: '0.600',
+      totalNetIncome: '5.400',
+    }
+    mocks.getPlatformLeaseDetails.mockResolvedValueOnce(pendingDetails).mockResolvedValue(settledDetails)
+    renderPanel()
+
+    fireEvent.click(await screen.findByRole('button', { name: '展开订单收益日志' }))
+    const pendingRow = await screen.findByRole('row', { name: /ORDER-PENDING-002/ })
+    expect(within(pendingRow).getByText('待结算')).toBeTruthy()
+
+    await act(async () => vi.advanceTimersByTimeAsync(10_000))
+
+    const settledRow = await screen.findByRole('row', { name: /ORDER-PENDING-002/ })
+    expect(within(settledRow).getByText('已结算')).toBeTruthy()
+    expect(screen.getByRole('region', { name: '已结算总额 6.000 卡时' })).toBeTruthy()
+    expect(mocks.getPlatformLeaseDetails).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(screen.getByRole('button', { name: '收起订单收益日志' }))
+    await act(async () => vi.advanceTimersByTimeAsync(20_000))
+    expect(mocks.getPlatformLeaseDetails).toHaveBeenCalledTimes(2)
   })
 
   it('renders lease list identifiers and long decimal strings without precision loss', async () => {

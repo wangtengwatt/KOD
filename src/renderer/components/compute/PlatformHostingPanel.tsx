@@ -214,9 +214,9 @@ export function PlatformHostingPanel() {
                   <Text size="sm">
                     {sku.cpuDescription} · 内存 {sku.ramGb}GB · 存储 {sku.storageGb}GB · {sku.networkDescription}
                   </Text>
-                  <Text fw={700}>月租 {formatCardHours(sku.monthlyRent)} 卡时</Text>
+                  <Text fw={700}>月租 {sku.monthlyRent} 卡时</Text>
                   <Text size="sm">
-                    平台统一销售价 {formatCardHours(sku.platformSalePrice)} 卡时 / {sku.packageDurationHours} 小时
+                    平台统一销售价 {sku.platformSalePrice} 卡时 / {sku.packageDurationHours} 小时
                   </Text>
                   <Text size="xs" c="dimmed">
                     售价与交付规则由平台统一管理，用户不可修改。
@@ -281,10 +281,10 @@ export function PlatformHostingPanel() {
         {checkout && (
           <Stack gap="sm">
             <Text fw={600}>{checkout.sku.name}</Text>
-            <Text>将从可回购卡时余额扣除 {formatCardHours(checkout.sku.monthlyRent)} 卡时</Text>
+            <Text>将从可回购卡时余额扣除 {checkout.sku.monthlyRent} 卡时</Text>
             <Text size="sm">
-              成功后服务器将按平台统一销售价 {formatCardHours(checkout.sku.platformSalePrice)} 卡时 /{' '}
-              {checkout.sku.packageDurationHours} 小时自动上架，自动续租状态以服务端创建的租约为准。
+              成功后服务器将按平台统一销售价 {checkout.sku.platformSalePrice} 卡时 / {checkout.sku.packageDurationHours}{' '}
+              小时自动上架，自动续租状态以服务端创建的租约为准。
             </Text>
             {rentError && <Alert color="red">{rentError}</Alert>}
             <Group justify="flex-end">
@@ -343,6 +343,8 @@ function LeaseCard({
     queryFn: () => getPlatformLeaseDetails(lease.id),
     enabled: detailsExpanded,
     retry: false,
+    refetchInterval: detailsExpanded ? 10_000 : false,
+    refetchIntervalInBackground: false,
   })
   return (
     <Card withBorder padding="md" radius="md">

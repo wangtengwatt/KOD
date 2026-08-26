@@ -3,11 +3,13 @@
 import { MantineProvider } from '@mantine/core'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import type { LocalDemoSession } from '@/packages/computeCenter'
+import type { LocalDemoScenario, LocalDemoSession } from '@/packages/computeCenter'
 import { authInfoStore } from '@/stores/authInfoStore'
 
 const mocks = vi.hoisted(() => ({
   getLocalDemoCapability: vi.fn(),
+  getLocalDemoScenario: vi.fn(),
+  runLocalDemoScenario: vi.fn(),
   switchLocalDemoRole: vi.fn(),
 }))
 
@@ -16,17 +18,51 @@ vi.mock('@/packages/computeCenter', async (importOriginal) => {
   return {
     ...original,
     getLocalDemoCapability: mocks.getLocalDemoCapability,
+    getLocalDemoScenario: mocks.getLocalDemoScenario,
+    runLocalDemoScenario: mocks.runLocalDemoScenario,
     switchLocalDemoRole: mocks.switchLocalDemoRole,
   }
 })
 
 import { LocalDemoRoleSwitcher } from './LocalDemoRoleSwitcher'
 
+const demoExpiresAt = new Date(Date.now() + 10 * 60_000).toISOString()
+
 const session = (accountId: string): LocalDemoSession => ({
   token: `token-${accountId}`,
   accountId,
-  expiresAt: '2026-08-25T13:10:00Z',
+  expiresAt: demoExpiresAt,
 })
+
+const initialScenario: LocalDemoScenario = {
+  scenarioKey: 'kai-hosting-lottery-v1',
+  stage: 'SETTLED',
+  adminAccountId: '9007199254740993101',
+  tenantAccountId: '9007199254740993102',
+  buyerAccountId: '9007199254740993103',
+  skuId: '9007199254740993104',
+  leaseId: '9007199254740993105',
+  productId: '9007199254740993106',
+  reservationId: '9007199254740993107',
+  buyerEligibilityId: '9007199254740993108',
+  tenantEligibilityId: null,
+  monthlyRentCardHours: '30.000',
+  salePriceCardHours: '12.000',
+  settledIncomeCardHours: '12.000',
+  buyerRewardCardHours: '0.060',
+  tenantRewardCardHours: '0.000',
+  skuAvailableInventory: 0,
+  reconciled: false,
+}
+
+const completedScenario: LocalDemoScenario = {
+  ...initialScenario,
+  stage: 'COMPLETED',
+  tenantEligibilityId: '9007199254740993109',
+  tenantRewardCardHours: '0.120',
+  skuAvailableInventory: 1,
+  reconciled: true,
+}
 
 function renderSwitcher(origin: string, onSession = vi.fn()) {
   return {
@@ -52,6 +88,8 @@ function deferred<T>() {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.getLocalDemoCapability.mockReset()
+  mocks.getLocalDemoScenario.mockReset()
+  mocks.runLocalDemoScenario.mockReset()
   mocks.switchLocalDemoRole.mockReset()
   authInfoStore.setState({
     accessToken: 'owner-a-access',
@@ -60,6 +98,8 @@ beforeEach(() => {
     loginEmail: 'owner-a@kod.test',
   })
   mocks.getLocalDemoCapability.mockResolvedValue({ enabled: true, roles: ['ADMIN', 'HOSTING_TENANT', 'GPU_BUYER'] })
+  mocks.getLocalDemoScenario.mockResolvedValue(initialScenario)
+  mocks.runLocalDemoScenario.mockResolvedValue(completedScenario)
   mocks.switchLocalDemoRole.mockResolvedValue(session('9007199254740993001'))
   vi.stubGlobal(
     'matchMedia',
@@ -108,6 +148,35 @@ it('renders local roles only after a strict affirmative capability on an exact H
   renderSwitcher('http://[::1]:8080')
   await waitFor(() => expect(mocks.getLocalDemoCapability).toHaveBeenCalledTimes(3))
   expect(screen.queryByRole('group', { name: '本地演示角色' })).toBeNull()
+})
+
+it('shows authoritative scenario state and keeps the idempotent run action single-flight', async () => {
+  const pendingRun = deferred<LocalDemoScenario>()
+  mocks.runLocalDemoScenario.mockImplementationOnce(() => pendingRun.promise)
+  renderSwitcher('http://localhost:8080')
+
+  expect(await screen.findByText('阶段：SETTLED')).toBeTruthy()
+  expect(screen.getByText('reconciled: false')).toBeTruthy()
+  expect(screen.getByText('月租 30.000 卡时')).toBeTruthy()
+  expect(screen.getByText('销售价 12.000 卡时')).toBeTruthy()
+  expect(screen.getByText('结算收入 12.000 卡时')).toBeTruthy()
+  expect(screen.getByText('买家奖励 0.060 卡时')).toBeTruthy()
+  expect(screen.getByText('租户奖励 0.000 卡时')).toBeTruthy()
+  expect(screen.getByText('可用库存 0')).toBeTruthy()
+  expect(document.body.textContent).toContain('lease 9007199254740993105')
+  expect(document.body.textContent).toContain('buyer eligibility 9007199254740993108')
+
+  const run = screen.getByRole('button', { name: '运行完整演示闭环' })
+  fireEvent.click(run)
+  fireEvent.click(run)
+  expect(mocks.runLocalDemoScenario).toHaveBeenCalledTimes(1)
+
+  await act(async () => pendingRun.resolve(completedScenario))
+  expect(await screen.findByText('阶段：COMPLETED')).toBeTruthy()
+  expect(screen.getByText('reconciled: true')).toBeTruthy()
+  expect(screen.getByText('租户奖励 0.120 卡时')).toBeTruthy()
+  expect(screen.getByText('可用库存 1')).toBeTruthy()
+  expect(document.body.textContent).toContain('tenant eligibility 9007199254740993109')
 })
 
 it('does not reveal controls from a capability response owned by an earlier auth session', async () => {

@@ -284,6 +284,29 @@ export function ComputeCenterPage() {
   const installLocalDemoSession = useCallback(
     async (session: LocalDemoSession) => {
       const generation = ++localDemoSessionGenerationRef.current
+      const previousSession = authInfoStore.getState()
+      const previousOwner = {
+        accessToken: previousSession.accessToken,
+        refreshToken: previousSession.refreshToken,
+        accountId: previousSession.accountId,
+        loginEmail: previousSession.loginEmail,
+      }
+
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: computeKeys.all }),
+        queryClient.cancelQueries({ queryKey: walletKeys.all }),
+      ])
+      const currentSession = authInfoStore.getState()
+      if (
+        localDemoSessionGenerationRef.current !== generation ||
+        currentSession.accessToken !== previousOwner.accessToken ||
+        currentSession.refreshToken !== previousOwner.refreshToken ||
+        currentSession.accountId !== previousOwner.accountId ||
+        currentSession.loginEmail !== previousOwner.loginEmail
+      )
+        return
+      queryClient.removeQueries({ queryKey: computeKeys.all })
+      queryClient.removeQueries({ queryKey: walletKeys.all })
       currentIdentityRef.current = null
       const stalePrompt = promptOwnerRef.current
       promptOwnerRef.current = null
@@ -296,22 +319,6 @@ export function ComputeCenterPage() {
       setActiveTab('market')
       setRoleSwitchGeneration((current) => current + 1)
       authInfoStore.getState().setAccessOnlySession({ accessToken: session.token, accountId: session.accountId })
-
-      await Promise.all([
-        queryClient.cancelQueries({ queryKey: computeKeys.all }),
-        queryClient.cancelQueries({ queryKey: walletKeys.all }),
-      ])
-      const installedSession = authInfoStore.getState()
-      if (
-        localDemoSessionGenerationRef.current !== generation ||
-        installedSession.accessToken !== session.token ||
-        installedSession.accountId !== session.accountId ||
-        installedSession.refreshToken !== null ||
-        installedSession.loginEmail !== null
-      )
-        return
-      queryClient.removeQueries({ queryKey: computeKeys.all })
-      queryClient.removeQueries({ queryKey: walletKeys.all })
     },
     [queryClient]
   )

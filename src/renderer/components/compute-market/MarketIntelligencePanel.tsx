@@ -157,7 +157,7 @@ export function MarketIntelligencePanel({
     refetchIntervalInBackground: false,
   })
 
-  const inferenceEnabled = Boolean(identity) && view === 'gpu-reference' && !simulationMode
+  const inferenceEnabled = Boolean(identity) && view === 'gpu-reference'
   const directoryGpuModel = normalizedGpuModel(gpuModel)
   const contractDirectoryQueryKey = useMemo(
     () => ['compute', 'market-inference', identity ?? 'signed-out', 'contracts', view, directoryGpuModel] as const,
@@ -189,7 +189,10 @@ export function MarketIntelligencePanel({
   const chartPoints = useMemo(() => mergeHistoryAndLive(historyQuery.data, quotes), [historyQuery.data, quotes])
 
   const matchingContracts = useMemo(
-    () => (contractDirectoryQuery.data ?? []).filter((contract) => sameGpuModel(contract.gpuModel, gpuModel)),
+    () =>
+      (contractDirectoryQuery.data ?? []).filter(
+        (contract) => contract.status === 'trading' && sameGpuModel(contract.gpuModel, gpuModel)
+      ),
     [contractDirectoryQuery.data, gpuModel]
   )
   const selectedContract = useMemo(
