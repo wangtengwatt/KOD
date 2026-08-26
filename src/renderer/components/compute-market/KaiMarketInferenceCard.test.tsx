@@ -111,6 +111,44 @@ describe('KaiMarketInferenceCard', () => {
     expect(screen.queryByRole('button', { name: /买入|卖出|下单|交易/ })).toBeNull()
   })
 
+  it('renders precision-38 scale-18 market decimals without rounding or numeric coercion', () => {
+    const highPrice = '999999999999999999.999999999999999999'
+    const highQuantity = '0.000000000000000001'
+    const highError = '-999999999999999999.999999999999999999'
+    renderCard({
+      ...freshView,
+      lastSuccess: {
+        ...successfulInference,
+        prediction: {
+          ...successfulInference.prediction,
+          nextEvent: {
+            dtNs: '7',
+            event: 'TRADE',
+            side: 'SELL',
+            price: highPrice,
+            quantity: highQuantity,
+          },
+        },
+      },
+      verification: {
+        ...matchedVerification,
+        actualPrice: highPrice,
+        actualQuantity: highQuantity,
+        priceError: highError,
+      },
+    })
+
+    const prediction = screen.getByRole('region', { name: '模型预测结果' })
+    expect(
+      within(prediction).getByText((content) => content.includes(highPrice) && content.includes(highQuantity))
+    ).toBeTruthy()
+    const verification = screen.getByRole('region', { name: '真实成交核验' })
+    expect(
+      within(verification).getByText((content) => content.includes(highPrice) && content.includes(highQuantity))
+    ).toBeTruthy()
+    expect(within(verification).getByText((content) => content.includes(highError))).toBeTruthy()
+  })
+
   it('marks a cached prediction and refuses to invent pipeline output without both real book sides', () => {
     renderCard({
       ...freshView,
