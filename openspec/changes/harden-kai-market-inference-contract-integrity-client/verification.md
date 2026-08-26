@@ -10,7 +10,8 @@
 ## TDD evidence
 
 - RED: focused inference tests failed because the previous decoder accepted only precision 18 / scale 8 for market values and precision 26 / scale 8 for `priceError`.
-- GREEN: precision-38 / scale-18 price, quantity, actual price, actual quantity, and signed price error strings decode unchanged; numeric, exponent, over-precision, over-scale, negative-zero, negative-price, and zero-quantity variants fail closed.
+- RED (corrected boundary): a canonical precision-56 / scale-18 signed error from exact subtraction was rejected by the prior precision-38 error schema.
+- GREEN: price, quantity, actual price, and actual quantity remain precision-38 / scale-18 exact strings; signed `priceError` now accepts precision 56 / scale 18, rejects precision 57, and renders the original string unchanged.
 - Presentation: the existing card rendered the exact long strings without numeric coercion, rounding, or locale formatting; only regression coverage was required.
 
 ## Commands and results
@@ -26,6 +27,6 @@
 ## Release gates
 
 - Protected-path, secret, upstream-endpoint, and diff scans passed with no scoped violations.
-- Independent read-only review of `6926e44..de6a56a` returned Approve YES, Critical 0, Important 0, Minor 0; its fresh evidence included 60/60 related tests, TypeScript, Biome, and strict OpenSpec.
-- Implementation and tests are isolated in local commits `9795b29` and `de6a56a`; this verification artifact is ready for non-force integration by the primary release flow.
+- The prior read-only review of `6926e44..de6a56a` returned Approve YES, Critical 0, Important 0, Minor 0. The new precision-56 correction still requires a fresh cumulative read-only review before integration.
+- Earlier implementation and tests remain isolated in local commits `9795b29` and `de6a56a`; the precision-56 correction is isolated in `2d7c0ad` and awaits fresh cumulative review.
 - No production deployment or production website mutation was performed.

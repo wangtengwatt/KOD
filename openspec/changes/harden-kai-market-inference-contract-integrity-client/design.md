@@ -6,7 +6,7 @@ The client already treats inference identifiers and decimals as strings, but thr
 
 ### One canonical decimal schema family
 
-Unsigned price, positive quantity, and signed price error SHALL use fixed-point strings with normalized precision at most 38 and scale at most 18. Exponent notation, plus signs, leading zeroes, trailing decimal points, JSON numbers, negative unsigned values, zero quantities, and negative zero SHALL remain invalid. The original server-provided canonical string SHALL be retained and displayed unchanged.
+Unsigned price and positive quantity SHALL use fixed-point strings with normalized precision at most 38 and scale at most 18. Exact signed price error SHALL use normalized precision at most 56 and scale at most 18 so subtraction is closed over the accepted price domain. Exponent notation, plus signs, leading zeroes, trailing decimal points, JSON numbers, negative unsigned values, zero quantities, and negative zero SHALL remain invalid. The original server-provided canonical string SHALL be retained and displayed unchanged.
 
 ### Scope remains inference-only
 
