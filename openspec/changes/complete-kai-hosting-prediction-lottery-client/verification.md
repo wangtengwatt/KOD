@@ -34,3 +34,4 @@ Final diff/scope/secret/protected scans found no protected-path or secret additi
 - The protected website/public tree, KAI Logo asset, green/white website presentation, and real quote/simulation algorithms are unchanged in the feature range.
 - The existing desktop shortcut remains `C:\Users\Microsoft\Desktop\KOD蒜粒-开发版.lnk`, targeting `D:\watt\.kod-local\run-kod-full-stack.ps1` with `D:\watt\kod\assets\icon.ico`.
 - Production deployment and production-database zero-row inspection were intentionally not performed. Task 7.3 remains open until the approved non-force push and desktop smoke are complete; production deployment remains a separate operations action.
+- GitHub mirroring is a delivery-only follow-up: the configured client GitHub repository already has a `suanlizhongxin_KOD` branch, so the approved operation must first prove fast-forward ancestry, push without force, and verify the final remote object ID exactly.
