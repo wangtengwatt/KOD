@@ -24,3 +24,13 @@ The following focused tests were added before each production change and failed 
 - Independent review: the sole Important finding was fixed with pre/post-refresh account-owner guards and re-reviewed with no remaining Critical or Important findings.
 
 Final diff/scope/secret/protected scans found no protected-path or secret additions; added URLs are limited to loopback and test-only `kod.test` fixtures.
+
+## Final release evidence (2026-08-26)
+
+- All 17 changed feature test files passed: 179 tests, 0 failures.
+- `pnpm run check`, changed-file Biome, production build, and strict OpenSpec validation passed from the clean feature worktree.
+- Full Vitest passed 1,801 tests and skipped 54. The remaining 6 failures were reproduced unchanged on the untouched target branch checkout: defaults locale, migration initialization, Windows discovery path, `parse_link`, and two unconfigured ChatboxAI relay cases.
+- The local persistent demo completed and reconciled the administrator inventory, tenant platform-hosted lease, buyer order, settlement income, buyer lottery, term completion/inventory release, and tenant lottery workflow using the backend's real business services.
+- The protected website/public tree, KAI Logo asset, green/white website presentation, and real quote/simulation algorithms are unchanged in the feature range.
+- The existing desktop shortcut remains `C:\Users\Microsoft\Desktop\KOD蒜粒-开发版.lnk`, targeting `D:\watt\.kod-local\run-kod-full-stack.ps1` with `D:\watt\kod\assets\icon.ico`.
+- Production deployment and production-database zero-row inspection were intentionally not performed. Task 7.3 remains open until the approved non-force push and desktop smoke are complete; production deployment remains a separate operations action.
