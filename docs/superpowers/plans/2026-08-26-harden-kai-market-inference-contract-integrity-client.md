@@ -62,7 +62,7 @@
 - [x] **Step 1:** Add RED fixtures for 39-digit integers with and without tail zeroes and legal 38-integer-digit values with trailing fractional zeroes.
 - [x] **Step 2:** Compute normalized precision and integer digits without converting through JavaScript `number`.
 - [x] **Step 3:** Apply the shared 38-integer-digit cap to price, quantity, actual values, and signed error while retaining the error precision-56 cap.
-- [ ] **Step 4:** Re-run focused, related, check, Biome, build, full, OpenSpec, protected-scope, and independent-review gates.
+- [x] **Step 4:** Re-run focused, related, check, Biome, build, full, OpenSpec, protected-scope, and independent-review gates.
 
 ### Task 3: Verify the client branch
 
@@ -77,5 +77,5 @@
 - [x] **Step 1:** Run focused and related Vitest, `pnpm run check`, changed-file Biome, and `pnpm run build`.
 - [x] **Step 2:** Run full Vitest and classify only failures reproduced at the exact baseline as pre-existing.
 - [x] **Step 3:** Run strict OpenSpec, diff, protected website/KAI Logo, quote-feed, endpoint/key, and secret scans.
-- [ ] **Step 4:** Obtain an independent read-only review and fix every Critical/Important finding.
+- [x] **Step 4:** Obtain an independent read-only review and fix every Critical/Important finding.
 - [ ] **Step 5:** Commit verification artifacts without deploying, pushing, or changing the desktop launcher.

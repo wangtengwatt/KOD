@@ -30,6 +30,6 @@
 ## Release gates
 
 - Protected-path, secret, upstream-endpoint, and diff scans passed with no scoped violations.
-- The prior read-only review of `6926e44..de6a56a` returned Approve YES, Critical 0, Important 0, Minor 0. The precision-56 and fixed-scale integer-cap corrections still require one fresh cumulative read-only review before integration.
-- Earlier implementation and tests remain isolated in local commits `9795b29` and `de6a56a`; the precision-56 correction is isolated in `2d7c0ad`; the fixed-scale correction is isolated in `d62f09f` for fresh cumulative review.
+- The fresh cumulative review of `42d17e5..9ac2ebe` returned Approve YES, Critical 0, Important 0, Minor 0 after independently checking the precision-56 and fixed-scale integer-cap corrections.
+- Earlier implementation and tests remain isolated in local commits `9795b29` and `de6a56a`; the precision-56 correction is isolated in `2d7c0ad`; the fixed-scale correction is isolated in `d62f09f`.
 - No production deployment or production website mutation was performed.

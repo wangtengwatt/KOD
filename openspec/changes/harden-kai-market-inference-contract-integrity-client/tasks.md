@@ -15,4 +15,4 @@
 - [x] 3.1 Run focused and related Vitest, TypeScript check, changed-file Biome, production build, and full Vitest with baseline classification.
 - [x] 3.2 Run strict OpenSpec, diff/scope/protected/secret scans, and independent review.
 - [x] 3.3 Deliver an isolated local commit for non-force integration; do not modify production website assets or deploy production.
-- [ ] 3.4 Obtain a fresh cumulative read-only review for the precision-56 correction and fix every Critical/Important finding before integration.
+- [x] 3.4 Obtain a fresh cumulative read-only review for the precision-56 correction and fix every Critical/Important finding before integration.
