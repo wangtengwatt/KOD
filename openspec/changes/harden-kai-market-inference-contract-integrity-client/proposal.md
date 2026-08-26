@@ -4,7 +4,7 @@ The real colleague feed accepts exact price and quantity facts up to precision 3
 
 ## What Changes
 
-- Accept canonical predicted price/quantity and verified actual price/quantity at precision 38 / scale 18, and exact signed price-error strings at precision 56 / scale 18.
+- Accept canonical predicted price/quantity and verified actual price/quantity at precision 38 / scale 18, and exact signed price-error strings at precision 56 / scale 18, with a shared maximum of 38 integer digits so every accepted value fits backend fixed-scale storage.
 - Continue rejecting JSON numbers, exponents, noncanonical zero, excess precision/scale, and malformed values.
 - Render the exact server strings without converting through JavaScript `number` or locale formatting.
 - Add boundary, failure, component, build, OpenSpec, and protected-scope regression evidence.

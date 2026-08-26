@@ -52,6 +52,18 @@
 - [x] **Step 4:** Re-run the component and related market tests.
 - [x] **Step 5:** Commit the regression test with the decoder correction.
 
+### Task 2A: Enforce fixed-scale integer capacity
+
+**Files:**
+- Modify: `src/renderer/packages/compute-market/kaiInference.ts`
+- Test: `src/renderer/packages/compute-market/kaiInference.test.ts`
+- Test: `src/renderer/components/compute-market/KaiMarketInferenceCard.test.tsx`
+
+- [x] **Step 1:** Add RED fixtures for 39-digit integers with and without tail zeroes and legal 38-integer-digit values with trailing fractional zeroes.
+- [x] **Step 2:** Compute normalized precision and integer digits without converting through JavaScript `number`.
+- [x] **Step 3:** Apply the shared 38-integer-digit cap to price, quantity, actual values, and signed error while retaining the error precision-56 cap.
+- [ ] **Step 4:** Re-run focused, related, check, Biome, build, full, OpenSpec, protected-scope, and independent-review gates.
+
 ### Task 3: Verify the client branch
 
 **Files:**

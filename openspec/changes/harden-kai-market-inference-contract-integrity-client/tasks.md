@@ -8,6 +8,7 @@
 - [x] 2.1 Replace the inference decimal limits with precision 38 / scale 18 while preserving field-specific sign and zero rules.
 - [x] 2.2 Add component coverage proving exact long strings render without `Number`, rounding, or locale conversion.
 - [x] 2.3 Expand only signed `priceError` to precision 56 / scale 18 and prove its exact maximum-domain decoding and rendering while price and quantity remain bounded at precision 38.
+- [x] 2.4 Enforce the shared 38-integer-digit storage cap for signed error and add explicit 38-digit/39-digit wire regressions.
 
 ## 3. Verify and hand off
 

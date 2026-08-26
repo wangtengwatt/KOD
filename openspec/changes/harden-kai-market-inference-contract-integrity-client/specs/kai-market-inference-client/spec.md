@@ -5,11 +5,15 @@ Decode and display the authoritative Kai inference decimal domain without precis
 ## ADDED Requirements
 
 ### Requirement: Prediction and verification decimals remain exact strings
-The client SHALL accept predicted price/quantity and verified actual price/quantity only as canonical fixed-point strings with normalized precision at most 38 and scale at most 18. It SHALL accept exact signed price error with normalized precision at most 56 and scale at most 18. It SHALL preserve and render the exact string supplied by the backend and SHALL NOT convert through JavaScript `number`, exponent notation, locale formatting, or rounding. Price SHALL remain non-negative, quantity SHALL remain positive, and signed price error SHALL reject negative zero.
+The client SHALL accept predicted price/quantity and verified actual price/quantity only as canonical fixed-point strings with normalized precision at most 38, scale at most 18, and at most 38 integer digits. It SHALL accept exact signed price error with normalized precision at most 56 and scale at most 18 while enforcing the same 38-integer-digit cap required by backend `DECIMAL(56,18)` storage. It SHALL preserve and render the exact string supplied by the backend and SHALL NOT convert through JavaScript `number`, exponent notation, locale formatting, or rounding. Price SHALL remain non-negative, quantity SHALL remain positive, and signed price error SHALL reject negative zero.
 
 #### Scenario: Backend returns a valid high-precision successor
 - **WHEN** a prediction or completed verification contains valid precision-38/scale-18 price or quantity strings, including an exact signed error requiring precision 56 / scale 18
 - **THEN** strict decoding SHALL succeed and the card SHALL display those exact strings without truncation or rounding
+
+#### Scenario: Fixed-scale integer capacity is enforced
+- **WHEN** any market value or signed price error contains 39 integer digits
+- **THEN** strict decoding SHALL fail before the value reaches presentation, while a 38-integer-digit value and a 38-integer-plus-18-fractional signed error SHALL remain valid
 
 #### Scenario: Decimal payload is numeric or noncanonical
 - **WHEN** any inference decimal is a JSON number, exponent string, over-precision/over-scale string, negative unsigned value, zero quantity, leading-zero value, or negative zero error
