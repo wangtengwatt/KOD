@@ -111,10 +111,10 @@ describe('KaiMarketInferenceCard', () => {
     expect(screen.queryByRole('button', { name: /买入|卖出|下单|交易/ })).toBeNull()
   })
 
-  it('renders precision-38 scale-18 market decimals without rounding or numeric coercion', () => {
+  it('renders precision-38 market values and precision-56 signed error without coercion', () => {
     const highPrice = '999999999999999999.999999999999999999'
     const highQuantity = '0.000000000000000001'
-    const highError = '-999999999999999999.999999999999999999'
+    const highError = `-${'9'.repeat(38)}.${'9'.repeat(18)}`
     renderCard({
       ...freshView,
       lastSuccess: {

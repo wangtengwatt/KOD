@@ -5,6 +5,7 @@ import { computeMarketplaceRequest } from '../computeCenter'
 
 const MAX_SIGNED_LONG = 9_223_372_036_854_775_807n
 const DECIMAL_PRECISION = 38
+const PRICE_ERROR_PRECISION = 56
 const DECIMAL_SCALE = 18
 const INFERENCE_DEADLINE_MS = 15_000
 const INFERENCE_UNAVAILABLE_MESSAGE = '预测服务暂不可用'
@@ -59,8 +60,8 @@ const priceErrorDecimalSchema = z
   .regex(new RegExp(`^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,${DECIMAL_SCALE}})?$`), {
     message: 'Expected a fixed-point string',
   })
-  .refine((value) => hasValidPrecision(value, DECIMAL_PRECISION), {
-    message: 'Decimal exceeds precision 38',
+  .refine((value) => hasValidPrecision(value, PRICE_ERROR_PRECISION), {
+    message: 'Decimal exceeds precision 56',
   })
   .refine((value) => !isNegativeZero(value), { message: 'Negative zero is not canonical' })
 
