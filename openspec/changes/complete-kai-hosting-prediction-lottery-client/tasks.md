@@ -33,7 +33,7 @@
 - [x] 7.1 Run focused and full tests, type checking, changed-file Biome, production build, strict OpenSpec, diff/scope, secret, branding, and generated-artifact checks.
 - [x] 7.2 Run the local full workflow and reconcile database rent, settlement, income, eligibility, draw, and reward ledger rows.
 - [ ] 7.3 Verify production read-only behavior and zero demo rows, build Windows artifacts, smoke the existing desktop shortcut, then integrate and push `suanlizhongxin_KOD`; stop on every conflict.
-- [ ] 7.4 Mirror the exact GitLab `suanlizhongxin_KOD` commit to the configured GitHub repository with a non-force fast-forward push, verify the remote object ID, and leave production undeployed.
+- [x] 7.4 Mirror the exact GitLab `suanlizhongxin_KOD` commit to the configured GitHub repository with a non-force fast-forward push, verify the remote object ID, and leave production undeployed.
 
 ## 8. Close final independent client review
 
