@@ -4,8 +4,8 @@ import { authInfoStore } from '@/stores/authInfoStore'
 import { computeMarketplaceRequest } from '../computeCenter'
 
 const MAX_SIGNED_LONG = 9_223_372_036_854_775_807n
-const DECIMAL_PRECISION = 18
-const PRICE_ERROR_DECIMAL_PRECISION = 26
+const DECIMAL_PRECISION = 38
+const DECIMAL_SCALE = 18
 const INFERENCE_DEADLINE_MS = 15_000
 const INFERENCE_UNAVAILABLE_MESSAGE = '预测服务暂不可用'
 
@@ -45,8 +45,10 @@ function isNegativeZero(value: string) {
 
 const unsignedDecimalSchema = z
   .string()
-  .regex(/^(?:0|[1-9]\d*)(?:\.\d{1,8})?$/, { message: 'Expected a non-negative fixed-point string' })
-  .refine((value) => hasValidPrecision(value, DECIMAL_PRECISION), { message: 'Decimal exceeds precision 18' })
+  .regex(new RegExp(`^(?:0|[1-9]\\d*)(?:\\.\\d{1,${DECIMAL_SCALE}})?$`), {
+    message: 'Expected a non-negative fixed-point string',
+  })
+  .refine((value) => hasValidPrecision(value, DECIMAL_PRECISION), { message: 'Decimal exceeds precision 38' })
 
 const positiveDecimalSchema = unsignedDecimalSchema.refine((value) => !/^0(?:\.0+)?$/.test(value), {
   message: 'Expected a positive fixed-point string',
@@ -54,9 +56,11 @@ const positiveDecimalSchema = unsignedDecimalSchema.refine((value) => !/^0(?:\.0
 
 const priceErrorDecimalSchema = z
   .string()
-  .regex(/^-?(?:0|[1-9]\d*)(?:\.\d{1,8})?$/, { message: 'Expected a fixed-point string' })
-  .refine((value) => hasValidPrecision(value, PRICE_ERROR_DECIMAL_PRECISION), {
-    message: 'Decimal exceeds precision 26',
+  .regex(new RegExp(`^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,${DECIMAL_SCALE}})?$`), {
+    message: 'Expected a fixed-point string',
+  })
+  .refine((value) => hasValidPrecision(value, DECIMAL_PRECISION), {
+    message: 'Decimal exceeds precision 38',
   })
   .refine((value) => !isNegativeZero(value), { message: 'Negative zero is not canonical' })
 

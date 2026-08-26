@@ -172,19 +172,49 @@ describe('KAI market inference wire contract', () => {
     expect(parsed.verification.priceError).toBe('0.10000000')
   })
 
-  it('accepts a precision-26 signed price error without widening prices or accepting numbers', () => {
-    const maximumPriceError = '999999999999999998.99999999'
+  it('preserves precision-38 scale-18 prediction and verification decimals as exact strings', () => {
+    const highPrecisionPrice = '999999999999999999.999999999999999999'
+    const highPrecisionQuantity = '0.000000000000000001'
+    const highPrecisionPriceError = '-999999999999999999.999999999999999999'
     const parsed = kaiMarketInferenceViewSchema.parse({
       ...view(),
-      verification: { ...view().verification, priceError: maximumPriceError },
+      lastSuccess: lastSuccess({
+        prediction: {
+          model: 'Kai_distill_LM',
+          text: 'high precision answer',
+          nextEvent: {
+            dtNs: '7',
+            event: 'TRADE',
+            side: 'SELL',
+            price: highPrecisionPrice,
+            quantity: highPrecisionQuantity,
+          },
+        },
+      }),
+      verification: {
+        ...view().verification,
+        actualPrice: highPrecisionPrice,
+        actualQuantity: highPrecisionQuantity,
+        priceError: highPrecisionPriceError,
+      },
     })
 
+    expect(parsed.lastSuccess?.prediction.nextEvent?.price).toBe(highPrecisionPrice)
+    expect(parsed.lastSuccess?.prediction.nextEvent?.quantity).toBe(highPrecisionQuantity)
     expect(parsed.verification?.status).toBe('MATCHED')
     if (parsed.verification?.status !== 'MATCHED') throw new Error('expected completed verification')
-    expect(parsed.verification.priceError).toBe(maximumPriceError)
-    expect(typeof parsed.verification.priceError).toBe('string')
+    expect(parsed.verification.actualPrice).toBe(highPrecisionPrice)
+    expect(parsed.verification.actualQuantity).toBe(highPrecisionQuantity)
+    expect(parsed.verification.priceError).toBe(highPrecisionPriceError)
+    expect(typeof parsed.verification.actualPrice).toBe('string')
 
-    for (const priceError of [1, '9999999999999999999.99999999']) {
+    for (const priceError of [
+      1,
+      '1e3',
+      '999999999999999999999.999999999999999999',
+      '1.0000000000000000000',
+      '-0.000000000000000000',
+    ]) {
       expect(
         kaiMarketInferenceViewSchema.safeParse({
           ...view(),
@@ -192,12 +222,26 @@ describe('KAI market inference wire contract', () => {
         }).success
       ).toBe(false)
     }
-    expect(
-      kaiMarketInferenceViewSchema.safeParse({
-        ...view(),
-        verification: { ...view().verification, actualPrice: maximumPriceError },
-      }).success
-    ).toBe(false)
+
+    for (const invalidEvent of [
+      { price: highPrecisionPrice, quantity: 0.1 },
+      { price: '-1.000000000000000000', quantity: highPrecisionQuantity },
+      { price: highPrecisionPrice, quantity: '0.000000000000000000' },
+      { price: '1.0000000000000000000', quantity: highPrecisionQuantity },
+    ]) {
+      expect(
+        kaiMarketInferenceViewSchema.safeParse({
+          ...view(),
+          lastSuccess: lastSuccess({
+            prediction: {
+              model: 'Kai_distill_LM',
+              text: 'invalid high precision answer',
+              nextEvent: { dtNs: '7', event: 'TRADE', side: 'SELL', ...invalidEvent },
+            },
+          }),
+        }).success
+      ).toBe(false)
+    }
   })
 
   it('accepts an explicit cached success and an insufficient-real-order-book pipeline state', () => {
@@ -273,7 +317,7 @@ describe('KAI market inference wire contract', () => {
   it('rejects unknown fields and malformed fixed-point values rather than normalizing them', () => {
     expect(kaiMarketInferenceViewSchema.safeParse({ ...view(), unexpected: true }).success).toBe(false)
 
-    for (const priceError of ['1e3', '+1.0', '01.0', '1.', '.1', '0.123456789', '-0.00000000']) {
+    for (const priceError of ['1e3', '+1.0', '01.0', '1.', '.1', '0.1234567890123456789', '-0.000000000000000000']) {
       expect(
         kaiMarketInferenceViewSchema.safeParse({
           ...view(),
