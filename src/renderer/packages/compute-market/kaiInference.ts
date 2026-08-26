@@ -36,8 +36,12 @@ const dtNsSchema = z.string().regex(/^[0-9]{1,32}$/, { message: 'Expected an ASC
 const fingerprintSchema = z.string().regex(/^[a-f0-9]{64}$/, { message: 'Expected a SHA-256 fingerprint' })
 const timestampSchema = z.iso.datetime({ offset: true })
 
-function hasValidPrecision(value: string, maximumPrecision: number) {
-  return value.replace('-', '').replace('.', '').length <= maximumPrecision
+function hasValidDecimalDomain(value: string, maximumPrecision: number) {
+  const unsigned = value.startsWith('-') ? value.slice(1) : value
+  const [integer, fraction = ''] = unsigned.split('.')
+  const normalizedDigits = `${integer}${fraction}`.replace(/^0+/, '').replace(/0+$/, '')
+  const normalizedPrecision = normalizedDigits.length === 0 ? 1 : normalizedDigits.length
+  return integer.length <= 38 && normalizedPrecision <= maximumPrecision
 }
 
 function isNegativeZero(value: string) {
@@ -49,7 +53,9 @@ const unsignedDecimalSchema = z
   .regex(new RegExp(`^(?:0|[1-9]\\d*)(?:\\.\\d{1,${DECIMAL_SCALE}})?$`), {
     message: 'Expected a non-negative fixed-point string',
   })
-  .refine((value) => hasValidPrecision(value, DECIMAL_PRECISION), { message: 'Decimal exceeds precision 38' })
+  .refine((value) => hasValidDecimalDomain(value, DECIMAL_PRECISION), {
+    message: 'Decimal exceeds the precision or integer-digit limit',
+  })
 
 const positiveDecimalSchema = unsignedDecimalSchema.refine((value) => !/^0(?:\.0+)?$/.test(value), {
   message: 'Expected a positive fixed-point string',
@@ -60,8 +66,8 @@ const priceErrorDecimalSchema = z
   .regex(new RegExp(`^-?(?:0|[1-9]\\d*)(?:\\.\\d{1,${DECIMAL_SCALE}})?$`), {
     message: 'Expected a fixed-point string',
   })
-  .refine((value) => hasValidPrecision(value, PRICE_ERROR_PRECISION), {
-    message: 'Decimal exceeds precision 56',
+  .refine((value) => hasValidDecimalDomain(value, PRICE_ERROR_PRECISION), {
+    message: 'Decimal exceeds the precision or integer-digit limit',
   })
   .refine((value) => !isNegativeZero(value), { message: 'Negative zero is not canonical' })
 

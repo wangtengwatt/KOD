@@ -173,7 +173,7 @@ describe('KAI market inference wire contract', () => {
   })
 
   it('preserves precision-38 market values and precision-56 signed error as exact strings', () => {
-    const highPrecisionPrice = '999999999999999999.999999999999999999'
+    const highPrecisionPrice = `${'9'.repeat(38)}.0`
     const highPrecisionQuantity = '0.000000000000000001'
     const highPrecisionPriceError = `-${'9'.repeat(38)}.${'9'.repeat(18)}`
     const parsed = kaiMarketInferenceViewSchema.parse({
@@ -211,6 +211,8 @@ describe('KAI market inference wire contract', () => {
     for (const priceError of [
       1,
       '1e3',
+      '9'.repeat(39),
+      `1${'0'.repeat(38)}`,
       `${'9'.repeat(39)}.${'9'.repeat(18)}`,
       '1.0000000000000000000',
       '-0.000000000000000000',
@@ -228,6 +230,9 @@ describe('KAI market inference wire contract', () => {
       { price: '-1.000000000000000000', quantity: highPrecisionQuantity },
       { price: highPrecisionPrice, quantity: '0.000000000000000000' },
       { price: '1.0000000000000000000', quantity: highPrecisionQuantity },
+      { price: '9'.repeat(39), quantity: highPrecisionQuantity },
+      { price: `1${'0'.repeat(38)}`, quantity: highPrecisionQuantity },
+      { price: highPrecisionPrice, quantity: `1${'0'.repeat(38)}` },
     ]) {
       expect(
         kaiMarketInferenceViewSchema.safeParse({

@@ -112,7 +112,7 @@ describe('KaiMarketInferenceCard', () => {
   })
 
   it('renders precision-38 market values and precision-56 signed error without coercion', () => {
-    const highPrice = '999999999999999999.999999999999999999'
+    const highPrice = `${'9'.repeat(38)}.0`
     const highQuantity = '0.000000000000000001'
     const highError = `-${'9'.repeat(38)}.${'9'.repeat(18)}`
     renderCard({
