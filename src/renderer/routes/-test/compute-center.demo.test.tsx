@@ -155,6 +155,104 @@ it('atomically installs an access-only role session and clears prior compute, ma
   expect(queryClient.getQueryData(['wallet', 'account:9007199254740993001', 'balance'])).toBeUndefined()
 })
 
+it('preserves external role B caches and workflow when role A cancellation finishes late', async () => {
+  const computeCancellation = deferred<void>()
+  const walletCancellation = deferred<void>()
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const cancelQueries = vi
+    .spyOn(queryClient, 'cancelQueries')
+    .mockImplementationOnce(() => computeCancellation.promise)
+    .mockImplementationOnce(() => walletCancellation.promise)
+  renderPage(queryClient)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'GPU 买家' }))
+  await waitFor(() =>
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: 'buyer-access',
+      refreshToken: null,
+      accountId: '9007199254740993002',
+      loginEmail: null,
+    })
+  )
+  await waitFor(() => expect(cancelQueries).toHaveBeenCalledTimes(2))
+
+  act(() => {
+    authInfoStore.getState().setAccessOnlySession({
+      accessToken: 'external-b-access',
+      accountId: '9007199254740993999',
+    })
+  })
+  queryClient.setQueryData(['compute', 'external-b-sentinel'], 'keep B compute')
+  queryClient.setQueryData(['wallet', 'external-b-sentinel'], 'keep B wallet')
+  const bWorkflow = screen.getByRole('tab', { name: '卡时资产' })
+  fireEvent.click(bWorkflow)
+  expect(bWorkflow.getAttribute('aria-selected')).toBe('true')
+
+  await act(async () => {
+    computeCancellation.resolve(undefined)
+    walletCancellation.resolve(undefined)
+    await Promise.all([computeCancellation.promise, walletCancellation.promise])
+  })
+
+  expect(authInfoStore.getState()).toMatchObject({
+    accessToken: 'external-b-access',
+    refreshToken: null,
+    accountId: '9007199254740993999',
+    loginEmail: null,
+  })
+  expect(queryClient.getQueryData(['compute', 'external-b-sentinel'])).toBe('keep B compute')
+  expect(queryClient.getQueryData(['wallet', 'external-b-sentinel'])).toBe('keep B wallet')
+  expect(bWorkflow.getAttribute('aria-selected')).toBe('true')
+})
+
+it('leaves external role B intact when role A cancellation fails late', async () => {
+  const computeCancellation = deferred<void>()
+  const walletCancellation = deferred<void>()
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const cancelQueries = vi
+    .spyOn(queryClient, 'cancelQueries')
+    .mockImplementationOnce(() => computeCancellation.promise)
+    .mockImplementationOnce(() => walletCancellation.promise)
+  renderPage(queryClient)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'GPU 买家' }))
+  await waitFor(() =>
+    expect(authInfoStore.getState()).toMatchObject({
+      accessToken: 'buyer-access',
+      refreshToken: null,
+      accountId: '9007199254740993002',
+      loginEmail: null,
+    })
+  )
+  await waitFor(() => expect(cancelQueries).toHaveBeenCalledTimes(2))
+
+  act(() => {
+    authInfoStore.getState().setAccessOnlySession({
+      accessToken: 'external-b-access',
+      accountId: '9007199254740993999',
+    })
+  })
+  queryClient.setQueryData(['compute', 'external-b-failure-sentinel'], 'keep B compute')
+  queryClient.setQueryData(['wallet', 'external-b-failure-sentinel'], 'keep B wallet')
+
+  await act(async () => {
+    computeCancellation.reject(new Error('late A cancellation failed'))
+    walletCancellation.resolve(undefined)
+    await Promise.allSettled([computeCancellation.promise, walletCancellation.promise])
+    await Promise.resolve()
+  })
+
+  expect(authInfoStore.getState()).toMatchObject({
+    accessToken: 'external-b-access',
+    refreshToken: null,
+    accountId: '9007199254740993999',
+    loginEmail: null,
+  })
+  expect(queryClient.getQueryData(['compute', 'external-b-failure-sentinel'])).toBe('keep B compute')
+  expect(queryClient.getQueryData(['wallet', 'external-b-failure-sentinel'])).toBe('keep B wallet')
+  expect(screen.queryByText('late A cancellation failed')).toBeNull()
+})
+
 it('preserves an externally installed session and caches when an earlier role response arrives late', async () => {
   const lateRole = deferred<{ token: string; accountId: string; expiresAt: string }>()
   mocks.switchLocalDemoRole.mockImplementationOnce(() => lateRole.promise)

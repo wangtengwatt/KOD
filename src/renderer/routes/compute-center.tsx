@@ -301,7 +301,15 @@ export function ComputeCenterPage() {
         queryClient.cancelQueries({ queryKey: computeKeys.all }),
         queryClient.cancelQueries({ queryKey: walletKeys.all }),
       ])
-      if (localDemoSessionGenerationRef.current !== generation) return
+      const installedSession = authInfoStore.getState()
+      if (
+        localDemoSessionGenerationRef.current !== generation ||
+        installedSession.accessToken !== session.token ||
+        installedSession.accountId !== session.accountId ||
+        installedSession.refreshToken !== null ||
+        installedSession.loginEmail !== null
+      )
+        return
       queryClient.removeQueries({ queryKey: computeKeys.all })
       queryClient.removeQueries({ queryKey: walletKeys.all })
     },

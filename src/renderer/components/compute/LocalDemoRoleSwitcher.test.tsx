@@ -172,6 +172,46 @@ it('keeps the latest role request authoritative when an earlier role response ar
   await waitFor(() => expect(onSession).toHaveBeenCalledTimes(1))
 })
 
+it('does not deliver a pending role session after the auth owner changes', async () => {
+  const pendingRole = deferred<LocalDemoSession>()
+  mocks.switchLocalDemoRole.mockImplementationOnce(() => pendingRole.promise)
+  const { onSession } = renderSwitcher('http://localhost:8080')
+
+  fireEvent.click(await screen.findByRole('button', { name: '管理员' }))
+  await waitFor(() => expect(mocks.switchLocalDemoRole).toHaveBeenCalledTimes(1))
+  act(() => {
+    authInfoStore.setState({
+      accessToken: 'owner-b-access',
+      refreshToken: null,
+      accountId: '9007199254740993999',
+      loginEmail: null,
+    })
+  })
+  await waitFor(() => expect(mocks.getLocalDemoCapability).toHaveBeenCalledTimes(2))
+  await act(async () => {
+    pendingRole.resolve(session('9007199254740993001'))
+    await pendingRole.promise
+  })
+
+  expect(onSession).not.toHaveBeenCalled()
+})
+
+it('does not deliver a pending role session after the switcher unmounts', async () => {
+  const pendingRole = deferred<LocalDemoSession>()
+  mocks.switchLocalDemoRole.mockImplementationOnce(() => pendingRole.promise)
+  const { onSession, unmount } = renderSwitcher('http://localhost:8080')
+
+  fireEvent.click(await screen.findByRole('button', { name: '管理员' }))
+  await waitFor(() => expect(mocks.switchLocalDemoRole).toHaveBeenCalledTimes(1))
+  unmount()
+  await act(async () => {
+    pendingRole.resolve(session('9007199254740993001'))
+    await pendingRole.promise
+  })
+
+  expect(onSession).not.toHaveBeenCalled()
+})
+
 it('allows retry after a session error without preserving an obsolete role result', async () => {
   mocks.switchLocalDemoRole
     .mockRejectedValueOnce(new Error('offline'))
